@@ -1,8 +1,8 @@
 ﻿name: "TNG IQ FANDA Agent"
-version: "0.1.0"
+version: "0.1.1"
 slug: "tng_iq_fanda_agent"
 description: "Lokální runtime a cloudová komunikace TNG IQ FANDA"
-url: "https://tngiqfanda.cz"
+url: "https://github.com/fandabodis-hash/homeassistant-apps"
 
 arch:
   - aarch64
@@ -33,28 +33,28 @@ options:
   device_model: "IQ FANDA PI5"
   hardware_revision: "Raspberry Pi 5"
   device_hostname: "iqfanda"
-  software_version: "0.1.0"
+  software_version: "0.1.1"
 
   log_level: "INFO"
 
 schema:
-  api_base_url: url
+  api_base_url: str
   provisioning_enabled: bool
-  provisioning_id: "str?"
+  provisioning_id: str?
 
-  first_name: "str?"
-  last_name: "str?"
-  email: "str?"
-  password: "password?"
+  first_name: str?
+  last_name: str?
+  email: str?
+  password: str?
 
-  site_name: "str?"
-  site_type: "list(house|commercial|industrial)"
+  site_name: str?
+  site_type: list(house|commercial|industrial)
 
-  device_serial_number: "str?"
-  device_name: "str(1,200)"
-  device_model: "str?"
-  hardware_revision: "str?"
-  device_hostname: "str?"
-  software_version: "str?"
+  device_serial_number: str?
+  device_name: str?
+  device_model: str?
+  hardware_revision: str?
+  device_hostname: str?
+  software_version: str?
 
-  log_level: "list(DEBUG|INFO|WARNING|ERROR)"
+  log_level: list(DEBUG|INFO|WARNING|ERROR)
