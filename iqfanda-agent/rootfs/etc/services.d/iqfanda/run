@@ -1,0 +1,57 @@
+#!/usr/bin/with-contenv bashio
+
+bashio::log.info "Spoustim TNG IQ FANDA Agent..."
+
+export IQF_API_BASE_URL
+IQF_API_BASE_URL="$(bashio::config 'api_base_url')"
+
+export IQF_PROVISIONING_ENABLED
+IQF_PROVISIONING_ENABLED="$(bashio::config 'provisioning_enabled')"
+
+export IQF_PROVISIONING_ID
+IQF_PROVISIONING_ID="$(bashio::config 'provisioning_id')"
+
+export IQF_FIRST_NAME
+IQF_FIRST_NAME="$(bashio::config 'first_name')"
+
+export IQF_LAST_NAME
+IQF_LAST_NAME="$(bashio::config 'last_name')"
+
+export IQF_EMAIL
+IQF_EMAIL="$(bashio::config 'email')"
+
+export IQF_PASSWORD
+IQF_PASSWORD="$(bashio::config 'password')"
+
+export IQF_SITE_NAME
+IQF_SITE_NAME="$(bashio::config 'site_name')"
+
+export IQF_SITE_TYPE
+IQF_SITE_TYPE="$(bashio::config 'site_type')"
+
+export IQF_DEVICE_SERIAL_NUMBER
+IQF_DEVICE_SERIAL_NUMBER="$(bashio::config 'device_serial_number')"
+
+export IQF_DEVICE_NAME
+IQF_DEVICE_NAME="$(bashio::config 'device_name')"
+
+export IQF_DEVICE_MODEL
+IQF_DEVICE_MODEL="$(bashio::config 'device_model')"
+
+export IQF_HARDWARE_REVISION
+IQF_HARDWARE_REVISION="$(bashio::config 'hardware_revision')"
+
+export IQF_DEVICE_HOSTNAME
+IQF_DEVICE_HOSTNAME="$(bashio::config 'device_hostname')"
+
+export IQF_SOFTWARE_VERSION
+IQF_SOFTWARE_VERSION="$(bashio::config 'software_version')"
+
+export IQF_LOG_LEVEL
+IQF_LOG_LEVEL="$(bashio::config 'log_level')"
+
+export IQF_DEVICE_CONFIG_PATH="/data/device.json"
+export IQF_CLOUD_CONFIG_PATH="/data/cloud-config.json"
+
+cd /app
+exec python3 -u main.py
