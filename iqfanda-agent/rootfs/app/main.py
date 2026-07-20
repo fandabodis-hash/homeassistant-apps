@@ -2,9 +2,9 @@ import logging
 import threading
 import time
 
-from device_config import main as spust_synchronizaci_konfigurace
-from heartbeat import main as spust_heartbeat
-from provisioning import zajisti_registraci_zarizeni
+from device_config import main as device_config_main
+from heartbeat import main as heartbeat_main
+from provisioning import ensure_device_is_provisioned
 
 
 logging.basicConfig(
@@ -13,57 +13,65 @@ logging.basicConfig(
 )
 
 
+def run_heartbeat() -> None:
+    heartbeat_main()
+
+
+def run_device_config_sync() -> None:
+    device_config_main()
+
+
 def main() -> None:
-    logging.info("IQ FANDA Agent Core spusten.")
+    logging.info("IQ FANDA Agent Core spuštěn.")
 
     try:
-        zajisti_registraci_zarizeni()
+        ensure_device_is_provisioned()
     except Exception:
         logging.exception(
-            "Provisioning zarizeni selhal. "
+            "Provisioning zařízení selhal. "
             "Heartbeat ani synchronizace konfigurace "
-            "nebudou spusteny."
+            "nebudou spuštěny."
         )
         raise
 
     logging.info(
-        "Identita zarizeni je pripravena. "
-        "Spoustim cloudove sluzby."
+        "Identita zařízení je připravena. "
+        "Spouštím cloudové služby."
     )
 
-    vlakno_konfigurace = threading.Thread(
-        target=spust_synchronizaci_konfigurace,
-        name="synchronizace-konfigurace",
+    device_config_thread = threading.Thread(
+        target=run_device_config_sync,
+        name="device-config-sync",
         daemon=True,
     )
 
-    vlakno_heartbeat = threading.Thread(
-        target=spust_heartbeat,
+    heartbeat_thread = threading.Thread(
+        target=run_heartbeat,
         name="heartbeat",
         daemon=True,
     )
 
-    vlakno_konfigurace.start()
-    vlakno_heartbeat.start()
+    device_config_thread.start()
+    heartbeat_thread.start()
 
     while True:
-        if not vlakno_konfigurace.is_alive():
+        if not device_config_thread.is_alive():
             logging.error(
-                "Vlakno synchronizace konfigurace se "
-                "neocekavane ukoncilo."
+                "Vlákno synchronizace konfigurace se "
+                "neočekávaně ukončilo."
             )
             break
 
-        if not vlakno_heartbeat.is_alive():
+        if not heartbeat_thread.is_alive():
             logging.error(
-                "Heartbeat vlakno se neocekavane ukoncilo."
+                "Heartbeat vlákno se neočekávaně ukončilo."
             )
             break
 
         time.sleep(5)
 
     raise RuntimeError(
-        "Jedna z hlavnich sluzeb Agenta se ukoncila."
+        "Jedna z hlavních služeb Agenta se ukončila."
     )
 
 
