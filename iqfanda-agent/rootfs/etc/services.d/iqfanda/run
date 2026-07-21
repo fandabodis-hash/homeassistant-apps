@@ -50,8 +50,8 @@ IQF_SOFTWARE_VERSION="$(bashio::config 'software_version')"
 export IQF_LOG_LEVEL
 IQF_LOG_LEVEL="$(bashio::config 'log_level')"
 
-export IQF_DEVICE_CONFIG_PATH="/data/device.json"
-export IQF_CLOUD_CONFIG_PATH="/data/cloud-config.json"
+export IQF_DEVICE_CONFIG_PATH="/config/device.json"
+export IQF_CLOUD_CONFIG_PATH="/config/cloud-config.json"
 
 cd /app
 exec python3 -u main.py
