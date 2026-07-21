@@ -1,4 +1,4 @@
-﻿import json
+import json
 import logging
 import os
 import tempfile
@@ -12,14 +12,14 @@ from sync_signal import wait_for_config_sync
 DEVICE_CONFIG_PATH = Path(
     os.getenv(
         "IQF_DEVICE_CONFIG_PATH",
-        "/data/device.json",
+        "/config/device.json",
     )
 )
 
 CLOUD_CONFIG_PATH = Path(
     os.getenv(
         "IQF_CLOUD_CONFIG_PATH",
-        "/data/cloud-config.json",
+        "/config/cloud-config.json",
     )
 )
 

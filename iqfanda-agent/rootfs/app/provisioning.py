@@ -1,4 +1,4 @@
-﻿import json
+import json
 import logging
 import os
 import socket
@@ -10,21 +10,21 @@ from urllib import error, request
 DEVICE_CONFIG_PATH = Path(
     os.getenv(
         "IQF_DEVICE_CONFIG_PATH",
-        "/data/device.json",
+        "/config/device.json",
     )
 )
 
 FACTORY_CONFIG_PATH = Path(
     os.getenv(
         "IQF_FACTORY_CONFIG_PATH",
-        "/data/factory.json",
+        "/config/factory.json",
     )
 )
 
 INSTALL_CONFIG_PATH = Path(
     os.getenv(
         "IQF_INSTALL_CONFIG_PATH",
-        "/data/install.json",
+        "/config/install.json",
     )
 )
 DEFAULT_API_BASE_URL = "https://api.tngiqfanda.cz"

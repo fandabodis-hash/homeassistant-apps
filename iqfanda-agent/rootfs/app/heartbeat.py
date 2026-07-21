@@ -1,4 +1,4 @@
-﻿import json
+import json
 import logging
 import os
 import time
@@ -12,7 +12,7 @@ from sync_signal import request_config_sync
 CONFIG_PATH = Path(
     os.getenv(
         "IQF_DEVICE_CONFIG_PATH",
-        "/data/device.json",
+        "/config/device.json",
     )
 )
 
