@@ -28,6 +28,7 @@ def cekat_na_dokonceni_instalace() -> None:
     )
 
     while True:
+        logging.info("Agent stále čeká na dokončení instalace...")
         time.sleep(30)
 
 
