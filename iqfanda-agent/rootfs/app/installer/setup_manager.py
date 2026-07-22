@@ -12,18 +12,19 @@ class SetupState(str, Enum):
     CONNECTING_WIFI = "connecting_wifi"
     WAITING_FOR_NETWORK = "waiting_for_network"
     REGISTERING = "registering"
-    HEARTBEAT = "heartbeat"
+    WAITING_FOR_HEARTBEAT = "waiting_for_heartbeat"
+    WAITING_FOR_CLOUD_CONFIG = "waiting_for_cloud_config"
     FINISHED = "finished"
     ERROR = "error"
 
 
 class SetupManager:
     """
-    ĹĂ­dĂ­ stav onboardingu zaĹ™Ă­zenĂ­.
+    Ridi stav onboardingu zarizeni.
 
-    V prvnĂ­ etapÄ› pouze bezpeÄŤnÄ› uklĂˇdĂˇ a vracĂ­ stav.
-    VlastnĂ­ pĹ™ipojenĂ­ Wi-Fi, registraci a vypnutĂ­ AP
-    doplnĂ­me v dalĹˇĂ­ch krocĂ­ch.
+    Orchestruje pripojeni k Wi-Fi, overeni internetu,
+    registraci v cloudu, prvni heartbeat a prvni stazeni
+    cloudove konfigurace.
     """
 
     def __init__(self) -> None:
@@ -31,11 +32,13 @@ class SetupManager:
         self._status: dict[str, Any] = {
             "state": SetupState.IDLE.value,
             "progress": 0,
-            "message": "Setup Manager je pĹ™ipraven.",
+            "message": "Setup Manager je pripraven.",
             "error": None,
             "started_at": None,
             "updated_at": self._utc_now(),
             "finished_at": None,
+            "wifi": None,
+            "registration": None,
         }
 
     @staticmethod
@@ -83,12 +86,12 @@ class SetupManager:
         interface: str,
     ) -> dict[str, Any]:
         """
-        PĹ™ipojĂ­ zaĹ™Ă­zenĂ­ k vybranĂ© Wi-Fi sĂ­ti.
+        Pripoji zarizeni k vybrane Wi-Fi siti.
         """
         self.set_status(
             SetupState.CONNECTING_WIFI,
             15,
-            f"PĹ™ipojuji zaĹ™Ă­zenĂ­ k Wi-Fi {ssid}.",
+            f"Pripojuji zarizeni k Wi-Fi {ssid}.",
         )
 
         result = connector(
@@ -99,14 +102,14 @@ class SetupManager:
 
         if not isinstance(result, dict):
             raise RuntimeError(
-                "Wi-Fi konektor vrĂˇtil neplatnĂ˝ vĂ˝sledek."
+                "Wi-Fi konektor vratil neplatny vysledek."
             )
 
         if not result.get("ok"):
             raise RuntimeError(
                 str(
                     result.get("error")
-                    or "PĹ™ipojenĂ­ k Wi-Fi se nezdaĹ™ilo."
+                    or "Pripojeni k Wi-Fi se nezdarilo."
                 )
             )
 
@@ -119,26 +122,23 @@ class SetupManager:
         interval_seconds: int = 3,
     ) -> dict[str, Any]:
         """
-        ÄŚekĂˇ na dostupnost odchozĂ­ho internetovĂ©ho pĹ™ipojenĂ­.
+        Ceka na dostupnost odchoziho internetoveho pripojeni.
         """
         from time import monotonic, sleep
 
         self.set_status(
             SetupState.WAITING_FOR_NETWORK,
             35,
-            "Wi-Fi je pĹ™ipojena. ÄŚekĂˇm na dostupnost internetu.",
+            "Wi-Fi je pripojena. Cekam na dostupnost internetu.",
         )
 
         deadline = monotonic() + timeout_seconds
-        last_error = "InternetovĂ© pĹ™ipojenĂ­ zatĂ­m nenĂ­ dostupnĂ©."
+        last_error = "Internetove pripojeni zatim neni dostupne."
 
         while monotonic() < deadline:
             result = network_checker()
 
-            if (
-                isinstance(result, dict)
-                and result.get("ok")
-            ):
+            if isinstance(result, dict) and result.get("ok"):
                 return result
 
             if isinstance(result, dict):
@@ -148,7 +148,7 @@ class SetupManager:
                 )
             else:
                 last_error = (
-                    "Kontrola internetu vrĂˇtila neplatnĂ˝ vĂ˝sledek."
+                    "Kontrola internetu vratila neplatny vysledek."
                 )
 
             sleep(interval_seconds)
@@ -162,26 +162,26 @@ class SetupManager:
         registration: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Zaregistruje zaĹ™Ă­zenĂ­ v cloudu a bezpeÄŤnÄ› uloĹľĂ­ jeho token.
+        Zaregistruje zarizeni v cloudu a bezpecne ulozi jeho token.
         """
         self.set_status(
             SetupState.REGISTERING,
             55,
-            "Registruji ĂşÄŤet, objekt a zaĹ™Ă­zenĂ­ v IQ FANDA Cloud.",
+            "Registruji ucet, objekt a zarizeni v IQ FANDA Cloud.",
         )
 
-        result = registrar(**registration)
+        result = registrar(registration)
 
         if not isinstance(result, dict):
             raise RuntimeError(
-                "CloudovĂˇ registrace vrĂˇtila neplatnĂ˝ vĂ˝sledek."
+                "Cloudova registrace vratila neplatny vysledek."
             )
 
         if not result.get("ok"):
             raise RuntimeError(
                 str(
                     result.get("error")
-                    or "Registrace zaĹ™Ă­zenĂ­ se nezdaĹ™ila."
+                    or "Registrace zarizeni se nezdarila."
                 )
             )
 
@@ -189,21 +189,21 @@ class SetupManager:
 
         if not isinstance(data, dict):
             raise RuntimeError(
-                "Cloud nevrĂˇtil registraÄŤnĂ­ Ăşdaje zaĹ™Ă­zenĂ­."
+                "Cloud nevratil registracni udaje zarizeni."
             )
 
         save_result = credential_saver(data)
 
         if not isinstance(save_result, dict):
             raise RuntimeError(
-                "ĂšloĹľiĹˇtÄ› identity vrĂˇtilo neplatnĂ˝ vĂ˝sledek."
+                "Uloziste identity vratilo neplatny vysledek."
             )
 
         if not save_result.get("ok"):
             raise RuntimeError(
                 str(
                     save_result.get("error")
-                    or "Identitu zaĹ™Ă­zenĂ­ se nepodaĹ™ilo uloĹľit."
+                    or "Identitu zarizeni se nepodarilo ulozit."
                 )
             )
 
@@ -211,6 +211,59 @@ class SetupManager:
             "cloud": data,
             "storage": save_result,
         }
+
+    def _send_first_heartbeat(self) -> dict[str, Any]:
+        """
+        Odesle prvni heartbeat s prave ulozenou identitou zarizeni.
+        """
+        from heartbeat import load_device_config, send_heartbeat
+
+        self.set_status(
+            SetupState.WAITING_FOR_HEARTBEAT,
+            75,
+            "Zarizeni je zaregistrovano. Odesilam prvni heartbeat.",
+        )
+
+        device_config = load_device_config()
+        result = send_heartbeat(device_config)
+
+        if not isinstance(result, dict):
+            raise RuntimeError(
+                "Prvni heartbeat vratil neplatnou odpoved."
+            )
+
+        return result
+
+    def _sync_first_cloud_config(self) -> dict[str, Any]:
+        """
+        Stahne a ulozi prvni cloudovou konfiguraci zarizeni.
+        """
+        from device_config import sync_device_config
+
+        self.set_status(
+            SetupState.WAITING_FOR_CLOUD_CONFIG,
+            90,
+            "Heartbeat byl uspesny. Stahuji cloudovou konfiguraci.",
+        )
+
+        cloud_config = sync_device_config()
+
+        if not isinstance(cloud_config, dict):
+            raise RuntimeError(
+                "Cloudova konfigurace ma neplatny format."
+            )
+
+        if not cloud_config.get("device_uuid"):
+            raise RuntimeError(
+                "Cloudova konfigurace neobsahuje device_uuid."
+            )
+
+        if cloud_config.get("config_version") is None:
+            raise RuntimeError(
+                "Cloudova konfigurace neobsahuje config_version."
+            )
+
+        return cloud_config
 
     def _run_setup(
         self,
@@ -224,9 +277,9 @@ class SetupManager:
         interface: str,
     ) -> None:
         """
-        HlavnĂ­ orchestrĂˇtor onboardingu zaĹ™Ă­zenĂ­.
+        Hlavni orchestrator onboardingu zarizeni.
 
-        InstalaÄŤnĂ­ AP se v tĂ©to fĂˇzi nevypĂ­nĂˇ ani nemaĹľe.
+        Instalacni AP se v teto fazi nevypina ani nemaze.
         """
         try:
             self._connect_wifi(
@@ -240,32 +293,59 @@ class SetupManager:
                 network_checker=network_checker,
             )
 
-            self._register_device(
+            registration_result = self._register_device(
                 registrar=registrar,
                 credential_saver=credential_saver,
                 registration=registration,
             )
 
+            heartbeat_result = self._send_first_heartbeat()
+            cloud_config = self._sync_first_cloud_config()
+
+            with self._lock:
+                self._status["result"] = {
+                    "device_uuid": registration_result[
+                        "cloud"
+                    ].get("device_uuid"),
+                    "device_status": registration_result[
+                        "cloud"
+                    ].get("device_status"),
+                    "heartbeat": heartbeat_result,
+                    "config_version": cloud_config.get(
+                        "config_version"
+                    ),
+                    "active_modules": cloud_config.get(
+                        "active_modules",
+                        [],
+                    ),
+                }
+
             self.set_status(
-                SetupState.HEARTBEAT,
-                75,
-                "ZaĹ™Ă­zenĂ­ je zaregistrovĂˇno. PĹ™ipravuji prvnĂ­ heartbeat.",
+                SetupState.FINISHED,
+                100,
+                "Zarizeni je pripojeno, zaregistrovano a pripraveno.",
             )
 
         except Exception as exc:
             current_state = self.get_status().get("state")
 
             if current_state == SetupState.CONNECTING_WIFI.value:
-                message = "PĹ™ipojenĂ­ k Wi-Fi se nezdaĹ™ilo."
+                message = "Pripojeni k Wi-Fi se nezdarilo."
                 progress = 15
             elif current_state == SetupState.WAITING_FOR_NETWORK.value:
-                message = "NepodaĹ™ilo se ovÄ›Ĺ™it pĹ™Ă­stup k internetu."
+                message = "Nepodarilo se overit pristup k internetu."
                 progress = 35
             elif current_state == SetupState.REGISTERING.value:
-                message = "Registrace zaĹ™Ă­zenĂ­ v cloudu se nezdaĹ™ila."
+                message = "Registrace zarizeni v cloudu se nezdarila."
                 progress = 55
+            elif current_state == SetupState.WAITING_FOR_HEARTBEAT.value:
+                message = "Prvni heartbeat se nezdaril."
+                progress = 75
+            elif current_state == SetupState.WAITING_FOR_CLOUD_CONFIG.value:
+                message = "Prvni stazeni cloudove konfigurace se nezdarilo."
+                progress = 90
             else:
-                message = "BÄ›hem onboardingu nastala chyba."
+                message = "Behem onboardingu nastala chyba."
                 progress = 0
 
             self.set_status(
@@ -296,9 +376,10 @@ class SetupManager:
         credential_saver: Any = None,
     ) -> dict[str, Any]:
         """
-        ZahĂˇjĂ­ onboarding v samostatnĂ©m pracovnĂ­m vlĂˇknÄ›.
+        Zahaji onboarding v samostatnem pracovnim vlakne.
         """
         from threading import Thread
+        from identity import identity_service
 
         ssid = str(ssid or "").strip()
         password = str(password or "")
@@ -311,9 +392,6 @@ class SetupManager:
         account_password = str(account_password or "")
         site_name = str(site_name or "").strip()
         site_type = str(site_type or "house").strip() or "house"
-        # Sériové číslo a další hardwarové údaje jsou pevně
-        # přidělené při výrobě. Uživatel je během onboardingu nezadává.
-        from identity import identity_service
 
         try:
             device_identity = identity_service.load()
@@ -321,7 +399,7 @@ class SetupManager:
             return {
                 "ok": False,
                 "error": (
-                    "Zařízení nemá platnou výrobní identitu: "
+                    "Zarizeni nema platnou vyrobni identitu: "
                     f"{exc}"
                 ),
                 "setup": self.get_status(),
@@ -347,6 +425,7 @@ class SetupManager:
             str(device_name or "TNG IQ FANDA").strip()
             or "TNG IQ FANDA"
         )
+
         software_version = (
             str(software_version).strip()
             if software_version is not None
@@ -356,14 +435,14 @@ class SetupManager:
         if not ssid:
             return {
                 "ok": False,
-                "error": "SSID nesmĂ­ bĂ˝t prĂˇzdnĂ©.",
+                "error": "SSID nesmi byt prazdne.",
                 "setup": self.get_status(),
             }
 
         if len(password) < 8:
             return {
                 "ok": False,
-                "error": "Heslo Wi-Fi musĂ­ mĂ­t alespoĹ 8 znakĹŻ.",
+                "error": "Heslo Wi-Fi musi mit alespon 8 znaku.",
                 "setup": self.get_status(),
             }
 
@@ -392,7 +471,7 @@ class SetupManager:
             return {
                 "ok": False,
                 "error": (
-                    "ChybĂ­ povinnĂ© registraÄŤnĂ­ Ăşdaje: "
+                    "Chybi povinne registracni udaje: "
                     + ", ".join(missing_registration_fields)
                 ),
                 "setup": self.get_status(),
@@ -402,8 +481,8 @@ class SetupManager:
             return {
                 "ok": False,
                 "error": (
-                    "Heslo cloudovĂ©ho ĂşÄŤtu musĂ­ mĂ­t "
-                    "alespoĹ 10 znakĹŻ."
+                    "Heslo cloudoveho uctu musi mit "
+                    "alespon 10 znaku."
                 ),
                 "setup": self.get_status(),
             }
@@ -411,7 +490,7 @@ class SetupManager:
         if "@" not in email:
             return {
                 "ok": False,
-                "error": "E-mailovĂˇ adresa nenĂ­ platnĂˇ.",
+                "error": "E-mailova adresa neni platna.",
                 "setup": self.get_status(),
             }
 
@@ -419,8 +498,8 @@ class SetupManager:
             return {
                 "ok": False,
                 "error": (
-                    "SĂ©riovĂ© ÄŤĂ­slo zaĹ™Ă­zenĂ­ musĂ­ mĂ­t "
-                    "alespoĹ 3 znaky."
+                    "Seriove cislo zarizeni musi mit "
+                    "alespon 3 znaky."
                 ),
                 "setup": self.get_status(),
             }
@@ -428,28 +507,28 @@ class SetupManager:
         if not callable(connector):
             return {
                 "ok": False,
-                "error": "Wi-Fi konektor nenĂ­ dostupnĂ˝.",
+                "error": "Wi-Fi konektor neni dostupny.",
                 "setup": self.get_status(),
             }
 
         if not callable(network_checker):
             return {
                 "ok": False,
-                "error": "Kontrola internetu nenĂ­ dostupnĂˇ.",
+                "error": "Kontrola internetu neni dostupna.",
                 "setup": self.get_status(),
             }
 
         if not callable(registrar):
             return {
                 "ok": False,
-                "error": "CloudovĂˇ registrace nenĂ­ dostupnĂˇ.",
+                "error": "Cloudova registrace neni dostupna.",
                 "setup": self.get_status(),
             }
 
         if not callable(credential_saver):
             return {
                 "ok": False,
-                "error": "ĂšloĹľiĹˇtÄ› identity nenĂ­ dostupnĂ©.",
+                "error": "Uloziste identity neni dostupne.",
                 "setup": self.get_status(),
             }
 
@@ -463,7 +542,7 @@ class SetupManager:
             ):
                 return {
                     "ok": False,
-                    "error": "Onboarding jiĹľ probĂ­hĂˇ.",
+                    "error": "Onboarding jiz probiha.",
                     "setup": deepcopy(self._status),
                 }
 
@@ -487,10 +566,12 @@ class SetupManager:
                 "software_version": software_version,
             }
 
+            self._status["result"] = None
+
         status = self.set_status(
             SetupState.CONNECTING_WIFI,
             10,
-            f"PĹ™ipravuji pĹ™ipojenĂ­ k Wi-Fi {ssid}.",
+            f"Pripravuji pripojeni k Wi-Fi {ssid}.",
         )
 
         worker = Thread(
@@ -534,13 +615,14 @@ class SetupManager:
             self._status = {
                 "state": SetupState.IDLE.value,
                 "progress": 0,
-                "message": "Setup Manager je pĹ™ipraven.",
+                "message": "Setup Manager je pripraven.",
                 "error": None,
                 "started_at": None,
                 "updated_at": self._utc_now(),
                 "finished_at": None,
                 "wifi": None,
                 "registration": None,
+                "result": None,
             }
 
             return deepcopy(self._status)

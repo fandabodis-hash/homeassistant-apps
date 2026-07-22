@@ -27,6 +27,7 @@ INSTALL_CONFIG_PATH = Path(
         "/config/install.json",
     )
 )
+
 DEFAULT_API_BASE_URL = "https://api.tngiqfanda.cz"
 REGISTER_ENDPOINT = "/api/v1/provisioning/register"
 
@@ -36,7 +37,7 @@ def get_required_environment(name: str) -> str:
 
     if not value:
         raise ValueError(
-            f"Chyb\u00ed povinn\u00e1 provisioning hodnota: {name}"
+            f"Chybi povinna provisioning hodnota: {name}"
         )
 
     return value
@@ -72,7 +73,7 @@ def provisioning_is_enabled() -> bool:
 def load_factory_config() -> dict:
     if not FACTORY_CONFIG_PATH.exists():
         raise FileNotFoundError(
-            f"Výrobní konfigurace neexistuje: "
+            f"Vyrobni konfigurace neexistuje: "
             f"{FACTORY_CONFIG_PATH}"
         )
 
@@ -95,7 +96,7 @@ def load_factory_config() -> dict:
 
         if not isinstance(value, str) or not value.strip():
             raise ValueError(
-                f"Ve výrobní konfiguraci chybí pole: {field}"
+                f"Ve vyrobni konfiguraci chybi pole: {field}"
             )
 
     return factory_config
@@ -104,7 +105,7 @@ def load_factory_config() -> dict:
 def load_install_config() -> dict:
     if not INSTALL_CONFIG_PATH.exists():
         raise FileNotFoundError(
-            f"Instalační konfigurace neexistuje: "
+            f"Instalacni konfigurace neexistuje: "
             f"{INSTALL_CONFIG_PATH}"
         )
 
@@ -127,7 +128,7 @@ def load_install_config() -> dict:
 
         if not isinstance(value, str) or not value.strip():
             raise ValueError(
-                f"V instalační konfiguraci chybí pole: {field}"
+                f"V instalacni konfiguraci chybi pole: {field}"
             )
 
     return install_config
@@ -208,7 +209,7 @@ def register_device(payload: dict) -> dict:
 
     if not registration.get("success"):
         raise ValueError(
-            "Cloud nevr\u00e1til \u00fasp\u011b\u0161n\u00fd v\u00fdsledek registrace."
+            "Cloud nevratil uspesny vysledek registrace."
         )
 
     for field in (
@@ -217,13 +218,16 @@ def register_device(payload: dict) -> dict:
     ):
         if not registration.get(field):
             raise ValueError(
-                f"V odpov\u011bdi registrace chyb\u00ed pole: {field}"
+                f"V odpovedi registrace chybi pole: {field}"
             )
 
-    return registration
+    return {
+        "ok": True,
+        "data": registration,
+    }
 
 
-def save_device_identity(registration: dict) -> None:
+def save_device_identity(registration: dict) -> dict:
     DEVICE_CONFIG_PATH.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -272,37 +276,42 @@ def save_device_identity(registration: dict) -> None:
         if INSTALL_CONFIG_PATH.exists():
             INSTALL_CONFIG_PATH.unlink()
             logging.info(
-                "Instala\u010dn\u00ed konfigurace byla po \u00fasp\u011b\u0161n\u00e9 registraci odstran\u011bna."
+                "Instalacni konfigurace byla po uspesne registraci odstranena."
             )
 
     except Exception:
         temporary_path.unlink(missing_ok=True)
         raise
 
+    return {
+        "ok": True,
+    }
+
 
 def ensure_device_is_provisioned() -> bool:
     if DEVICE_CONFIG_PATH.exists():
         logging.info(
-            "Identita za\u0159\u00edzen\u00ed ji\u017e existuje: %s",
+            "Identita zarizeni jiz existuje: %s",
             DEVICE_CONFIG_PATH,
         )
         return False
 
     if not provisioning_is_enabled():
         raise RuntimeError(
-            "Za\u0159\u00edzen\u00ed nen\u00ed registrov\u00e1no a provisioning "
-            "je vypnut\u00fd."
+            "Zarizeni neni registrovano a provisioning "
+            "je vypnuty."
         )
 
     logging.info(
-        "Identita za\u0159\u00edzen\u00ed neexistuje. "
-        "Spou\u0161t\u00edm prvn\u00ed registraci."
+        "Identita zarizeni neexistuje. "
+        "Spoustim prvni registraci."
     )
 
     payload = build_registration_payload()
 
     try:
-        registration = register_device(payload)
+        registration_result = register_device(payload)
+        registration = registration_result["data"]
 
     except error.HTTPError as exc:
         response_body = exc.read().decode(
@@ -311,20 +320,20 @@ def ensure_device_is_provisioned() -> bool:
         )
 
         raise RuntimeError(
-            f"Registrace byla odm\u00edtnuta, HTTP "
+            f"Registrace byla odmitnuta, HTTP "
             f"{exc.code}: {response_body}"
         ) from exc
 
     except error.URLError as exc:
         raise RuntimeError(
-            f"Cloud nen\u00ed p\u0159i registraci dostupn\u00fd: "
+            f"Cloud neni pri registraci dostupny: "
             f"{exc.reason}"
         ) from exc
 
     save_device_identity(registration)
 
     logging.info(
-        "Za\u0159\u00edzen\u00ed bylo \u00fasp\u011b\u0161n\u011b registrov\u00e1no. UUID: %s",
+        "Zarizeni bylo uspesne registrovano. UUID: %s",
         registration["device_uuid"],
     )
 
@@ -338,8 +347,3 @@ if __name__ == "__main__":
     )
 
     ensure_device_is_provisioned()
-
-
-
-
-
