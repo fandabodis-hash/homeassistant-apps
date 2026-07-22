@@ -6,6 +6,7 @@ import json
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
+from urllib.parse import urlsplit
 
 from installer.installer_service import (
     pripojit_wifi,
@@ -32,11 +33,147 @@ POVINNA_POLE_INSTALACE = (
     "site_type",
 )
 
+UVODNI_STRANKA = """<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="utf-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1"
+    >
+    <title>TNG IQ FANDA</title>
+
+    <style>
+        :root {
+            color-scheme: light dark;
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: #f4f6f8;
+            color: #1f2933;
+        }
+
+        .karta {
+            width: min(560px, 100%);
+            padding: 32px;
+            border: 1px solid #d9e2ec;
+            border-radius: 16px;
+            background: #ffffff;
+            box-shadow: 0 8px 30px rgb(0 0 0 / 10%);
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 30px;
+        }
+
+        .podnadpis {
+            margin-bottom: 24px;
+            color: #52606d;
+        }
+
+        .stav {
+            padding: 16px;
+            border: 1px solid #a7d7a9;
+            border-radius: 10px;
+            background: #eef8ef;
+        }
+
+        .stav strong {
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .detail {
+            margin-top: 18px;
+            line-height: 1.5;
+            color: #52606d;
+        }
+
+        .indikator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            margin-right: 8px;
+            border-radius: 50%;
+            background: #2e7d32;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: #111827;
+                color: #f3f4f6;
+            }
+
+            .karta {
+                border-color: #374151;
+                background: #1f2937;
+            }
+
+            .podnadpis,
+            .detail {
+                color: #cbd5e1;
+            }
+
+            .stav {
+                border-color: #3f7044;
+                background: #183c20;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="karta">
+        <h1>TNG IQ FANDA</h1>
+
+        <div class="podnadpis">
+            Instalační rozhraní zařízení
+        </div>
+
+        <div class="stav">
+            <strong>
+                <span class="indikator"></span>
+                Installer API je spuštěno
+            </strong>
+
+            Komunikace přes Home Assistant Ingress funguje.
+        </div>
+
+        <div class="detail">
+            Dalším krokem bude vytvoření průvodce pro konfiguraci
+            Wi-Fi, založení účtu klienta a registraci zařízení
+            do cloudu TNG IQ FANDA.
+        </div>
+    </main>
+</body>
+</html>
+"""
+
 
 class InstallerApiHandler(BaseHTTPRequestHandler):
     """Obsluha lokalniho HTTP API Installeru."""
 
     server_version = "TNG-IQ-FANDA-Installer/0.1"
+
+    def _ziskat_cestu(self) -> str:
+        """Vrati cestu pozadavku bez parametru URL."""
+
+        return urlsplit(self.path).path
 
     def _odeslat_json(
         self,
@@ -50,19 +187,56 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
         ).encode("utf-8")
 
         self.send_response(int(status))
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(telo)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header(
+            "Content-Type",
+            "application/json; charset=utf-8",
+        )
+        self.send_header(
+            "Content-Length",
+            str(len(telo)),
+        )
+        self.send_header(
+            "Cache-Control",
+            "no-store",
+        )
+        self.end_headers()
+        self.wfile.write(telo)
+
+    def _odeslat_html(
+        self,
+        status: HTTPStatus | int,
+        html: str,
+    ) -> None:
+        telo = html.encode("utf-8")
+
+        self.send_response(int(status))
+        self.send_header(
+            "Content-Type",
+            "text/html; charset=utf-8",
+        )
+        self.send_header(
+            "Content-Length",
+            str(len(telo)),
+        )
+        self.send_header(
+            "Cache-Control",
+            "no-store",
+        )
         self.end_headers()
         self.wfile.write(telo)
 
     def _nacist_json(self) -> dict[str, Any]:
-        delka_text = self.headers.get("Content-Length", "0")
+        delka_text = self.headers.get(
+            "Content-Length",
+            "0",
+        )
 
         try:
             delka = int(delka_text)
         except ValueError as chyba:
-            raise ValueError("Neplatna delka HTTP pozadavku.") from chyba
+            raise ValueError(
+                "Neplatna delka HTTP pozadavku."
+            ) from chyba
 
         if delka <= 0:
             return {}
@@ -70,23 +244,49 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
         surova_data = self.rfile.read(delka)
 
         try:
-            data = json.loads(surova_data.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as chyba:
-            raise ValueError("Telo pozadavku neni platny JSON.") from chyba
+            data = json.loads(
+                surova_data.decode("utf-8")
+            )
+        except (
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+        ) as chyba:
+            raise ValueError(
+                "Telo pozadavku neni platny JSON."
+            ) from chyba
 
         if not isinstance(data, dict):
-            raise ValueError("JSON pozadavku musi byt objekt.")
+            raise ValueError(
+                "JSON pozadavku musi byt objekt."
+            )
 
         return data
 
     def do_OPTIONS(self) -> None:
-        self.send_response(HTTPStatus.NO_CONTENT)
-        self.send_header("Allow", "GET, POST, OPTIONS")
-        self.send_header("Content-Length", "0")
+        self.send_response(
+            HTTPStatus.NO_CONTENT
+        )
+        self.send_header(
+            "Allow",
+            "GET, POST, OPTIONS",
+        )
+        self.send_header(
+            "Content-Length",
+            "0",
+        )
         self.end_headers()
 
     def do_GET(self) -> None:
-        if self.path == "/health":
+        cesta = self._ziskat_cestu()
+
+        if cesta in ("", "/"):
+            self._odeslat_html(
+                HTTPStatus.OK,
+                UVODNI_STRANKA,
+            )
+            return
+
+        if cesta == "/health":
             self._odeslat_json(
                 HTTPStatus.OK,
                 {
@@ -96,7 +296,7 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if self.path == "/api/installer/status":
+        if cesta == "/api/installer/status":
             self._odeslat_json(
                 HTTPStatus.OK,
                 {
@@ -106,8 +306,9 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if self.path == "/api/wifi/status":
+        if cesta == "/api/wifi/status":
             vysledek = ziskat_stav_wifi()
+
             status = (
                 HTTPStatus.OK
                 if vysledek.get("ok")
@@ -129,9 +330,12 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
         )
 
     def do_POST(self) -> None:
+        cesta = self._ziskat_cestu()
+
         try:
-            if self.path == "/api/wifi/scan":
+            if cesta == "/api/wifi/scan":
                 vysledek = vyhledat_wifi_site()
+
                 status = (
                     HTTPStatus.OK
                     if vysledek.get("ok")
@@ -144,14 +348,20 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
                 )
                 return
 
-            if self.path == "/api/wifi/connect":
+            if cesta == "/api/wifi/connect":
                 data = self._nacist_json()
 
                 ssid = data.get("ssid")
                 password = data.get("password")
-                interface = data.get("interface", "wlan0")
+                interface = data.get(
+                    "interface",
+                    "wlan0",
+                )
 
-                if not isinstance(ssid, str) or not ssid.strip():
+                if (
+                    not isinstance(ssid, str)
+                    or not ssid.strip()
+                ):
                     self._odeslat_json(
                         HTTPStatus.BAD_REQUEST,
                         {
@@ -166,17 +376,24 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
                         HTTPStatus.BAD_REQUEST,
                         {
                             "ok": False,
-                            "error": "Heslo Wi-Fi musi byt text.",
+                            "error": (
+                                "Heslo Wi-Fi musi byt text."
+                            ),
                         },
                     )
                     return
 
-                if not isinstance(interface, str) or not interface.strip():
+                if (
+                    not isinstance(interface, str)
+                    or not interface.strip()
+                ):
                     self._odeslat_json(
                         HTTPStatus.BAD_REQUEST,
                         {
                             "ok": False,
-                            "error": "Sitove rozhrani neni platne.",
+                            "error": (
+                                "Sitove rozhrani neni platne."
+                            ),
                         },
                     )
                     return
@@ -199,14 +416,19 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
                 )
                 return
 
-            if self.path == "/api/installer/start":
+            if cesta == "/api/installer/start":
                 data = self._nacist_json()
 
                 chybejici_pole = [
                     pole
                     for pole in POVINNA_POLE_INSTALACE
-                    if not isinstance(data.get(pole), str)
-                    or not data[pole].strip()
+                    if (
+                        not isinstance(
+                            data.get(pole),
+                            str,
+                        )
+                        or not data[pole].strip()
+                    )
                 ]
 
                 if chybejici_pole:
@@ -223,20 +445,31 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
                 vysledek = spustit_instalaci(
                     ssid=data["ssid"],
                     password=data["password"],
-                    provisioning_id=data["provisioning_id"],
+                    provisioning_id=(
+                        data["provisioning_id"]
+                    ),
                     first_name=data["first_name"],
                     last_name=data["last_name"],
                     email=data["email"],
-                    account_password=data["account_password"],
+                    account_password=(
+                        data["account_password"]
+                    ),
                     site_name=data["site_name"],
                     site_type=data["site_type"],
-                    device_serial_number=data.get("device_serial_number"),
+                    device_serial_number=data.get(
+                        "device_serial_number"
+                    ),
                     device_name=data.get(
                         "device_name",
                         "TNG IQ FANDA",
                     ),
-                    software_version=data.get("software_version"),
-                    interface=data.get("interface", "wlan0"),
+                    software_version=data.get(
+                        "software_version"
+                    ),
+                    interface=data.get(
+                        "interface",
+                        "wlan0",
+                    ),
                 )
 
                 self._odeslat_json(
@@ -248,7 +481,7 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
                 )
                 return
 
-            if self.path == "/api/installer/reset":
+            if cesta == "/api/installer/reset":
                 vysledek = resetovat_instalaci()
 
                 self._odeslat_json(
@@ -282,7 +515,9 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
                 HTTPStatus.INTERNAL_SERVER_ERROR,
                 {
                     "ok": False,
-                    "error": "Interni chyba Installeru.",
+                    "error": (
+                        "Interni chyba Installeru."
+                    ),
                     "detail": str(chyba),
                 },
             )
@@ -317,10 +552,16 @@ def spustit_api(
 ) -> None:
     """Spusti blokujici lokalni HTTP API."""
 
-    server = vytvorit_server(host=host, port=port)
+    server = vytvorit_server(
+        host=host,
+        port=port,
+    )
 
     print(
-        f"Installer API spusteno na http://{host}:{server.server_port}",
+        (
+            "Installer API spusteno na "
+            f"http://{host}:{server.server_port}"
+        ),
         flush=True,
     )
 
@@ -334,6 +575,3 @@ def spustit_api(
 
 if __name__ == "__main__":
     spustit_api()
-
-
-
