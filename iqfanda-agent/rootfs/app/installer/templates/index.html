@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+    <meta
+        name="theme-color"
+        content="#08111f"
+    >
+
+    <title>TNG IQ FANDA – Instalace zařízení</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/css/installer.css"
+    >
+</head>
+
+<body>
+    <section
+        id="uvodni-obrazovka"
+        class="uvodni-obrazovka"
+        aria-labelledby="uvodni-nadpis"
+    >
+        <div class="uvodni-obsah">
+            <img
+                src="/static/img/logo_iqfanda.png"
+                alt="TNG IQ FANDA – Friendly Advanced Network & Data Automation"
+                class="uvodni-logo"
+            >
+
+            <h1
+                id="uvodni-nadpis"
+                class="visually-hidden"
+            >
+                TNG IQ FANDA
+            </h1>
+
+            <button
+                id="tlacitko-zaciname"
+                class="uvodni-tlacitko"
+                type="button"
+            >
+                <span>Začínáme</span>
+
+                <span
+                    class="uvodni-tlacitko-sipka"
+                    aria-hidden="true"
+                >
+                    →
+                </span>
+            </button>
+        </div>
+    </section>
+
+    <div class="portal-shell portal-shell-skryty">
+
+        <header class="portal-header">
+            <div class="header-status">
+                <div
+                    id="device-status"
+                    class="device-status"
+                    role="status"
+                    aria-live="polite"
+                >
+                    <span
+                        class="status-dot"
+                        aria-hidden="true"
+                    ></span>
+
+                    <span class="header-status-text">
+                        Zařízení připraveno
+                    </span>
+                </div>
+            </div>
+
+            <div class="header-title">
+                <strong>Instalační průvodce</strong>
+                <span aria-hidden="true"></span>
+            </div>
+        </header>
+
+        <main class="portal-main">
+
+            <aside class="wizard-sidebar">
+                <div class="sidebar-intro">
+                    <span class="eyebrow">
+                        První spuštění
+                    </span>
+
+                    <h1>
+                        Připravujeme váš systém IQ FANDA
+                    </h1>
+
+                    <p>
+                        Průvodce připojí zařízení k internetu,
+                        vytvoří cloudový účet a dokončí registraci
+                        řídicí jednotky.
+                    </p>
+                </div>
+
+                <nav
+                    class="wizard-steps"
+                    aria-label="Průběh instalace"
+                >
+                    <button
+                        type="button"
+                        class="wizard-step is-active"
+                        data-step-target="welcome"
+                    >
+                        <span class="step-number">1</span>
+
+                        <span class="step-content">
+                            <strong>Úvod</strong>
+                            <small>Kontrola zařízení</small>
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
+                        class="wizard-step"
+                        data-step-target="account"
+                        disabled
+                    >
+                        <span class="step-number">2</span>
+
+                        <span class="step-content">
+                            <strong>Účet a objekt</strong>
+                            <small>Údaje zákazníka</small>
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
+                        class="wizard-step"
+                        data-step-target="wifi"
+                        disabled
+                    >
+                        <span class="step-number">3</span>
+
+                        <span class="step-content">
+                            <strong>Wi-Fi</strong>
+                            <small>Připojení k síti</small>
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
+                        class="wizard-step"
+                        data-step-target="summary"
+                        disabled
+                    >
+                        <span class="step-number">4</span>
+
+                        <span class="step-content">
+                            <strong>Kontrola</strong>
+                            <small>Souhrn instalace</small>
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
+                        class="wizard-step"
+                        data-step-target="installation"
+                        disabled
+                    >
+                        <span class="step-number">5</span>
+
+                        <span class="step-content">
+                            <strong>Instalace</strong>
+                            <small>Registrace zařízení</small>
+                        </span>
+                    </button>
+                </nav>
+
+                <div class="sidebar-footer">
+                    <span>
+                        Lokální instalační rozhraní
+                    </span>
+
+                    <strong>
+                        TNG-Air s.r.o.
+                    </strong>
+                </div>
+            </aside>
+
+            <section class="wizard-panel">
+
+                <div
+                    id="global-alert"
+                    class="alert"
+                    role="alert"
+                    hidden
+                ></div>
+
+                <!-- Krok 1: Úvod -->
+                <section
+                    id="step-welcome"
+                    class="wizard-screen is-active"
+                    data-step="welcome"
+                >
+                    <div class="screen-heading">
+                        <span class="eyebrow">
+                            Vítejte
+                        </span>
+
+                        <h2>
+                            Instalace TNG IQ FANDA
+                        </h2>
+
+                        <p>
+                            Než začneme, ověříme stav zařízení
+                            a připravenost instalačních služeb.
+                        </p>
+                    </div>
+
+                    <div class="readiness-card">
+                        <div class="readiness-icon">
+                            <span>✓</span>
+                        </div>
+
+                        <div class="readiness-content">
+                            <strong id="readiness-title">
+                                Ověřuji připravenost zařízení
+                            </strong>
+
+                            <p id="readiness-message">
+                                Probíhá kontrola Installer API
+                                a výrobní identity zařízení.
+                            </p>
+                        </div>
+
+                        <div
+                            id="readiness-loader"
+                            class="spinner"
+                            aria-label="Probíhá kontrola"
+                        ></div>
+                    </div>
+
+                    <div class="feature-grid">
+                        <article class="feature-card">
+                            <span class="feature-index">01</span>
+
+                            <h3>Cloudový účet</h3>
+
+                            <p>
+                                Vytvoření účtu zákazníka
+                                a registrace objektu.
+                            </p>
+                        </article>
+
+                        <article class="feature-card">
+                            <span class="feature-index">02</span>
+
+                            <h3>Připojení Wi-Fi</h3>
+
+                            <p>
+                                Bezpečné připojení řídicí jednotky
+                                k místní síti.
+                            </p>
+                        </article>
+
+                        <article class="feature-card">
+                            <span class="feature-index">03</span>
+
+                            <h3>Aktivace systému</h3>
+
+                            <p>
+                                Registrace zařízení, heartbeat
+                                a stažení první konfigurace.
+                            </p>
+                        </article>
+                    </div>
+
+                    <div class="screen-actions">
+                        <span class="action-note">
+                            Instalace obvykle trvá několik minut.
+                        </span>
+
+                        <button
+                            type="button"
+                            id="button-start"
+                            class="button button-primary"
+                            disabled
+                        >
+                            Zahájit instalaci
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Krok 2: Účet a objekt -->
+                <section
+                    id="step-account"
+                    class="wizard-screen"
+                    data-step="account"
+                    hidden
+                >
+                    <div class="screen-heading">
+                        <span class="eyebrow">
+                            Krok 2 z 5
+                        </span>
+
+                        <h2>
+                            Účet zákazníka a objekt
+                        </h2>
+
+                        <p>
+                            Zadané údaje budou použity pro vytvoření
+                            účtu v IQ FANDA Cloud.
+                        </p>
+                    </div>
+
+                    <form
+                        id="account-form"
+                        novalidate
+                    >
+                        <div class="form-section">
+                            <div class="section-title">
+                                <h3>Kontaktní údaje</h3>
+
+                                <p>
+                                    Údaje budoucího správce systému.
+                                </p>
+                            </div>
+
+                            <div class="form-grid">
+                                <label class="field">
+                                    <span>Jméno</span>
+
+                                    <input
+                                        type="text"
+                                        id="first-name"
+                                        name="first_name"
+                                        autocomplete="given-name"
+                                        maxlength="100"
+                                        required
+                                    >
+                                </label>
+
+                                <label class="field">
+                                    <span>Příjmení</span>
+
+                                    <input
+                                        type="text"
+                                        id="last-name"
+                                        name="last_name"
+                                        autocomplete="family-name"
+                                        maxlength="100"
+                                        required
+                                    >
+                                </label>
+
+                                <label class="field field-wide">
+                                    <span>E-mailová adresa</span>
+
+                                    <input
+                                        type="email"
+                                        id="email"
+                                        name="email"
+                                        autocomplete="email"
+                                        maxlength="254"
+                                        required
+                                    >
+                                </label>
+
+                                <label class="field">
+                                    <span>Heslo účtu</span>
+
+                                    <div class="password-field">
+                                        <input
+                                            type="password"
+                                            id="account-password"
+                                            name="account_password"
+                                            autocomplete="new-password"
+                                            minlength="10"
+                                            required
+                                        >
+
+                                        <button
+                                            type="button"
+                                            class="password-toggle"
+                                            data-password-target="account-password"
+                                            aria-label="Zobrazit heslo"
+                                        >
+                                            Zobrazit
+                                        </button>
+                                    </div>
+
+                                    <small>
+                                        Nejméně 10 znaků.
+                                    </small>
+                                </label>
+
+                                <label class="field">
+                                    <span>Potvrzení hesla</span>
+
+                                    <div class="password-field">
+                                        <input
+                                            type="password"
+                                            id="account-password-confirm"
+                                            name="account_password_confirm"
+                                            autocomplete="new-password"
+                                            minlength="10"
+                                            required
+                                        >
+
+                                        <button
+                                            type="button"
+                                            class="password-toggle"
+                                            data-password-target="account-password-confirm"
+                                            aria-label="Zobrazit heslo"
+                                        >
+                                            Zobrazit
+                                        </button>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <div class="section-title">
+                                <h3>Instalovaný objekt</h3>
+
+                                <p>
+                                    Základní identifikace místa instalace.
+                                </p>
+                            </div>
+
+                            <div class="form-grid">
+                                <label class="field field-wide">
+                                    <span>Název objektu</span>
+
+                                    <input
+                                        type="text"
+                                        id="site-name"
+                                        name="site_name"
+                                        placeholder="Například Rodinný dům Novákovi"
+                                        maxlength="150"
+                                        required
+                                    >
+                                </label>
+
+                                <label class="field">
+                                    <span>Typ objektu</span>
+
+                                    <select
+                                        id="site-type"
+                                        name="site_type"
+                                        required
+                                    >
+                                        <option value="house">
+                                            Rodinný dům
+                                        </option>
+
+                                        <option value="apartment">
+                                            Byt
+                                        </option>
+
+                                        <option value="commercial">
+                                            Komerční objekt
+                                        </option>
+
+                                        <option value="industrial">
+                                            Průmyslový objekt
+                                        </option>
+
+                                        <option value="other">
+                                            Jiný objekt
+                                        </option>
+                                    </select>
+                                </label>
+
+                                <label class="field">
+                                    <span>Provisioning ID</span>
+
+                                    <input
+                                        type="text"
+                                        id="provisioning-id"
+                                        name="provisioning_id"
+                                        autocomplete="off"
+                                        maxlength="200"
+                                        required
+                                    >
+
+                                    <small>
+                                        Instalační identifikátor dodaný
+                                        se zařízením.
+                                    </small>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="screen-actions">
+                            <button
+                                type="button"
+                                class="button button-secondary"
+                                data-action="back"
+                                data-target-step="welcome"
+                            >
+                                Zpět
+                            </button>
+
+                            <button
+                                type="submit"
+                                class="button button-primary"
+                            >
+                                Pokračovat k Wi-Fi
+                            </button>
+                        </div>
+                    </form>
+                </section>
+
+                <!-- Krok 3: Wi-Fi -->
+                <section
+                    id="step-wifi"
+                    class="wizard-screen"
+                    data-step="wifi"
+                    hidden
+                >
+                    <div class="screen-heading">
+                        <span class="eyebrow">
+                            Krok 3 z 5
+                        </span>
+
+                        <h2>
+                            Připojení k Wi-Fi
+                        </h2>
+
+                        <p>
+                            Vyberte síť, ke které se má zařízení
+                            po dokončení instalace automaticky připojovat.
+                        </p>
+                    </div>
+
+                    <div class="wifi-toolbar">
+                        <div>
+                            <strong>Dostupné sítě</strong>
+
+                            <span id="wifi-scan-status">
+                                Zatím nebylo provedeno vyhledání.
+                            </span>
+                        </div>
+
+                        <button
+                            type="button"
+                            id="button-scan-wifi"
+                            class="button button-secondary"
+                        >
+                            Vyhledat sítě
+                        </button>
+                    </div>
+
+                    <div
+                        id="wifi-list"
+                        class="wifi-list"
+                    >
+                        <div class="empty-state">
+                            <strong>
+                                Vyhledejte dostupné Wi-Fi sítě
+                            </strong>
+
+                            <p>
+                                Po dokončení skenu se zde zobrazí
+                                dostupná bezdrátová připojení.
+                            </p>
+                        </div>
+                    </div>
+
+                    <form
+                        id="wifi-form"
+                        novalidate
+                    >
+                        <div class="form-grid">
+                            <label class="field field-wide">
+                                <span>Název Wi-Fi sítě</span>
+
+                                <input
+                                    type="text"
+                                    id="wifi-ssid"
+                                    name="ssid"
+                                    autocomplete="off"
+                                    maxlength="100"
+                                    required
+                                >
+                            </label>
+
+                            <label class="field field-wide">
+                                <span>Heslo Wi-Fi</span>
+
+                                <div class="password-field">
+                                    <input
+                                        type="password"
+                                        id="wifi-password"
+                                        name="password"
+                                        autocomplete="current-password"
+                                        minlength="8"
+                                        required
+                                    >
+
+                                    <button
+                                        type="button"
+                                        class="password-toggle"
+                                        data-password-target="wifi-password"
+                                        aria-label="Zobrazit heslo"
+                                    >
+                                        Zobrazit
+                                    </button>
+                                </div>
+
+                                <small>
+                                    Heslo musí mít nejméně 8 znaků.
+                                </small>
+                            </label>
+                        </div>
+
+                        <div class="screen-actions">
+                            <button
+                                type="button"
+                                class="button button-secondary"
+                                data-action="back"
+                                data-target-step="account"
+                            >
+                                Zpět
+                            </button>
+
+                            <button
+                                type="submit"
+                                class="button button-primary"
+                            >
+                                Pokračovat ke kontrole
+                            </button>
+                        </div>
+                    </form>
+                </section>
+
+                <!-- Krok 4: Souhrn -->
+                <section
+                    id="step-summary"
+                    class="wizard-screen"
+                    data-step="summary"
+                    hidden
+                >
+                    <div class="screen-heading">
+                        <span class="eyebrow">
+                            Krok 4 z 5
+                        </span>
+
+                        <h2>
+                            Kontrola instalace
+                        </h2>
+
+                        <p>
+                            Zkontrolujte zadané údaje. Po spuštění
+                            začne zařízení automaticky provádět instalaci.
+                        </p>
+                    </div>
+
+                    <div class="summary-grid">
+                        <article class="summary-card">
+                            <span class="summary-label">
+                                Zákazník
+                            </span>
+
+                            <strong id="summary-customer">
+                                —
+                            </strong>
+
+                            <span id="summary-email">
+                                —
+                            </span>
+                        </article>
+
+                        <article class="summary-card">
+                            <span class="summary-label">
+                                Objekt
+                            </span>
+
+                            <strong id="summary-site">
+                                —
+                            </strong>
+
+                            <span id="summary-site-type">
+                                —
+                            </span>
+                        </article>
+
+                        <article class="summary-card">
+                            <span class="summary-label">
+                                Wi-Fi síť
+                            </span>
+
+                            <strong id="summary-wifi">
+                                —
+                            </strong>
+
+                            <span>
+                                Automatické připojení
+                            </span>
+                        </article>
+
+                        <article class="summary-card">
+                            <span class="summary-label">
+                                Zařízení
+                            </span>
+
+                            <strong id="summary-device">
+                                TNG IQ FANDA
+                            </strong>
+
+                            <span id="summary-device-serial">
+                                Výrobní identita bude načtena zařízením
+                            </span>
+                        </article>
+                    </div>
+
+                    <div class="installation-warning">
+                        <strong>
+                            Během instalace zařízení nevypínejte.
+                        </strong>
+
+                        <p>
+                            Po připojení k domácí Wi-Fi může být
+                            dočasně přerušeno spojení s instalačním
+                            přístupovým bodem.
+                        </p>
+                    </div>
+
+                    <div class="screen-actions">
+                        <button
+                            type="button"
+                            class="button button-secondary"
+                            data-action="back"
+                            data-target-step="wifi"
+                        >
+                            Zpět
+                        </button>
+
+                        <button
+                            type="button"
+                            id="button-install"
+                            class="button button-primary"
+                        >
+                            Spustit instalaci
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Krok 5: Instalace -->
+                <section
+                    id="step-installation"
+                    class="wizard-screen"
+                    data-step="installation"
+                    hidden
+                >
+                    <div class="screen-heading">
+                        <span class="eyebrow">
+                            Krok 5 z 5
+                        </span>
+
+                        <h2 id="installation-title">
+                            Probíhá instalace
+                        </h2>
+
+                        <p id="installation-message">
+                            Připravuji instalaci zařízení.
+                        </p>
+                    </div>
+
+                    <div class="progress-card">
+                        <div class="progress-header">
+                            <span>Celkový průběh</span>
+
+                            <strong id="progress-value">
+                                0 %
+                            </strong>
+                        </div>
+
+                        <div
+                            class="progress-track"
+                            role="progressbar"
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                            aria-valuenow="0"
+                        >
+                            <div
+                                id="progress-bar"
+                                class="progress-bar"
+                            ></div>
+                        </div>
+                    </div>
+
+                    <div class="installation-stages">
+                        <div
+                            class="installation-stage"
+                            data-state="connecting_wifi"
+                        >
+                            <span class="stage-indicator">1</span>
+
+                            <div>
+                                <strong>Připojení k Wi-Fi</strong>
+
+                                <small>
+                                    Aktivace klientského síťového profilu
+                                </small>
+                            </div>
+                        </div>
+
+                        <div
+                            class="installation-stage"
+                            data-state="waiting_for_network"
+                        >
+                            <span class="stage-indicator">2</span>
+
+                            <div>
+                                <strong>Kontrola internetu</strong>
+
+                                <small>
+                                    Ověření odchozího připojení
+                                </small>
+                            </div>
+                        </div>
+
+                        <div
+                            class="installation-stage"
+                            data-state="registering"
+                        >
+                            <span class="stage-indicator">3</span>
+
+                            <div>
+                                <strong>Registrace v cloudu</strong>
+
+                                <small>
+                                    Vytvoření účtu, objektu a zařízení
+                                </small>
+                            </div>
+                        </div>
+
+                        <div
+                            class="installation-stage"
+                            data-state="waiting_for_heartbeat"
+                        >
+                            <span class="stage-indicator">4</span>
+
+                            <div>
+                                <strong>Ověření zařízení</strong>
+
+                                <small>
+                                    Odeslání prvního heartbeat
+                                </small>
+                            </div>
+                        </div>
+
+                        <div
+                            class="installation-stage"
+                            data-state="waiting_for_cloud_config"
+                        >
+                            <span class="stage-indicator">5</span>
+
+                            <div>
+                                <strong>Cloudová konfigurace</strong>
+
+                                <small>
+                                    Stažení prvního nastavení systému
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        id="installation-error"
+                        class="installation-error"
+                        hidden
+                    >
+                        <strong>
+                            Instalaci se nepodařilo dokončit
+                        </strong>
+
+                        <p id="installation-error-message"></p>
+
+                        <button
+                            type="button"
+                            id="button-reset"
+                            class="button button-secondary"
+                        >
+                            Vrátit se na začátek
+                        </button>
+                    </div>
+
+                    <div
+                        id="installation-complete"
+                        class="installation-complete"
+                        hidden
+                    >
+                        <div class="complete-icon">
+                            ✓
+                        </div>
+
+                        <div>
+                            <strong>
+                                Zařízení je připraveno
+                            </strong>
+
+                            <p>
+                                Registrace byla dokončena a systém
+                                komunikuje s IQ FANDA Cloud.
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
+            </section>
+        </main>
+
+        <footer class="portal-footer">
+            <span>
+                TNG IQ FANDA
+            </span>
+
+            <span>
+                Bezpečné lokální instalační rozhraní
+            </span>
+        </footer>
+
+    </div>
+
+    <script
+        src="/static/js/installer.js"
+        defer
+    ></script>
+    <script src="/static/js/uvod.js"></script>
+</body>
+</html>

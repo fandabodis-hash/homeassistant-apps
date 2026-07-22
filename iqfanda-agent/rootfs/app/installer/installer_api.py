@@ -1,4 +1,4 @@
-﻿"""Lokalni HTTP API Installeru TNG IQ FANDA."""
+"""Lokalni HTTP API Installeru TNG IQ FANDA."""
 
 from __future__ import annotations
 
@@ -17,6 +17,12 @@ from installer.installer_service import (
     ziskat_stav_wifi,
 )
 
+from installer.web import (
+    WebOdpoved,
+    nacist_staticky_soubor,
+    nacist_uvodni_stranku,
+)
+
 
 VYCHOZI_HOST = "0.0.0.0"
 VYCHOZI_PORT = 8099
@@ -33,136 +39,6 @@ POVINNA_POLE_INSTALACE = (
     "site_type",
 )
 
-UVODNI_STRANKA = """<!DOCTYPE html>
-<html lang="cs">
-<head>
-    <meta charset="utf-8">
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1"
-    >
-    <title>TNG IQ FANDA</title>
-
-    <style>
-        :root {
-            color-scheme: light dark;
-            font-family:
-                Arial,
-                Helvetica,
-                sans-serif;
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            background: #f4f6f8;
-            color: #1f2933;
-        }
-
-        .karta {
-            width: min(560px, 100%);
-            padding: 32px;
-            border: 1px solid #d9e2ec;
-            border-radius: 16px;
-            background: #ffffff;
-            box-shadow: 0 8px 30px rgb(0 0 0 / 10%);
-        }
-
-        h1 {
-            margin: 0 0 8px;
-            font-size: 30px;
-        }
-
-        .podnadpis {
-            margin-bottom: 24px;
-            color: #52606d;
-        }
-
-        .stav {
-            padding: 16px;
-            border: 1px solid #a7d7a9;
-            border-radius: 10px;
-            background: #eef8ef;
-        }
-
-        .stav strong {
-            display: block;
-            margin-bottom: 4px;
-        }
-
-        .detail {
-            margin-top: 18px;
-            line-height: 1.5;
-            color: #52606d;
-        }
-
-        .indikator {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            margin-right: 8px;
-            border-radius: 50%;
-            background: #2e7d32;
-        }
-
-        @media (prefers-color-scheme: dark) {
-            body {
-                background: #111827;
-                color: #f3f4f6;
-            }
-
-            .karta {
-                border-color: #374151;
-                background: #1f2937;
-            }
-
-            .podnadpis,
-            .detail {
-                color: #cbd5e1;
-            }
-
-            .stav {
-                border-color: #3f7044;
-                background: #183c20;
-            }
-        }
-    </style>
-</head>
-
-<body>
-    <main class="karta">
-        <h1>TNG IQ FANDA</h1>
-
-        <div class="podnadpis">
-            Instalační rozhraní zařízení
-        </div>
-
-        <div class="stav">
-            <strong>
-                <span class="indikator"></span>
-                Installer API je spuštěno
-            </strong>
-
-            Komunikace přes Home Assistant Ingress funguje.
-        </div>
-
-        <div class="detail">
-            Dalším krokem bude vytvoření průvodce pro konfiguraci
-            Wi-Fi, založení účtu klienta a registraci zařízení
-            do cloudu TNG IQ FANDA.
-        </div>
-    </main>
-</body>
-</html>
-"""
 
 
 class InstallerApiHandler(BaseHTTPRequestHandler):
@@ -225,6 +101,33 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(telo)
 
+
+    def _odeslat_web(
+        self,
+        odpoved: WebOdpoved,
+    ) -> None:
+        """Odesle odpoved vytvorenou webovou vrstvou."""
+
+        self.send_response(int(odpoved.status))
+        self.send_header(
+            "Content-Type",
+            odpoved.typ_obsahu,
+        )
+        self.send_header(
+            "Content-Length",
+            str(len(odpoved.telo)),
+        )
+        self.send_header(
+            "Cache-Control",
+            odpoved.cache_control,
+        )
+        self.send_header(
+            "X-Content-Type-Options",
+            "nosniff",
+        )
+        self.end_headers()
+        self.wfile.write(odpoved.telo)
+
     def _nacist_json(self) -> dict[str, Any]:
         delka_text = self.headers.get(
             "Content-Length",
@@ -280,9 +183,14 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
         cesta = self._ziskat_cestu()
 
         if cesta in ("", "/"):
-            self._odeslat_html(
-                HTTPStatus.OK,
-                UVODNI_STRANKA,
+            self._odeslat_web(
+                nacist_uvodni_stranku()
+            )
+            return
+
+        if cesta.startswith("/static/"):
+            self._odeslat_web(
+                nacist_staticky_soubor(cesta)
             )
             return
 
