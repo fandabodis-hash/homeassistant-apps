@@ -6,6 +6,7 @@ import time
 
 from device_config import main as device_config_main
 from heartbeat import main as heartbeat_main
+from installer.access_point_service import request_access_point
 from installer.installer_api import spustit_api
 from provisioning import ensure_device_is_provisioned
 
@@ -47,6 +48,8 @@ def cekat_na_registraci_zarizeni(
         "Kontroluji, zda je zařízení připraveno k registraci."
     )
 
+    access_point_requested = False
+
     while True:
         if not installer_api_thread.is_alive():
             raise RuntimeError(
@@ -59,6 +62,26 @@ def cekat_na_registraci_zarizeni(
 
         except FileNotFoundError as chyba:
             logging.warning("%s", chyba)
+
+            if not access_point_requested:
+                try:
+                    vysledek_ap = request_access_point(
+                        reason="device_not_provisioned",
+                    )
+                    logging.info(
+                        "Host Agent byl po\u017e\u00e1d\u00e1n "
+                        "o spu\u0161t\u011bn\u00ed instala\u010dn\u00edho "
+                        "Access Pointu: %s",
+                        vysledek_ap.get("path"),
+                    )
+                    access_point_requested = True
+
+                except Exception:
+                    logging.exception(
+                        "Po\u017eadavek na spu\u0161t\u011bn\u00ed "
+                        "instala\u010dn\u00edho Access Pointu "
+                        "se nepoda\u0159ilo ulo\u017eit."
+                    )
             logging.info(
                 "Zařízení čeká na dokončení instalace. "
                 "Další kontrola za %s sekund.",

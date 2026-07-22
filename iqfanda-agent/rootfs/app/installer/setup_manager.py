@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 
+import logging
 import threading
 from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
+
+from installer.access_point_service import release_access_point
 
 
 class SetupState(str, Enum):
@@ -302,6 +305,31 @@ class SetupManager:
             heartbeat_result = self._send_first_heartbeat()
             cloud_config = self._sync_first_cloud_config()
 
+            try:
+                access_point_result = release_access_point(
+                    reason="onboarding_completed",
+                )
+                logging.info(
+                    "Host Agent byl pozadan o ukonceni "
+                    "instalacniho Access Pointu: %s",
+                    access_point_result.get("path"),
+                )
+
+            except Exception:
+                access_point_result = {
+                    "ok": False,
+                    "error": (
+                        "Pozadavek na ukonceni "
+                        "instalacniho Access Pointu "
+                        "se nepodarilo ulozit."
+                    ),
+                }
+                logging.exception(
+                    "Pozadavek na ukonceni instalacniho "
+                    "Access Pointu se nepodarilo ulozit. "
+                    "Onboarding zustava uspesny."
+                )
+
             with self._lock:
                 self._status["result"] = {
                     "device_uuid": registration_result[
@@ -311,6 +339,7 @@ class SetupManager:
                         "cloud"
                     ].get("device_status"),
                     "heartbeat": heartbeat_result,
+                    "access_point": access_point_result,
                     "config_version": cloud_config.get(
                         "config_version"
                     ),
