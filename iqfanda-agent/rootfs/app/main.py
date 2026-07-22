@@ -13,6 +13,9 @@ logging.basicConfig(
 )
 
 
+PROVISIONING_RETRY_SECONDS = 30
+
+
 def run_heartbeat() -> None:
     heartbeat_main()
 
@@ -21,34 +24,38 @@ def run_device_config_sync() -> None:
     device_config_main()
 
 
-def cekat_na_dokonceni_instalace() -> None:
-    logging.warning(
-        "Zařízení není zatím zaregistrováno. "
-        "Agent čeká na dokončení instalace."
+def cekat_na_registraci_zarizeni() -> None:
+    logging.info(
+        "Kontroluji, zda je zařízení připraveno k registraci."
     )
 
     while True:
-        logging.info("Agent stále čeká na dokončení instalace...")
-        time.sleep(30)
+        try:
+            ensure_device_is_provisioned()
+            return
+
+        except FileNotFoundError as chyba:
+            logging.warning("%s", chyba)
+            logging.info(
+                "Zařízení čeká na dokončení instalace. "
+                "Další kontrola za %s sekund.",
+                PROVISIONING_RETRY_SECONDS,
+            )
+
+        except Exception:
+            logging.exception(
+                "Provisioning zařízení selhal. "
+                "Další pokus proběhne za %s sekund.",
+                PROVISIONING_RETRY_SECONDS,
+            )
+
+        time.sleep(PROVISIONING_RETRY_SECONDS)
 
 
 def main() -> None:
     logging.info("IQ FANDA Agent Core spuštěn.")
 
-    try:
-        ensure_device_is_provisioned()
-    except FileNotFoundError as chyba:
-        logging.warning("%s", chyba)
-        cekat_na_dokonceni_instalace()
-        return
-    except Exception:
-        logging.exception(
-            "Provisioning zařízení selhal. "
-            "Heartbeat ani synchronizace konfigurace "
-            "nebudou spuštěny."
-        )
-        cekat_na_dokonceni_instalace()
-        return
+    cekat_na_registraci_zarizeni()
 
     logging.info(
         "Identita zařízení je připravena. "
