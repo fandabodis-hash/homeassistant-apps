@@ -9,13 +9,51 @@ WIFI_INTERFACE = "wlan0"
 
 
 def run_nmcli(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["nmcli", *args],
-        capture_output=True,
-        text=True,
-        timeout=15,
-        check=False,
-    )
+    """
+    Spusti prikaz NetworkManageru.
+
+    Na Raspberry Pi se pouzije skutecne nmcli.
+    Pokud nmcli neni dostupne, vrati se rizeny vysledek
+    misto padu celeho Installer API.
+    """
+
+    command = ["nmcli", *args]
+
+    try:
+        return subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+
+    except FileNotFoundError:
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=127,
+            stdout="",
+            stderr=(
+                "NetworkManager (nmcli) neni v tomto "
+                "prostredi dostupny."
+            ),
+        )
+
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=124,
+            stdout="",
+            stderr="Prikaz nmcli prekrocil casovy limit.",
+        )
+
+    except OSError as exc:
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=1,
+            stdout="",
+            stderr=f"Prikaz nmcli se nepodarilo spustit: {exc}",
+        )
 
 
 def get_wifi_status() -> dict:
