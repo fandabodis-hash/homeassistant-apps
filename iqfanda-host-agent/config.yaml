@@ -1,0 +1,46 @@
+name: "TNG IQ FANDA Host Agent"
+description: "Systémový agent pro síť, instalační Wi-Fi a hardware TNG IQ FANDA"
+version: "0.5.17"
+slug: "iqf_host_agent"
+stage: experimental
+
+startup: system
+boot: manual
+init: false
+
+arch:
+  - aarch64
+
+host_network: true
+host_dbus: true
+apparmor: false
+
+privileged:
+  - NET_ADMIN
+  - NET_RAW
+  - SYS_ADMIN
+
+map:
+  - addon_config:rw
+  - homeassistant_config:rw
+  - share:rw
+
+options:
+  diagnostic_mode: true
+  execute_access_point: false
+  wifi_interface: "wlan0"
+  access_point:
+    enabled: false
+    ssid: "TNG_IQ_FANDA"
+    password: "iq800711"
+    address: "192.168.4.1/24"
+
+schema:
+  diagnostic_mode: bool
+  execute_access_point: bool
+  wifi_interface: str
+  access_point:
+    enabled: bool
+    ssid: str
+    password: password
+    address: str

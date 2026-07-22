@@ -1,0 +1,4 @@
+﻿iqfanda-host-agent/Dockerfile text eol=lf
+iqfanda-host-agent/*.yaml text eol=lf
+iqfanda-host-agent/rootfs/etc/services.d/** text eol=lf
+iqfanda-host-agent/rootfs/usr/local/bin/*.py text eol=lf

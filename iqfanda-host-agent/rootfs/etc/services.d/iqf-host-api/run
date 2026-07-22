@@ -1,0 +1,5 @@
+#!/usr/bin/with-contenv bashio
+
+bashio::log.info "Spouštím interní TNG IQ FANDA Host API."
+
+exec python3 /usr/local/bin/iqf_host_api.py

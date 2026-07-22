@@ -1,0 +1,339 @@
+﻿#!/usr/bin/with-contenv bashio
+
+set -eo pipefail
+
+INTERFACE="$(bashio::config 'wifi_interface')"
+DIAGNOSTIC_MODE="$(bashio::config 'diagnostic_mode')"
+EXECUTE_AP="$(bashio::config 'execute_access_point')"
+
+AP_PASSWORD="$(bashio::config 'access_point.password')"
+REQUEST_FILE="/homeassistant/iqf/runtime/access_point_request.yaml"
+
+AP_CONNECTION="IQF Installation AP"
+CLIENT_CONNECTION="IQF Client WiFi"
+FALLBACK_CLIENT_CONNECTION="Supervisor wlan0"
+DNSMASQ_CONFIG="/tmp/iqf-dnsmasq.conf"
+DNSMASQ_PID_FILE="/tmp/iqf-dnsmasq.pid"
+
+# Výchozí hodnoty – zabrání chybě „unbound variable“.
+REQUESTED="false"
+REASON="unknown"
+SSID="TNG_IQ_FANDA"
+ADDRESS="192.168.4.1/24"
+PORTAL_URL="http://192.168.4.1:8080"
+
+bashio::log.info "TNG IQ FANDA Host Agent 0.5.17"
+bashio::log.info "Diagnostický režim: ${DIAGNOSTIC_MODE}"
+bashio::log.info "Provádění AP povoleno: ${EXECUTE_AP}"
+bashio::log.info "Wi-Fi rozhraní: ${INTERFACE}"
+bashio::log.info "Soubor požadavku: ${REQUEST_FILE}"
+
+if [ ! -e "/sys/class/net/${INTERFACE}" ]; then
+    bashio::log.fatal "Rozhraní ${INTERFACE} nebylo nalezeno."
+fi
+
+if ! command -v nmcli >/dev/null 2>&1; then
+    bashio::log.fatal "Příkaz nmcli není dostupný."
+fi
+
+if ! nmcli general status; then
+    bashio::log.fatal \
+        "Host Agent se nedokáže spojit s NetworkManagerem."
+fi
+
+bashio::log.info "NetworkManager je dostupný."
+
+start_dhcp() {
+    local ap_ip="${ADDRESS%/*}"
+
+    bashio::log.info "Spouštím DHCP server na ${INTERFACE}."
+
+    stop_dhcp 2>/dev/null || true
+
+    rm -f \
+        "${DNSMASQ_PID_FILE}" \
+        /tmp/iqf-dnsmasq.leases
+
+    cat > "${DNSMASQ_CONFIG}" <<EOF
+port=0
+interface=${INTERFACE}
+bind-dynamic
+dhcp-authoritative
+dhcp-range=192.168.4.10,192.168.4.100,255.255.255.0,12h
+dhcp-option=3,${ap_ip}
+dhcp-leasefile=/tmp/iqf-dnsmasq.leases
+pid-file=${DNSMASQ_PID_FILE}
+log-dhcp
+EOF
+
+    bashio::log.info "Kontroluji konfiguraci dnsmasq."
+
+    if ! dnsmasq \
+        --test \
+        --conf-file="${DNSMASQ_CONFIG}"; then
+
+        bashio::log.error "Konfigurace dnsmasq není platná."
+        return 1
+    fi
+
+    dnsmasq \
+        --keep-in-foreground \
+        --log-facility=- \
+        --conf-file="${DNSMASQ_CONFIG}" &
+
+    DNSMASQ_PID=$!
+
+    sleep 2
+
+    if ! kill -0 "${DNSMASQ_PID}" 2>/dev/null; then
+        bashio::log.error \
+            "Proces dnsmasq se po spuštění ukončil."
+
+        wait "${DNSMASQ_PID}" 2>/dev/null || true
+        return 1
+    fi
+
+    printf '%s\n' "${DNSMASQ_PID}" > "${DNSMASQ_PID_FILE}"
+
+    bashio::log.info "DHCP server je aktivní."
+    bashio::log.info \
+        "Rozsah adres: 192.168.4.10 až 192.168.4.100"
+
+    return 0
+}
+
+
+
+restore_client_connection() {
+    if nmcli -t -f NAME connection show --active \
+        | grep -Fxq "${CLIENT_CONNECTION}"; then
+        bashio::log.info \
+            "Klientské Wi-Fi připojení ${CLIENT_CONNECTION} je aktivní."
+        return 0
+    fi
+
+    if nmcli connection show "${CLIENT_CONNECTION}" >/dev/null 2>&1; then
+        bashio::log.info \
+            "Obnovuji klientské Wi-Fi připojení ${CLIENT_CONNECTION}."
+
+        if nmcli connection up "${CLIENT_CONNECTION}"; then
+            return 0
+        fi
+
+        bashio::log.warning \
+            "Profil ${CLIENT_CONNECTION} se nepodařilo aktivovat."
+    fi
+
+    if nmcli connection show "${FALLBACK_CLIENT_CONNECTION}" \
+        >/dev/null 2>&1; then
+
+        bashio::log.info \
+            "Obnovuji záložní Wi-Fi profil ${FALLBACK_CLIENT_CONNECTION}."
+
+        if nmcli connection up "${FALLBACK_CLIENT_CONNECTION}"; then
+            return 0
+        fi
+    fi
+
+    bashio::log.warning \
+        "Nepodařilo se obnovit žádné klientské Wi-Fi připojení."
+
+    return 1
+}
+start_access_point() {
+    if nmcli -t -f NAME connection show --active \
+        | grep -Fxq "${AP_CONNECTION}"; then
+        bashio::log.info "Instalační Access Point už je aktivní."
+        return 0
+    fi
+
+    bashio::log.warning \
+        "Přepínám ${INTERFACE} do režimu instalačního Access Pointu."
+
+    nmcli connection down "${CLIENT_CONNECTION}" 2>/dev/null || true
+    nmcli connection down "${FALLBACK_CLIENT_CONNECTION}" 2>/dev/null || true
+    nmcli connection delete "${AP_CONNECTION}" 2>/dev/null || true
+
+    if ! nmcli connection add \
+        type wifi \
+        ifname "${INTERFACE}" \
+        con-name "${AP_CONNECTION}" \
+        autoconnect no \
+        ssid "${SSID}"; then
+
+        bashio::log.error "Nepodařilo se vytvořit profil Access Pointu."
+        restore_client_connection
+        return 1
+    fi
+
+    if ! nmcli connection modify "${AP_CONNECTION}" \
+        802-11-wireless.mode ap \
+        802-11-wireless.band bg \
+        ipv4.method manual \
+        ipv4.addresses "${ADDRESS}" \
+        ipv6.method disabled \
+        wifi-sec.key-mgmt wpa-psk \
+        wifi-sec.psk "${AP_PASSWORD}"; then
+
+        bashio::log.error "Nepodařilo se nastavit profil Access Pointu."
+        nmcli connection delete "${AP_CONNECTION}" 2>/dev/null || true
+        restore_client_connection
+        return 1
+    fi
+
+    if ! nmcli connection up "${AP_CONNECTION}"; then
+        bashio::log.error "Instalační Access Point se nepodařilo spustit."
+
+        nmcli connection delete "${AP_CONNECTION}" 2>/dev/null || true
+        restore_client_connection
+        return 1
+    fi
+
+if ! start_dhcp; then
+    bashio::log.error "AP byl vytvořen, ale DHCP se nepodařilo spustit."
+
+    nmcli connection down "${AP_CONNECTION}" 2>/dev/null || true
+    nmcli connection delete "${AP_CONNECTION}" 2>/dev/null || true
+    restore_client_connection
+
+    return 1
+fi
+
+bashio::log.info "Instalační Wi-Fi byla spuštěna."
+bashio::log.info "SSID: ${SSID}"
+bashio::log.info "Portál: ${PORTAL_URL}"
+}
+
+stop_dhcp() {
+    local pid=""
+
+    if [ -f "${DNSMASQ_PID_FILE}" ]; then
+        pid="$(cat "${DNSMASQ_PID_FILE}" 2>/dev/null || true)"
+    fi
+
+    if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
+        bashio::log.info "Ukončuji DHCP server."
+        kill "${pid}" 2>/dev/null || true
+        wait "${pid}" 2>/dev/null || true
+    fi
+
+    pkill -f "dnsmasq.*${DNSMASQ_CONFIG}" 2>/dev/null || true
+
+    rm -f \
+        "${DNSMASQ_PID_FILE}" \
+        "${DNSMASQ_CONFIG}" \
+        /tmp/iqf-dnsmasq.leases
+}
+
+stop_access_point() {
+    stop_dhcp
+    
+    if nmcli connection show "${AP_CONNECTION}" >/dev/null 2>&1; then
+        bashio::log.info "Ukončuji instalační Access Point."
+
+        nmcli connection down "${AP_CONNECTION}" 2>/dev/null || true
+        nmcli connection delete "${AP_CONNECTION}" 2>/dev/null || true
+    fi
+
+    restore_client_connection
+}
+
+
+read_request() {
+    if [ ! -f "${REQUEST_FILE}" ]; then
+        bashio::log.warning \
+            "Požadavek na Access Point zatím neexistuje."
+
+        REQUESTED="false"
+        REASON="request_file_missing"
+        return 1
+    fi
+
+    REQUESTED="$(
+        yq -r '.requested // false' "${REQUEST_FILE}" 2>/dev/null \
+        || echo "false"
+    )"
+
+    REASON="$(
+        yq -r '.reason // "unknown"' "${REQUEST_FILE}" 2>/dev/null \
+        || echo "unknown"
+    )"
+
+    SSID="$(
+        yq -r '.ssid // "TNG_IQ_FANDA"' "${REQUEST_FILE}" 2>/dev/null \
+        || echo "TNG_IQ_FANDA"
+    )"
+
+    ADDRESS="$(
+        yq -r '.address // "192.168.4.1/24"' \
+        "${REQUEST_FILE}" 2>/dev/null \
+        || echo "192.168.4.1/24"
+    )"
+
+    PORTAL_URL="$(
+        yq -r '.portal_url // "http://192.168.4.1:8080"' \
+        "${REQUEST_FILE}" 2>/dev/null \
+        || echo "http://192.168.4.1:8080"
+    )"
+
+    bashio::log.info "Požadavek Startup Service:"
+    bashio::log.info "  requested: ${REQUESTED}"
+    bashio::log.info "  reason: ${REASON}"
+    bashio::log.info "  ssid: ${SSID}"
+    bashio::log.info "  address: ${ADDRESS}"
+
+    return 0
+}
+
+
+process_request() {
+    if [ "${REQUESTED}" = "true" ]; then
+        if [ "${EXECUTE_AP}" = "true" ]; then
+            start_access_point
+        else
+            bashio::log.warning \
+                "Access Point je požadován, ale execute_access_point=false."
+            bashio::log.warning "Síť nebude změněna."
+        fi
+    else
+        bashio::log.info "Access Point není požadován."
+
+        if [ "${EXECUTE_AP}" = "true" ]; then
+            stop_access_point
+        fi
+    fi
+}
+
+
+LAST_CHECKSUM=""
+
+if read_request; then
+    process_request
+fi
+
+if [ -f "${REQUEST_FILE}" ]; then
+    LAST_CHECKSUM="$(
+        sha256sum "${REQUEST_FILE}" | awk '{print $1}'
+    )"
+fi
+
+bashio::log.info "Host Agent čeká na změnu požadavku."
+
+while true; do
+    if [ -f "${REQUEST_FILE}" ]; then
+        CURRENT_CHECKSUM="$(
+            sha256sum "${REQUEST_FILE}" | awk '{print $1}'
+        )"
+
+        if [ "${CURRENT_CHECKSUM}" != "${LAST_CHECKSUM}" ]; then
+            LAST_CHECKSUM="${CURRENT_CHECKSUM}"
+
+            if read_request; then
+                process_request
+            fi
+        fi
+    fi
+
+    sleep 5
+done
+
