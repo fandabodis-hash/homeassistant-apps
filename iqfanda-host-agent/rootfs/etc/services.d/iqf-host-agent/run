@@ -1,4 +1,4 @@
-﻿#!/usr/bin/with-contenv bashio
+#!/usr/bin/with-contenv bashio
 
 set -eo pipefail
 
@@ -20,7 +20,7 @@ REQUESTED="false"
 REASON="unknown"
 SSID="TNG_IQ_FANDA"
 ADDRESS="192.168.4.1/24"
-PORTAL_URL="http://192.168.4.1:8080"
+PORTAL_URL="http://192.168.4.1:8099"
 
 bashio::log.info "TNG IQ FANDA Host Agent 0.5.17"
 bashio::log.info "Diagnostický režim: ${DIAGNOSTIC_MODE}"
@@ -271,9 +271,9 @@ read_request() {
     )"
 
     PORTAL_URL="$(
-        yq -r '.portal_url // "http://192.168.4.1:8080"' \
+        yq -r '.portal_url // "http://192.168.4.1:8099"' \
         "${REQUEST_FILE}" 2>/dev/null \
-        || echo "http://192.168.4.1:8080"
+        || echo "http://192.168.4.1:8099"
     )"
 
     bashio::log.info "Požadavek Startup Service:"
@@ -336,4 +336,3 @@ while true; do
 
     sleep 5
 done
-
