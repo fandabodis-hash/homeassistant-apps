@@ -408,7 +408,7 @@ class SetupManager:
         Zahaji onboarding v samostatnem pracovnim vlakne.
         """
         from threading import Thread
-        from identity import identity_service
+        from host.identity import identity_service
 
         ssid = str(ssid or "").strip()
         password = str(password or "")
