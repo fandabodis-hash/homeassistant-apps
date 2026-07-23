@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 
 import threading
 from copy import deepcopy
@@ -313,7 +313,7 @@ class SetupManager:
         site_type = str(site_type or "house").strip() or "house"
         # Sériové číslo a další hardwarové údaje jsou pevně
         # přidělené při výrobě. Uživatel je během onboardingu nezadává.
-        from identity import identity_service
+        from host.identity import identity_service
 
         try:
             device_identity = identity_service.load()

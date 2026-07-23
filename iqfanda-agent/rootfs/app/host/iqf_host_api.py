@@ -1,13 +1,13 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 
 import json
 import re
 import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from setup_manager import setup_manager
-from cloud_client import cloud_client
-from credential_store import credential_store
+from host.setup_manager import setup_manager
+from host.cloud_client import cloud_client
+from host.credential_store import credential_store
 
 
 HOST = "127.0.0.1"
