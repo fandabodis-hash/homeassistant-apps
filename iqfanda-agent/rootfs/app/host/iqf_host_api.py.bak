@@ -1,0 +1,274 @@
+﻿#!/usr/bin/env python3
+
+import json
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+from host.setup_manager import setup_manager
+from host.cloud_client import cloud_client
+from host.credential_store import credential_store
+
+from installer.network_manager import (
+    connect_wifi,
+    check_internet_access,
+    get_network_info,
+    get_wifi_status,
+    scan_wifi_networks,
+)
+
+
+HOST = "127.0.0.1"
+PORT = 8091
+WIFI_INTERFACE = "wlan0"
+
+
+class HostApiHandler(BaseHTTPRequestHandler):
+    server_version = "IQFHostAPI/0.3"
+
+    def _send_json(self, status_code: int, payload: dict) -> None:
+        body = json.dumps(
+            payload,
+            ensure_ascii=False,
+        ).encode("utf-8")
+
+        self.send_response(status_code)
+        self.send_header(
+            "Content-Type",
+            "application/json; charset=utf-8",
+        )
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _read_json_body(self) -> dict:
+        content_length = int(
+            self.headers.get("Content-Length", "0")
+        )
+
+        if content_length <= 0:
+            return {}
+
+        raw_body = self.rfile.read(content_length)
+        payload = json.loads(raw_body.decode("utf-8"))
+
+        if not isinstance(payload, dict):
+            raise ValueError("JSON tělo musí být objekt.")
+
+        return payload
+
+    def do_POST(self) -> None:
+        if self.path == "/setup/start":
+            try:
+                payload = self._read_json_body()
+
+                result = setup_manager.start(
+                    ssid=str(payload.get("ssid", "")),
+                    password=str(payload.get("password", "")),
+                    provisioning_id=str(
+                        payload.get("provisioning_id", "")
+                    ),
+                    first_name=str(
+                        payload.get("first_name", "")
+                    ),
+                    last_name=str(
+                        payload.get("last_name", "")
+                    ),
+                    email=str(
+                        payload.get("email", "")
+                    ),
+                    account_password=str(
+                        payload.get("account_password", "")
+                    ),
+                    site_name=str(
+                        payload.get("site_name", "")
+                    ),
+                    site_type=str(
+                        payload.get("site_type", "house")
+                    ),
+                    device_name=str(
+                        payload.get(
+                            "device_name",
+                            "TNG IQ FANDA",
+                        )
+                    ),
+                    software_version=payload.get(
+                        "software_version"
+                    ),
+                    interface=str(
+                        payload.get(
+                            "interface",
+                            WIFI_INTERFACE,
+                        )
+                    ),
+                    connector=connect_wifi,
+                    network_checker=check_internet_access,
+                    registrar=cloud_client.register_device,
+                    credential_saver=(
+                        credential_store.save_registration
+                    ),
+                )
+
+                if result.get("ok"):
+                    status_code = 202
+                elif result.get("error") == "Onboarding již probíhá.":
+                    status_code = 409
+                else:
+                    status_code = 400
+
+                self._send_json(status_code, result)
+
+            except (
+                json.JSONDecodeError,
+                UnicodeDecodeError,
+                ValueError,
+            ) as exc:
+                self._send_json(
+                    400,
+                    {
+                        "ok": False,
+                        "error": f"Neplatný požadavek: {exc}",
+                    },
+                )
+
+            except Exception as exc:
+                self._send_json(
+                    500,
+                    {
+                        "ok": False,
+                        "error": str(exc),
+                    },
+                )
+
+            return
+
+        if self.path == "/setup/reset":
+            self._send_json(
+                200,
+                {
+                    "ok": True,
+                    "setup": setup_manager.reset(),
+                },
+            )
+            return
+
+        if self.path == "/wifi/connect":
+            try:
+                payload = self._read_json_body()
+
+                result = connect_wifi(
+                    ssid=str(payload.get("ssid", "")),
+                    password=str(payload.get("password", "")),
+                    interface=str(
+                        payload.get(
+                            "interface",
+                            WIFI_INTERFACE,
+                        )
+                    ),
+                )
+
+                status_code = 200 if result.get("ok") else 400
+                self._send_json(status_code, result)
+
+            except (
+                json.JSONDecodeError,
+                UnicodeDecodeError,
+                ValueError,
+            ) as exc:
+                self._send_json(
+                    400,
+                    {
+                        "ok": False,
+                        "error": f"Neplatný požadavek: {exc}",
+                    },
+                )
+
+            except Exception as exc:
+                self._send_json(
+                    500,
+                    {
+                        "ok": False,
+                        "error": str(exc),
+                    },
+                )
+
+            return
+
+        self._send_json(
+            404,
+            {
+                "ok": False,
+                "error": "Endpoint nebyl nalezen.",
+            },
+        )
+
+    def do_GET(self) -> None:
+        if self.path == "/health":
+            self._send_json(
+                200,
+                {
+                    "ok": True,
+                    "service": "TNG IQ FANDA Host API",
+                    "version": "0.2.0",
+                },
+            )
+            return
+
+        if self.path == "/wifi/status":
+            result = get_wifi_status()
+            status_code = 200 if result.get("ok") else 503
+            self._send_json(status_code, result)
+            return
+
+        if self.path == "/wifi/scan":
+            result = scan_wifi_networks()
+            status_code = 200 if result.get("ok") else 503
+            self._send_json(status_code, result)
+            return
+
+        if self.path == "/setup/status":
+            self._send_json(
+                200,
+                {
+                    "ok": True,
+                    "setup": setup_manager.get_status(),
+                },
+            )
+            return
+
+        if self.path == "/network/info":
+            result = get_network_info()
+            status_code = 200 if result.get("ok") else 503
+            self._send_json(status_code, result)
+            return
+
+        self._send_json(
+            404,
+            {
+                "ok": False,
+                "error": "Endpoint nebyl nalezen.",
+            },
+        )
+
+    def log_message(self, format: str, *args) -> None:
+        print(
+            f"[IQF HOST API] {self.address_string()} "
+            f"{format % args}",
+            flush=True,
+        )
+
+
+def main() -> None:
+    server = ThreadingHTTPServer(
+        (HOST, PORT),
+        HostApiHandler,
+    )
+
+    print(
+        f"[IQF HOST API] Naslouchám na http://{HOST}:{PORT}",
+        flush=True,
+    )
+
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
