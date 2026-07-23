@@ -1,8 +1,8 @@
 name: "TNG IQ FANDA Host Agent"
 description: "Systémový agent pro síť, instalační Wi-Fi a hardware TNG IQ FANDA"
-version: "0.5.17"
+version: "0.5.18"
 slug: "iqf_host_agent"
-stage: experimental
+stage: stable
 
 startup: system
 boot: manual
