@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from factory.factory_info import read_identity
 from factory.factory_service import create_identity
 
 
@@ -17,7 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="factory-tool",
         description=(
-            "Vyrobni nastroj pro vytvoreni trvale identity "
+            "Vyrobni nastroj pro spravu trvale identity "
             "zarizeni TNG IQ FANDA."
         ),
     )
@@ -57,6 +58,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     create_parser.add_argument(
+        "--identity-path",
+        type=Path,
+        default=None,
+        help=(
+            "Volitelna cesta k souboru identity. "
+            "Pouziva se zejmena pro testovani."
+        ),
+    )
+
+    info_parser = subparsers.add_parser(
+        "info",
+        help="Zobrazi existujici vyrobni identitu.",
+    )
+
+    info_parser.add_argument(
         "--identity-path",
         type=Path,
         default=None,
@@ -108,6 +124,44 @@ def run_create(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_info(args: argparse.Namespace) -> int:
+    """Zobrazi existujici vyrobni identitu."""
+
+    try:
+        if args.identity_path is None:
+            identity = read_identity()
+        else:
+            identity = read_identity(
+                identity_path=args.identity_path,
+            )
+
+    except (OSError, ValueError) as error:
+        print(
+            f"CHYBA PRI CTENI IDENTITY: {error}",
+            file=sys.stderr,
+        )
+        return 3
+
+    if not identity.get("identity_exists"):
+        print(
+            "CHYBA: Vyrobni identita neexistuje.",
+            file=sys.stderr,
+        )
+        return 2
+
+    print("Vyrobni identita byla nalezena.")
+    print(
+        json.dumps(
+            identity,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+    )
+
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Hlavni vstupni bod Factory Tool."""
 
@@ -116,6 +170,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "create":
         return run_create(args)
+
+    if args.command == "info":
+        return run_info(args)
 
     parser.error(
         f"Nepodporovany prikaz: {args.command}"
