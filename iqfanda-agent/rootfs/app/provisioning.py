@@ -1,23 +1,17 @@
 import json
 import logging
 import os
-import socket
 import tempfile
 from pathlib import Path
 from urllib import error, request
+
+from host.identity import DeviceIdentityService
 
 
 DEVICE_CONFIG_PATH = Path(
     os.getenv(
         "IQF_DEVICE_CONFIG_PATH",
         "/config/device.json",
-    )
-)
-
-FACTORY_CONFIG_PATH = Path(
-    os.getenv(
-        "IQF_FACTORY_CONFIG_PATH",
-        "/config/factory.json",
     )
 )
 
@@ -70,36 +64,37 @@ def provisioning_is_enabled() -> bool:
     }
 
 
-def load_factory_config() -> dict:
-    if not FACTORY_CONFIG_PATH.exists():
-        raise FileNotFoundError(
-            f"Vyrobni konfigurace neexistuje: "
-            f"{FACTORY_CONFIG_PATH}"
-        )
+def load_manufacturing_identity() -> dict:
+    """Nacte a overi trvalou vyrobni identitu zarizeni."""
 
-    with FACTORY_CONFIG_PATH.open(
-        "r",
-        encoding="utf-8-sig",
-    ) as file:
-        factory_config = json.load(file)
+    identity_service = DeviceIdentityService()
+    manufacturing_identity = identity_service.load()
+
+    if not manufacturing_identity.get("identity_exists"):
+        raise FileNotFoundError(
+            "Vyrobni identita zarizeni neexistuje: "
+            f"{identity_service.identity_path}"
+        )
 
     required_fields = (
         "provisioning_id",
         "serial_number",
-        "device_model",
+        "model",
         "hardware_revision",
         "software_version",
+        "hostname",
     )
 
     for field in required_fields:
-        value = factory_config.get(field)
+        value = manufacturing_identity.get(field)
 
         if not isinstance(value, str) or not value.strip():
             raise ValueError(
-                f"Ve vyrobni konfiguraci chybi pole: {field}"
+                "Ve vyrobni identite chybi pole: "
+                f"{field}"
             )
 
-    return factory_config
+    return manufacturing_identity
 
 
 def load_install_config() -> dict:
@@ -135,16 +130,15 @@ def load_install_config() -> dict:
 
 
 def build_registration_payload() -> dict:
-    factory_config = load_factory_config()
+    """Sestavi data pro prvni registraci zarizeni."""
+
+    manufacturing_identity = load_manufacturing_identity()
     install_config = load_install_config()
 
-    hostname = get_optional_environment(
-        "IQF_DEVICE_HOSTNAME",
-        socket.gethostname(),
-    )
-
     return {
-        "provisioning_id": factory_config["provisioning_id"],
+        "provisioning_id": manufacturing_identity[
+            "provisioning_id"
+        ],
         "first_name": install_config["first_name"],
         "last_name": install_config["last_name"],
         "email": install_config["email"],
@@ -154,17 +148,21 @@ def build_registration_payload() -> dict:
             "site_type",
             "house",
         ),
-        "device_serial_number": factory_config["serial_number"],
+        "device_serial_number": manufacturing_identity[
+            "serial_number"
+        ],
         "device_name": get_optional_environment(
             "IQF_DEVICE_NAME",
             "TNG IQ FANDA",
         ),
-        "device_model": factory_config["device_model"],
-        "hardware_revision": factory_config[
+        "device_model": manufacturing_identity["model"],
+        "hardware_revision": manufacturing_identity[
             "hardware_revision"
         ],
-        "device_hostname": hostname,
-        "software_version": factory_config[
+        "device_hostname": manufacturing_identity[
+            "hostname"
+        ],
+        "software_version": manufacturing_identity[
             "software_version"
         ],
     }
