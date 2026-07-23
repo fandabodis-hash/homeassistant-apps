@@ -229,7 +229,7 @@ class AccessPointManager:
             "802-11-wireless.band",
             "bg",
             "ipv4.method",
-            "shared",
+            "manual",
             "ipv4.addresses",
             address,
             "ipv6.method",
