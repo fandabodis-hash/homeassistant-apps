@@ -9,6 +9,7 @@ from heartbeat import main as heartbeat_main
 from installer.access_point_service import request_access_point
 from installer.installer_api import spustit_api
 from provisioning import ensure_device_is_provisioned
+from host.iqf_host_api import main as host_api_main
 
 
 logging.basicConfig(
@@ -37,6 +38,12 @@ def spustit_installer_api() -> None:
     """Spusti lokalni HTTP API Installeru."""
 
     spustit_api()
+
+
+def spustit_host_api() -> None:
+    """Spusti lokalni Host API."""
+
+    host_api_main()
 
 
 def cekat_na_registraci_zarizeni(
@@ -148,6 +155,11 @@ def main() -> None:
         "Spouštím cloudové služby."
     )
 
+    host_api_thread = vytvorit_vlakno(
+        cil=spustit_host_api,
+        nazev="host-api",
+    )
+
     device_config_thread = vytvorit_vlakno(
         cil=spustit_synchronizaci_konfigurace,
         nazev="device-config-sync",
@@ -158,12 +170,14 @@ def main() -> None:
         nazev="heartbeat",
     )
 
+    host_api_thread.start()
     device_config_thread.start()
     heartbeat_thread.start()
 
     kontrolovat_sluzby(
         {
             "installer-api": installer_api_thread,
+            "host-api": host_api_thread,
             "device-config-sync": device_config_thread,
             "heartbeat": heartbeat_thread,
         }
