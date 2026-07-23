@@ -1,0 +1,128 @@
+"""Prikazovy nastroj Factory Tool pro TNG IQ FANDA."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Sequence
+
+from factory.factory_service import create_identity
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Sestavi parser prikazove radky."""
+
+    parser = argparse.ArgumentParser(
+        prog="factory-tool",
+        description=(
+            "Vyrobni nastroj pro vytvoreni trvale identity "
+            "zarizeni TNG IQ FANDA."
+        ),
+    )
+
+    subparsers = parser.add_subparsers(
+        dest="command",
+        required=True,
+    )
+
+    create_parser = subparsers.add_parser(
+        "create",
+        help="Vytvori novou vyrobni identitu.",
+    )
+
+    create_parser.add_argument(
+        "--serial",
+        required=True,
+        help="Seriove cislo ve formatu F800711-TNG-NNNNN.",
+    )
+
+    create_parser.add_argument(
+        "--model",
+        default="IQ FANDA PI5",
+        help="Model zarizeni.",
+    )
+
+    create_parser.add_argument(
+        "--hardware-revision",
+        default="Raspberry Pi 5",
+        help="Hardwarova revize zarizeni.",
+    )
+
+    create_parser.add_argument(
+        "--software-version",
+        default="0.1.18",
+        help="Verze softwaru instalovana pri vyrobe.",
+    )
+
+    create_parser.add_argument(
+        "--identity-path",
+        type=Path,
+        default=None,
+        help=(
+            "Volitelna cesta k souboru identity. "
+            "Pouziva se zejmena pro testovani."
+        ),
+    )
+
+    return parser
+
+
+def run_create(args: argparse.Namespace) -> int:
+    """Provede vytvoreni vyrobni identity."""
+
+    try:
+        identity = create_identity(
+            serial_number=args.serial,
+            model=args.model,
+            hardware_revision=args.hardware_revision,
+            software_version=args.software_version,
+            identity_path=args.identity_path,
+        )
+
+    except (ValueError, FileExistsError) as error:
+        print(
+            f"CHYBA: {error}",
+            file=sys.stderr,
+        )
+        return 2
+
+    except OSError as error:
+        print(
+            f"CHYBA PRI ZAPISU IDENTITY: {error}",
+            file=sys.stderr,
+        )
+        return 3
+
+    print("Vyrobni identita byla uspesne vytvorena.")
+    print(
+        json.dumps(
+            identity,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+    )
+
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Hlavni vstupni bod Factory Tool."""
+
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if args.command == "create":
+        return run_create(args)
+
+    parser.error(
+        f"Nepodporovany prikaz: {args.command}"
+    )
+
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
