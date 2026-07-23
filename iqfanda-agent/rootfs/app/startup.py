@@ -1,4 +1,4 @@
-﻿"""Koordinator startu sluzeb TNG IQ FANDA Agentu."""
+"""Koordinator startu sluzeb TNG IQ FANDA Agentu."""
 
 import logging
 import threading
@@ -6,6 +6,7 @@ import time
 
 from device_config import main as device_config_main
 from heartbeat import main as heartbeat_main
+from host.access_point_manager import access_point_manager
 from host.iqf_host_api import main as host_api_main
 from installer.access_point_service import request_access_point
 from installer.installer_api import spustit_api
@@ -46,9 +47,16 @@ def spustit_host_api() -> None:
     host_api_main()
 
 
+def spustit_access_point_manager() -> None:
+    """Spusti spravce instalacniho Access Pointu."""
+
+    access_point_manager.run_forever()
+
+
 def cekat_na_registraci_zarizeni(
     installer_api_thread: threading.Thread,
     host_api_thread: threading.Thread,
+    access_point_thread: threading.Thread,
 ) -> None:
     """Ceka na vytvoreni identity zarizeni."""
 
@@ -67,6 +75,12 @@ def cekat_na_registraci_zarizeni(
         if not host_api_thread.is_alive():
             raise RuntimeError(
                 "Host API se během čekání na registraci ukončilo."
+            )
+
+        if not access_point_thread.is_alive():
+            raise RuntimeError(
+                "Access Point Manager se behem cekani "
+                "na registraci ukoncil."
             )
 
         try:
@@ -155,15 +169,24 @@ def main() -> None:
         nazev="host-api",
     )
 
+    access_point_thread = vytvorit_vlakno(
+        cil=spustit_access_point_manager,
+        nazev="access-point-manager",
+    )
+
     installer_api_thread.start()
     host_api_thread.start()
+    access_point_thread.start()
 
     logging.info("Installer API bylo spuštěno.")
     logging.info("Host API bylo spuštěno.")
 
+    logging.info("Access Point Manager byl spusten.")
+
     cekat_na_registraci_zarizeni(
         installer_api_thread=installer_api_thread,
         host_api_thread=host_api_thread,
+        access_point_thread=access_point_thread,
     )
 
     logging.info(
@@ -188,6 +211,7 @@ def main() -> None:
         {
             "installer-api": installer_api_thread,
             "host-api": host_api_thread,
+            "access-point-manager": access_point_thread,
             "device-config-sync": device_config_thread,
             "heartbeat": heartbeat_thread,
         }
