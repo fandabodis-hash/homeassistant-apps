@@ -30,7 +30,6 @@ VYCHOZI_PORT = 8099
 POVINNA_POLE_INSTALACE = (
     "ssid",
     "password",
-    "provisioning_id",
     "first_name",
     "last_name",
     "email",
@@ -353,9 +352,6 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
                 vysledek = spustit_instalaci(
                     ssid=data["ssid"],
                     password=data["password"],
-                    provisioning_id=(
-                        data["provisioning_id"]
-                    ),
                     first_name=data["first_name"],
                     last_name=data["last_name"],
                     email=data["email"],

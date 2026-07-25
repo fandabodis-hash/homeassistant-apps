@@ -44,7 +44,6 @@ def pripojit_wifi(
 def spustit_instalaci(
     ssid: str,
     password: str,
-    provisioning_id: str,
     first_name: str,
     last_name: str,
     email: str,
@@ -61,7 +60,6 @@ def spustit_instalaci(
     return setup_manager.start(
         ssid=ssid,
         password=password,
-        provisioning_id=provisioning_id,
         first_name=first_name,
         last_name=last_name,
         email=email,

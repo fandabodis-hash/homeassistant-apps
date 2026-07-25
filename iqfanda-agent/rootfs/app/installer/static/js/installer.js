@@ -40,7 +40,6 @@ const dataInstalace = {
     account_password: "",
     site_name: "",
     site_type: "house",
-    provisioning_id: "",
     ssid: "",
     password: "",
     interface: "wlan0",
@@ -517,10 +516,6 @@ function zpracovatFormularUctu(udalost) {
             document.getElementById("site-name"),
         site_type:
             document.getElementById("site-type"),
-        provisioning_id:
-            document.getElementById(
-                "provisioning-id"
-            ),
     };
 
     const povinnaPole = [
@@ -531,7 +526,6 @@ function zpracovatFormularUctu(udalost) {
         pole.account_password_confirm,
         pole.site_name,
         pole.site_type,
-        pole.provisioning_id,
     ];
 
     if (!overitPovinnaPole(povinnaPole)) {
@@ -605,9 +599,6 @@ function zpracovatFormularUctu(udalost) {
 
     dataInstalace.site_type =
         pole.site_type.value;
-
-    dataInstalace.provisioning_id =
-        pole.provisioning_id.value.trim();
 
     zobrazitKrok("wifi");
 }
@@ -1043,9 +1034,6 @@ async function spustitInstalaci() {
         ssid: dataInstalace.ssid,
         password: dataInstalace.password,
         interface: dataInstalace.interface,
-
-        provisioning_id:
-            dataInstalace.provisioning_id,
 
         first_name:
             dataInstalace.first_name,

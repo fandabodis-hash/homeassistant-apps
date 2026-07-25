@@ -467,7 +467,6 @@ class SetupManager:
         self,
         ssid: str,
         password: str,
-        provisioning_id: str,
         first_name: str,
         last_name: str,
         email: str,
@@ -493,7 +492,6 @@ class SetupManager:
         password = str(password or "")
         interface = str(interface or "wlan0").strip() or "wlan0"
 
-        provisioning_id = str(provisioning_id or "").strip()
         first_name = str(first_name or "").strip()
         last_name = str(last_name or "").strip()
         email = str(email or "").strip().lower()
@@ -512,6 +510,10 @@ class SetupManager:
                 ),
                 "setup": self.get_status(),
             }
+
+        provisioning_id = str(
+            device_identity.get("provisioning_id") or ""
+        ).strip()
 
         device_serial_number = str(
             device_identity.get("serial_number") or ""
