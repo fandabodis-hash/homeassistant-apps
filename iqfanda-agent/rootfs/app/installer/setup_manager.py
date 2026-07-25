@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
+import json
 import logging
 import threading
 from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
-
-from installer.access_point_service import release_access_point
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 
 class SetupState(str, Enum):
@@ -80,6 +81,88 @@ class SetupManager:
                 self._status["finished_at"] = None
 
             return deepcopy(self._status)
+
+    def _release_access_point(self) -> dict[str, Any]:
+        """
+        Synchronne pozada Host API o ukonceni instalacniho
+        Access Pointu a pocka na skutecne uvolneni rozhrani wlan0.
+        """
+        self.set_status(
+            SetupState.CONNECTING_WIFI,
+            12,
+            "Ukoncuji instalacni Wi-Fi a pripravuji pripojeni k siti.",
+        )
+
+        request = Request(
+            "http://127.0.0.1:8091/access-point/release",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urlopen(request, timeout=15) as response:
+                response_body = response.read().decode("utf-8")
+
+            try:
+                payload = json.loads(response_body)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(
+                    "Host API vratilo neplatnou JSON odpoved."
+                ) from exc
+
+            if not isinstance(payload, dict):
+                raise RuntimeError(
+                    "Host API vratilo neplatny format odpovedi."
+                )
+
+            if not payload.get("ok"):
+                raise RuntimeError(
+                    str(
+                        payload.get("error")
+                        or "Host API odmitlo ukoncit Access Point."
+                    )
+                )
+
+            return payload
+
+        except HTTPError as exc:
+            error_body = ""
+
+            try:
+                error_body = exc.read().decode(
+                    "utf-8",
+                    errors="replace",
+                )
+            except Exception:
+                error_body = ""
+
+            detail = f"Host API vratilo HTTP {exc.code}."
+
+            if error_body:
+                try:
+                    error_payload = json.loads(error_body)
+
+                    if isinstance(error_payload, dict):
+                        detail = str(
+                            error_payload.get("error")
+                            or error_payload.get("detail")
+                            or detail
+                        )
+                except json.JSONDecodeError:
+                    pass
+
+            raise RuntimeError(detail) from exc
+
+        except URLError as exc:
+            raise RuntimeError(
+                "Host API na localhost:8091 neni dostupne."
+            ) from exc
+
+        except TimeoutError as exc:
+            raise RuntimeError(
+                "Host API nestihlo ukoncit Access Point v casovem limitu."
+            ) from exc
 
     def _connect_wifi(
         self,
@@ -282,9 +365,19 @@ class SetupManager:
         """
         Hlavni orchestrator onboardingu zarizeni.
 
-        Instalacni AP se v teto fazi nevypina ani nemaze.
+        Nejprve synchronne ukonci instalacni Access Point,
+        pocka na uvolneni rozhrani wlan0 a teprve potom
+        pripoji zarizeni ke klientskemu Wi-Fi pripojeni.
         """
         try:
+            access_point_result = self._release_access_point()
+
+            logging.info(
+                "Instalacni Access Point byl synchronne ukoncen "
+                "pres Host API: %s",
+                access_point_result,
+            )
+
             self._connect_wifi(
                 connector=connector,
                 ssid=ssid,
@@ -304,31 +397,6 @@ class SetupManager:
 
             heartbeat_result = self._send_first_heartbeat()
             cloud_config = self._sync_first_cloud_config()
-
-            try:
-                access_point_result = release_access_point(
-                    reason="onboarding_completed",
-                )
-                logging.info(
-                    "Host Agent byl pozadan o ukonceni "
-                    "instalacniho Access Pointu: %s",
-                    access_point_result.get("path"),
-                )
-
-            except Exception:
-                access_point_result = {
-                    "ok": False,
-                    "error": (
-                        "Pozadavek na ukonceni "
-                        "instalacniho Access Pointu "
-                        "se nepodarilo ulozit."
-                    ),
-                }
-                logging.exception(
-                    "Pozadavek na ukonceni instalacniho "
-                    "Access Pointu se nepodarilo ulozit. "
-                    "Onboarding zustava uspesny."
-                )
 
             with self._lock:
                 self._status["result"] = {
