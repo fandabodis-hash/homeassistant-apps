@@ -10,7 +10,7 @@ from host.access_point_manager import access_point_manager
 from host.iqf_host_api import main as host_api_main
 from installer.access_point_service import request_access_point
 from installer.installer_api import spustit_api
-from provisioning import ensure_device_is_provisioned
+from provisioning import DEVICE_CONFIG_PATH
 
 
 logging.basicConfig(
@@ -83,45 +83,39 @@ def cekat_na_registraci_zarizeni(
                 "na registraci ukoncil."
             )
 
-        try:
-            ensure_device_is_provisioned()
+        if DEVICE_CONFIG_PATH.exists():
+            logging.info(
+                "Identita zarizeni byla vytvorena: %s",
+                DEVICE_CONFIG_PATH,
+            )
             return
 
-        except FileNotFoundError as chyba:
-            logging.warning("%s", chyba)
+        if not access_point_requested:
+            try:
+                vysledek_ap = request_access_point(
+                    reason="device_not_provisioned",
+                )
+                logging.info(
+                    "Access Point Manager byl pozadan "
+                    "o spusteni instalacniho "
+                    "Access Pointu: %s",
+                    vysledek_ap.get("path"),
+                )
+                access_point_requested = True
 
-            if not access_point_requested:
-                try:
-                    vysledek_ap = request_access_point(
-                        reason="device_not_provisioned",
-                    )
-                    logging.info(
-                        "Host Agent byl požádán "
-                        "o spuštění instalačního "
-                        "Access Pointu: %s",
-                        vysledek_ap.get("path"),
-                    )
-                    access_point_requested = True
+            except Exception:
+                logging.exception(
+                    "Pozadavek na spusteni "
+                    "instalacniho Access Pointu "
+                    "se nepodarilo ulozit."
+                )
 
-                except Exception:
-                    logging.exception(
-                        "Požadavek na spuštění "
-                        "instalačního Access Pointu "
-                        "se nepodařilo uložit."
-                    )
-
-            logging.info(
-                "Zařízení čeká na dokončení instalace. "
-                "Další kontrola za %s sekund.",
-                PROVISIONING_RETRY_SECONDS,
-            )
-
-        except Exception:
-            logging.exception(
-                "Provisioning zařízení selhal. "
-                "Další pokus proběhne za %s sekund.",
-                PROVISIONING_RETRY_SECONDS,
-            )
+        logging.info(
+            "Zarizeni ceka na dokonceni instalace "
+            "a vytvoreni identity. "
+            "Dalsi kontrola za %s sekund.",
+            PROVISIONING_RETRY_SECONDS,
+        )
 
         time.sleep(PROVISIONING_RETRY_SECONDS)
 
