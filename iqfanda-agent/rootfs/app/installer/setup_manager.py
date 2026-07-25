@@ -10,6 +10,8 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from installer.access_point_service import release_access_point
+
 
 class SetupState(str, Enum):
     IDLE = "idle"
@@ -91,6 +93,15 @@ class SetupManager:
             SetupState.CONNECTING_WIFI,
             12,
             "Ukoncuji instalacni Wi-Fi a pripravuji pripojeni k siti.",
+        )
+
+        release_result = release_access_point(
+            reason="installer_connecting_to_client_wifi",
+        )
+
+        logging.info(
+            "Pozadavek na instalacni Access Point byl zrusen: %s",
+            release_result,
         )
 
         request = Request(
