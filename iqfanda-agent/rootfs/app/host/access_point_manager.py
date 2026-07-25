@@ -327,6 +327,55 @@ class AccessPointManager:
             "profile_name": self.profile_name,
         }
 
+    def release_and_wait(
+        self,
+        timeout_seconds: float = 10.0,
+        interval_seconds: float = 0.2,
+    ) -> dict[str, Any]:
+        """
+        Synchronne ukonci instalacni Access Point a overi,
+        ze profil jiz neni aktivni v NetworkManageru.
+        """
+
+        timeout_seconds = max(
+            1.0,
+            float(timeout_seconds),
+        )
+        interval_seconds = max(
+            0.1,
+            float(interval_seconds),
+        )
+
+        stop_result = self.stop_access_point()
+        deadline = time.monotonic() + timeout_seconds
+
+        while time.monotonic() < deadline:
+            if not self.is_access_point_active():
+                with self._lock:
+                    self._active = False
+                    self._last_error = None
+
+                return {
+                    "ok": True,
+                    "active": False,
+                    "interface": self.interface,
+                    "profile_name": self.profile_name,
+                    "stop": stop_result,
+                }
+
+            time.sleep(interval_seconds)
+
+        error = (
+            "Instalacni Access Point zustal aktivni "
+            f"i po {timeout_seconds:.1f} sekundach."
+        )
+
+        with self._lock:
+            self._last_error = error
+
+        raise RuntimeError(error)
+
+
     def reconcile(self) -> dict[str, Any]:
         """Sjednoti skutecny stav AP s ulozenym pozadavkem."""
 

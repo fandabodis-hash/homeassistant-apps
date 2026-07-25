@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from host.setup_manager import setup_manager
 from host.cloud_client import cloud_client
 from host.credential_store import credential_store
+from host.access_point_manager import access_point_manager
 
 from installer.network_manager import (
     connect_wifi,
@@ -22,7 +23,7 @@ WIFI_INTERFACE = "wlan0"
 
 
 class HostApiHandler(BaseHTTPRequestHandler):
-    server_version = "IQFHostAPI/0.3"
+    server_version = "IQFHostAPI/0.4"
 
     def _send_json(self, status_code: int, payload: dict) -> None:
         body = json.dumps(
@@ -150,6 +151,22 @@ class HostApiHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if self.path == "/access-point/release":
+            try:
+                result = access_point_manager.release_and_wait()
+                self._send_json(200, result)
+
+            except Exception as exc:
+                self._send_json(
+                    500,
+                    {
+                        "ok": False,
+                        "error": str(exc),
+                    },
+                )
+
+            return
+
         if self.path == "/wifi/connect":
             try:
                 payload = self._read_json_body()
@@ -207,7 +224,7 @@ class HostApiHandler(BaseHTTPRequestHandler):
                 {
                     "ok": True,
                     "service": "TNG IQ FANDA Host API",
-                    "version": "0.3.0",
+                    "version": "0.4.0",
                 },
             )
             return
