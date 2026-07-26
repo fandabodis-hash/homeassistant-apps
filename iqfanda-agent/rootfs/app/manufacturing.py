@@ -132,7 +132,7 @@ def build_manufacturing_identity(
         ).isoformat(),
         "factory_version": "1.0",
         "hostname": f"iqf-{serial_suffix}",
-        "state": "UNPROVISIONED",
+        "state": "READY_FOR_INSTALL",
         "hardware_id": read_raspberry_pi_serial(),
         "platform": platform.platform(),
     }

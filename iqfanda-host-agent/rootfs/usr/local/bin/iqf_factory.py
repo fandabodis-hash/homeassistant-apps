@@ -89,7 +89,7 @@ def _build_identity(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "factory_version": "1.0",
         "hostname": hostname,
-        "state": "UNPROVISIONED",
+        "state": "READY_FOR_INSTALL",
         "hardware_id": _read_raspberry_pi_serial(),
         "platform": platform.platform(),
     }

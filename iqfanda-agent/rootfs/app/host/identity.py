@@ -63,7 +63,7 @@ class DeviceIdentityService:
 
         result = dict(data)
         result["identity_exists"] = True
-        result.setdefault("state", "UNPROVISIONED")
+        result.setdefault("state", "READY_FOR_INSTALL")
 
         return result
 
