@@ -8,6 +8,7 @@ from installer.network_manager import (
     get_wifi_status,
     scan_wifi_networks,
 )
+from installer.factory_reset import provest_factory_reset
 from installer.provisioning_adapter import (
     registrovat_zarizeni,
     ulozit_registraci,
@@ -81,6 +82,12 @@ def ziskat_stav_instalace() -> dict[str, Any]:
     """Vrati aktualni stav prvotni instalace."""
 
     return setup_manager.get_status()
+
+
+def provest_tovarni_reset() -> dict[str, Any]:
+    """Vrati zarizeni do stavu READY_FOR_INSTALL."""
+
+    return provest_factory_reset()
 
 
 def resetovat_instalaci() -> dict[str, Any]:

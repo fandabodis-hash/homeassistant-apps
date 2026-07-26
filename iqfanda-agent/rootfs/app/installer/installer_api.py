@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 from installer.installer_service import (
     pripojit_wifi,
+    provest_tovarni_reset,
     resetovat_instalaci,
     spustit_instalaci,
     vyhledat_wifi_site,
@@ -396,6 +397,18 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
                             "installer": vysledek,
                         },
                     )
+                return
+
+            if cesta == "/api/factory/reset":
+                vysledek = provest_tovarni_reset()
+
+                self._odeslat_json(
+                    HTTPStatus.OK,
+                    {
+                        "ok": True,
+                        "factory_reset": vysledek,
+                    },
+                )
                 return
 
             if cesta == "/api/installer/reset":
