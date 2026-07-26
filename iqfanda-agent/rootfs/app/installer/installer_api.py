@@ -376,13 +376,26 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
                     ),
                 )
 
-                self._odeslat_json(
-                    HTTPStatus.ACCEPTED,
-                    {
-                        "ok": True,
-                        "installer": vysledek,
-                    },
-                )
+                if vysledek.get("ok"):
+                    self._odeslat_json(
+                        HTTPStatus.ACCEPTED,
+                        {
+                            "ok": True,
+                            "installer": vysledek,
+                        },
+                    )
+                else:
+                    self._odeslat_json(
+                        HTTPStatus.BAD_REQUEST,
+                        {
+                            "ok": False,
+                            "error": vysledek.get(
+                                "error",
+                                "Instalaci se nepodarilo spustit.",
+                            ),
+                            "installer": vysledek,
+                        },
+                    )
                 return
 
             if cesta == "/api/installer/reset":
