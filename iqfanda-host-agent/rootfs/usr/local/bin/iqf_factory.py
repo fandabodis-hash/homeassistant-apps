@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import json
@@ -13,7 +13,7 @@ from typing import Any
 from identity import DEFAULT_IDENTITY_PATH, DeviceIdentityService
 
 
-SERIAL_PATTERN = re.compile(r"^F800711-TNG-\d{6}$")
+SERIAL_PATTERN = re.compile(r"^F800711-TNG-\d{5}$")
 
 
 def _read_raspberry_pi_serial() -> str | None:
@@ -104,7 +104,7 @@ def main() -> int:
         required=True,
         help=(
             "Manufacturing serial number, "
-            "for example F800711-TNG-000001."
+            "for example F800711-TNG-00004."
         ),
     )
     parser.add_argument(
@@ -133,8 +133,8 @@ def main() -> int:
     if not SERIAL_PATTERN.fullmatch(serial_number):
         parser.error(
             "Serial number must have format "
-            "F800711-TNG-NNNNNN, "
-            "for example F800711-TNG-000001."
+            "F800711-TNG-NNNNN, "
+            "for example F800711-TNG-00004."
         )
 
     identity_service = DeviceIdentityService(args.identity_path)
