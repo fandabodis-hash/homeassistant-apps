@@ -1,4 +1,4 @@
-"""Koordinator startu sluzeb TNG IQ FANDA Agentu."""
+﻿"""Koordinator startu sluzeb TNG IQ FANDA Agentu."""
 
 import logging
 import threading
@@ -11,6 +11,7 @@ from host.iqf_host_api import main as host_api_main
 from installer.access_point_service import request_access_point
 from installer.installer_api import spustit_api
 from provisioning import DEVICE_CONFIG_PATH
+from usb_inventory import main as usb_inventory_main
 
 
 logging.basicConfig(
@@ -53,6 +54,12 @@ def spustit_access_point_manager() -> None:
     access_point_manager.run_forever()
 
 
+def spustit_usb_inventory() -> None:
+    """Spusti automatickou inventarizaci USB zarizeni."""
+
+    usb_inventory_main()
+
+
 def cekat_na_registraci_zarizeni(
     installer_api_thread: threading.Thread,
     host_api_thread: threading.Thread,
@@ -61,7 +68,7 @@ def cekat_na_registraci_zarizeni(
     """Ceka na vytvoreni identity zarizeni."""
 
     logging.info(
-        "Kontroluji, zda je zařízení připraveno k registraci."
+        "Kontroluji, zda je zarizeni pripraveno k registraci."
     )
 
     access_point_requested = False
@@ -69,12 +76,12 @@ def cekat_na_registraci_zarizeni(
     while True:
         if not installer_api_thread.is_alive():
             raise RuntimeError(
-                "Installer API se během čekání na registraci ukončilo."
+                "Installer API se behem cekani na registraci ukoncilo."
             )
 
         if not host_api_thread.is_alive():
             raise RuntimeError(
-                "Host API se během čekání na registraci ukončilo."
+                "Host API se behem cekani na registraci ukoncilo."
             )
 
         if not access_point_thread.is_alive():
@@ -95,19 +102,19 @@ def cekat_na_registraci_zarizeni(
                 vysledek_ap = request_access_point(
                     reason="device_not_provisioned",
                 )
+
                 logging.info(
                     "Access Point Manager byl pozadan "
-                    "o spusteni instalacniho "
-                    "Access Pointu: %s",
+                    "o spusteni instalacniho Access Pointu: %s",
                     vysledek_ap.get("path"),
                 )
+
                 access_point_requested = True
 
             except Exception:
                 logging.exception(
-                    "Pozadavek na spusteni "
-                    "instalacniho Access Pointu "
-                    "se nepodarilo ulozit."
+                    "Pozadavek na spusteni instalacniho "
+                    "Access Pointu se nepodarilo ulozit."
                 )
 
         logging.info(
@@ -142,7 +149,7 @@ def kontrolovat_sluzby(
         for nazev, vlakno in vlakna.items():
             if not vlakno.is_alive():
                 raise RuntimeError(
-                    f"Služba '{nazev}' se neočekávaně ukončila."
+                    f"Sluzba '{nazev}' se neocekavane ukoncila."
                 )
 
         time.sleep(SERVICE_CHECK_SECONDS)
@@ -151,7 +158,7 @@ def kontrolovat_sluzby(
 def main() -> None:
     """Spusti lokalni API a po registraci cloudove sluzby."""
 
-    logging.info("IQ FANDA Agent Core spuštěn.")
+    logging.info("IQ FANDA Agent Core spusten.")
 
     installer_api_thread = vytvorit_vlakno(
         cil=spustit_installer_api,
@@ -172,9 +179,8 @@ def main() -> None:
     host_api_thread.start()
     access_point_thread.start()
 
-    logging.info("Installer API bylo spuštěno.")
-    logging.info("Host API bylo spuštěno.")
-
+    logging.info("Installer API bylo spusteno.")
+    logging.info("Host API bylo spusteno.")
     logging.info("Access Point Manager byl spusten.")
 
     cekat_na_registraci_zarizeni(
@@ -184,8 +190,8 @@ def main() -> None:
     )
 
     logging.info(
-        "Identita zařízení je připravena. "
-        "Spouštím cloudové služby."
+        "Identita zarizeni je pripravena. "
+        "Spoustim cloudove sluzby."
     )
 
     device_config_thread = vytvorit_vlakno(
@@ -198,8 +204,14 @@ def main() -> None:
         nazev="heartbeat",
     )
 
+    usb_inventory_thread = vytvorit_vlakno(
+        cil=spustit_usb_inventory,
+        nazev="usb-inventory",
+    )
+
     device_config_thread.start()
     heartbeat_thread.start()
+    usb_inventory_thread.start()
 
     kontrolovat_sluzby(
         {
@@ -208,6 +220,7 @@ def main() -> None:
             "access-point-manager": access_point_thread,
             "device-config-sync": device_config_thread,
             "heartbeat": heartbeat_thread,
+            "usb-inventory": usb_inventory_thread,
         }
     )
 
