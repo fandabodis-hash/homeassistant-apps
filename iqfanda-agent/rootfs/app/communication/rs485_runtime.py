@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -65,6 +66,26 @@ def nacti_json(
         return None
 
     return data
+
+
+def vypocitej_otisk_zdroje(
+    komunikacni_stav: dict[str, Any],
+) -> str:
+    """Vypocita stabilni otisk zdrojoveho komunikacniho stavu."""
+
+    data_pro_otisk = dict(komunikacni_stav)
+    data_pro_otisk.pop("generated_at", None)
+
+    obsah = json.dumps(
+        data_pro_otisk,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+    return hashlib.sha256(
+        obsah.encode("utf-8")
+    ).hexdigest()
 
 
 def je_rs485_komunikator(
