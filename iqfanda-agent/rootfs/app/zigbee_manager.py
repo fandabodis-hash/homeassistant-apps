@@ -74,10 +74,41 @@ def home_assistant_request(
                 errors="strict",
             )
 
-            if not response_body.strip():
+            normalized_response_body = (
+                response_body.strip()
+            )
+
+            if not normalized_response_body:
                 return None
 
-            return json.loads(response_body)
+            if normalized_path == "/template":
+                if normalized_response_body.startswith(
+                    ("[", "{")
+                ):
+                    try:
+                        return json.loads(
+                            normalized_response_body
+                        )
+
+                    except json.JSONDecodeError as exc:
+                        raise HomeAssistantApiError(
+                            "Home Assistant sablona "
+                            "vratila neplatnou JSON "
+                            "odpoved."
+                        ) from exc
+
+                return normalized_response_body
+
+            try:
+                return json.loads(
+                    normalized_response_body
+                )
+
+            except json.JSONDecodeError as exc:
+                raise HomeAssistantApiError(
+                    "Home Assistant API vratilo "
+                    "neplatnou JSON odpoved."
+                ) from exc
 
     except error.HTTPError as exc:
         response_body = exc.read().decode(
