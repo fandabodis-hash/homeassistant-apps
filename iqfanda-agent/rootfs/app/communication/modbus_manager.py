@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from communication.json_utils import nacti_json
+from communication.modbus_port import ModbusPort
 
 
 COMMUNICATION_STATE_PATH = Path(
@@ -21,13 +22,13 @@ COMMUNICATION_STATE_PATH = Path(
 logger = logging.getLogger(__name__)
 
 
-registrovane_porty: dict[str, dict[str, Any]] = {}
+registrovane_porty: dict[str, ModbusPort] = {}
 
 
 def ziskej_nebo_registruj_port(
     cesta_portu: str,
-) -> dict[str, Any]:
-    """Vrati existujici nebo vytvori novy zaznam serioveho portu."""
+) -> ModbusPort:
+    """Vrati existujici nebo vytvori novy Modbus port."""
 
     normalizovana_cesta = cesta_portu.strip()
 
@@ -36,27 +37,25 @@ def ziskej_nebo_registruj_port(
             "Cesta serioveho portu nesmi byt prazdna."
         )
 
-    zaznam = registrovane_porty.get(
+    port = registrovane_porty.get(
         normalizovana_cesta
     )
 
-    if zaznam is None:
-        zaznam = {
-            "path": normalizovana_cesta,
-            "status": "registered",
-            "serial_port": None,
-        }
+    if port is None:
+        port = ModbusPort(
+            path=normalizovana_cesta
+        )
 
         registrovane_porty[
             normalizovana_cesta
-        ] = zaznam
+        ] = port
 
         logger.info(
             "Modbus Manager: registrovan seriovy port %s.",
             normalizovana_cesta,
         )
 
-    return zaznam
+    return port
 
 
 def je_modbus_rtu_komunikator(
