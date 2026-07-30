@@ -1,9 +1,10 @@
-﻿"""Koordinator startu sluzeb TNG IQ FANDA Agentu."""
+"""Koordinator startu sluzeb TNG IQ FANDA Agentu."""
 
 import logging
 import threading
 import time
 
+from communication.communication_manager import main as communication_manager_main
 from device_config import main as device_config_main
 from heartbeat import main as heartbeat_main
 from host.access_point_manager import access_point_manager
@@ -58,6 +59,12 @@ def spustit_usb_inventory() -> None:
     """Spusti automatickou inventarizaci USB zarizeni."""
 
     usb_inventory_main()
+
+
+def spustit_communication_manager() -> None:
+    """Spusti spravu komunikacniho centra."""
+
+    communication_manager_main()
 
 
 def cekat_na_registraci_zarizeni(
@@ -209,9 +216,15 @@ def main() -> None:
         nazev="usb-inventory",
     )
 
+    communication_manager_thread = vytvorit_vlakno(
+        cil=spustit_communication_manager,
+        nazev="communication-manager",
+    )
+
     device_config_thread.start()
     heartbeat_thread.start()
     usb_inventory_thread.start()
+    communication_manager_thread.start()
 
     kontrolovat_sluzby(
         {
@@ -221,6 +234,7 @@ def main() -> None:
             "device-config-sync": device_config_thread,
             "heartbeat": heartbeat_thread,
             "usb-inventory": usb_inventory_thread,
+            "communication-manager": communication_manager_thread,
         }
     )
 
