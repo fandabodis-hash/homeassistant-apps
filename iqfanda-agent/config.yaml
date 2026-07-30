@@ -1,5 +1,5 @@
-﻿name: "TNG IQ FANDA Agent"
-version: "0.1.26"
+name: "TNG IQ FANDA Agent"
+version: "0.1.27"
 slug: "tng_iq_fanda_agent"
 description: "Lokální­ runtime a cloudová komunikace TNG IQ FANDA"
 url: "https://github.com/fandabodis-hash/homeassistant-apps"
@@ -23,7 +23,8 @@ ports_description:
 panel_icon: mdi:wifi-cog
 panel_title: "TNG IQ FANDA"
 
-hassio_api: true
+hassio_api: true
+homeassistant_api: true
 hassio_role: manager
 host_dbus: true
 
@@ -81,6 +82,7 @@ schema:
   software_version: str?
 
   log_level: list(DEBUG|INFO|WARNING|ERROR)
+
 
 
 
