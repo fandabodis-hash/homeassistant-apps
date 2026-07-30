@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from host.cloud_client import cloud_client
+from zigbee_manager import HomeAssistantApiError, open_zigbee_permit
 
 
 DEVICE_CONFIG_PATH = Path(
@@ -175,21 +176,63 @@ def execute_command(
     )
 
     if command_type == "zigbee_permit_join":
+        raw_duration = command_payload.get(
+            "duration_seconds",
+            180,
+        )
+
+        try:
+            permit_result = open_zigbee_permit(
+                duration_seconds=raw_duration,
+            )
+
+        except (
+            HomeAssistantApiError,
+            ValueError,
+        ) as exc:
+            submit_command_result(
+                identity=identity,
+                command_id=command_id,
+                status="failed",
+                result={
+                    "worker": "command_worker",
+                    "executor": "zigbee_manager",
+                    "phase": "permit_failed",
+                    "payload_received": command_payload,
+                },
+                error_message=str(exc),
+            )
+
+            logging.error(
+                "Zigbee permit pro prikaz %s selhal: %s",
+                command_id,
+                exc,
+            )
+            return
+
         submit_command_result(
             identity=identity,
             command_id=command_id,
-            status="failed",
+            status="succeeded",
             result={
                 "worker": "command_worker",
-                "executor": "zigbee",
-                "phase": "validation_complete",
-                "payload_received": command_payload,
+                "executor": "zigbee_manager",
+                "phase": "permit_opened",
+                "service": permit_result["service"],
+                "duration_seconds": permit_result[
+                    "duration_seconds"
+                ],
             },
-            error_message=(
-                "Command Worker prikaz uspesne prevzal. "
-                "Skutecny Zigbee permit join zatim neni "
-                "v teto testovaci verzi aktivovan."
+            error_message=None,
+        )
+
+        logging.info(
+            (
+                "Zigbee parovaci rezim byl otevren na %s sekund. "
+                "Prikaz: %s"
             ),
+            permit_result["duration_seconds"],
+            command_id,
         )
         return
 

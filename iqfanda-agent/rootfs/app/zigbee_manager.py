@@ -193,6 +193,87 @@ def get_zigbee_runtime_status() -> dict[str, Any]:
     }
 
 
+def call_home_assistant_service(
+    *,
+    domain: str,
+    service: str,
+    payload: dict[str, Any] | None = None,
+) -> Any:
+    """Zavola sluzbu Home Assistant Core API."""
+
+    normalized_domain = str(domain or '').strip()
+    normalized_service = str(service or '').strip()
+
+    if not normalized_domain:
+        raise ValueError(
+            "Domena sluzby nesmi byt prazdna."
+        )
+
+    if not normalized_service:
+        raise ValueError(
+            "Nazev sluzby nesmi byt prazdny."
+        )
+
+    return home_assistant_request(
+        path=(
+            "/services/"
+            f"{normalized_domain}/"
+            f"{normalized_service}"
+        ),
+        method="POST",
+        payload=payload or {},
+    )
+
+
+def open_zigbee_permit(
+    duration_seconds: int = 180,
+) -> dict[str, Any]:
+    """Otevre ZHA parovaci rezim na zadany cas."""
+
+    try:
+        duration = int(duration_seconds)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "Delka parovani musi byt cele cislo."
+        ) from exc
+
+    if duration < 1 or duration > 254:
+        raise ValueError(
+            "Delka parovani musi byt v rozsahu 1 az 254 sekund."
+        )
+
+    runtime_status = get_zigbee_runtime_status()
+
+    if not runtime_status.get(
+        "zha_service_domain_available"
+    ):
+        raise HomeAssistantApiError(
+            "Domena sluzeb ZHA neni dostupna."
+        )
+
+    zha_services = runtime_status.get("zha_services") or []
+
+    if "permit" not in zha_services:
+        raise HomeAssistantApiError(
+            "Sluzba zha.permit neni dostupna."
+        )
+
+    response = call_home_assistant_service(
+        domain="zha",
+        service="permit",
+        payload={
+            "duration": duration,
+        },
+    )
+
+    return {
+        "ok": True,
+        "service": "zha.permit",
+        "duration_seconds": duration,
+        "home_assistant_response": response,
+    }
+
+
 def diagnostic_main() -> None:
     """Vypise diagnostiku bez zmeny systemu."""
 
