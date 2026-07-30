@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from host.cloud_client import cloud_client
-from zigbee_manager import HomeAssistantApiError, open_zigbee_permit
+from zigbee_manager import (
+    HomeAssistantApiError,
+    get_home_assistant_entity_ids,
+    open_zigbee_permit,
+    wait_for_new_device,
+)
 
 
 DEVICE_CONFIG_PATH = Path(
@@ -143,16 +148,274 @@ def submit_command_result(
     )
 
 
+def normalize_duration_seconds(
+    raw_duration: Any,
+) -> int:
+    """Overi delku Zigbee parovaciho rezimu."""
+
+    try:
+        duration = int(raw_duration)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "Delka Zigbee parovani musi byt cele cislo."
+        ) from exc
+
+    if duration < 1 or duration > 254:
+        raise ValueError(
+            "Delka Zigbee parovani musi byt "
+            "v rozsahu 1 az 254 sekund."
+        )
+
+    return duration
+
+
+def execute_zigbee_permit_join(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """
+    Otevre parovani, ceka na nove zarizeni
+    a overi jeho teplotni entitu.
+    """
+
+    duration_seconds = normalize_duration_seconds(
+        command_payload.get(
+            "duration_seconds",
+            180,
+        )
+    )
+
+    expected_device_type = str(
+        command_payload.get(
+            "expected_device_type",
+            "",
+        )
+        or ""
+    ).strip()
+
+    building_module_id = str(
+        command_payload.get(
+            "building_module_id",
+            "",
+        )
+        or ""
+    ).strip()
+
+    try:
+        entity_ids_before = (
+            get_home_assistant_entity_ids()
+        )
+
+        logging.info(
+            (
+                "Pred Zigbee parovanim bylo nalezeno "
+                "%s Home Assistant entit. Prikaz: %s"
+            ),
+            len(entity_ids_before),
+            command_id,
+        )
+
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="running",
+            result={
+                "worker": "command_worker",
+                "executor": "zigbee_manager",
+                "phase": "snapshot_created",
+                "entity_count_before": len(
+                    entity_ids_before
+                ),
+                "duration_seconds": duration_seconds,
+                "expected_device_type": (
+                    expected_device_type
+                ),
+                "building_module_id": building_module_id,
+            },
+        )
+
+        permit_result = open_zigbee_permit(
+            duration_seconds=duration_seconds,
+        )
+
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="running",
+            result={
+                "worker": "command_worker",
+                "executor": "zigbee_manager",
+                "phase": "waiting_for_device",
+                "service": permit_result["service"],
+                "duration_seconds": duration_seconds,
+                "entity_count_before": len(
+                    entity_ids_before
+                ),
+                "expected_device_type": (
+                    expected_device_type
+                ),
+                "building_module_id": building_module_id,
+            },
+        )
+
+        logging.info(
+            (
+                "Zigbee parovaci rezim byl otevren "
+                "na %s sekund. Cekam na nove zarizeni. "
+                "Prikaz: %s"
+            ),
+            duration_seconds,
+            command_id,
+        )
+
+        discovery_result = wait_for_new_device(
+            entity_ids_before=entity_ids_before,
+            timeout_seconds=duration_seconds,
+        )
+
+        device = discovery_result.get(
+            "device"
+        )
+
+        entities = discovery_result.get(
+            "entities"
+        )
+
+        temperature_entity = discovery_result.get(
+            "temperature_entity"
+        )
+
+        battery_entity = discovery_result.get(
+            "battery_entity"
+        )
+
+        if not isinstance(device, dict):
+            raise HomeAssistantApiError(
+                "Nove zarizeni nema platna metadata."
+            )
+
+        if not isinstance(entities, list):
+            raise HomeAssistantApiError(
+                "Nove zarizeni nema platny seznam entit."
+            )
+
+        if not isinstance(
+            temperature_entity,
+            dict,
+        ):
+            raise HomeAssistantApiError(
+                "Nove zarizeni nema dostupnou platnou "
+                "teplotni entitu."
+            )
+
+        result = {
+            "worker": "command_worker",
+            "executor": "zigbee_manager",
+            "phase": "device_verified",
+            "expected_device_type": expected_device_type,
+            "building_module_id": building_module_id,
+            "device": device,
+            "entities": entities,
+            "entity_count": len(entities),
+            "temperature_entity": temperature_entity,
+            "battery_entity": (
+                battery_entity
+                if isinstance(battery_entity, dict)
+                else None
+            ),
+            "system_roles": {
+                "building_indoor_temperature": (
+                    temperature_entity.get(
+                        "entity_id"
+                    )
+                ),
+                "device_battery": (
+                    battery_entity.get(
+                        "entity_id"
+                    )
+                    if isinstance(
+                        battery_entity,
+                        dict,
+                    )
+                    else None
+                ),
+            },
+            "service": permit_result["service"],
+            "duration_seconds": duration_seconds,
+        }
+
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="succeeded",
+            result=result,
+            error_message=None,
+        )
+
+        logging.info(
+            (
+                "Nove Zigbee zarizeni bylo overeno. "
+                "Device ID: %s, teplota: %s, "
+                "baterie: %s, pocet entit: %s, "
+                "prikaz: %s"
+            ),
+            device.get("device_id"),
+            temperature_entity.get("entity_id"),
+            (
+                battery_entity.get("entity_id")
+                if isinstance(
+                    battery_entity,
+                    dict,
+                )
+                else "neni dostupna"
+            ),
+            len(entities),
+            command_id,
+        )
+
+    except (
+        HomeAssistantApiError,
+        ValueError,
+    ) as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": "zigbee_manager",
+                "phase": "device_discovery_failed",
+                "duration_seconds": duration_seconds,
+                "expected_device_type": (
+                    expected_device_type
+                ),
+                "building_module_id": building_module_id,
+            },
+            error_message=str(exc),
+        )
+
+        logging.error(
+            "Zigbee parovani pro prikaz %s selhalo: %s",
+            command_id,
+            exc,
+        )
+
+
 def execute_command(
     *,
     identity: dict[str, Any],
     command: dict[str, Any],
 ) -> None:
-    """Provede bezpecny test celeho Command Engine."""
+    """Provede prijaty cloudovy prikaz."""
 
     command_id = str(command["id"])
     command_type = str(command["command_type"])
     command_payload = command.get("payload") or {}
+
+    if not isinstance(command_payload, dict):
+        command_payload = {}
 
     logging.info(
         "Prikaz prevzat. ID: %s, typ: %s, payload: %s",
@@ -176,63 +439,10 @@ def execute_command(
     )
 
     if command_type == "zigbee_permit_join":
-        raw_duration = command_payload.get(
-            "duration_seconds",
-            180,
-        )
-
-        try:
-            permit_result = open_zigbee_permit(
-                duration_seconds=raw_duration,
-            )
-
-        except (
-            HomeAssistantApiError,
-            ValueError,
-        ) as exc:
-            submit_command_result(
-                identity=identity,
-                command_id=command_id,
-                status="failed",
-                result={
-                    "worker": "command_worker",
-                    "executor": "zigbee_manager",
-                    "phase": "permit_failed",
-                    "payload_received": command_payload,
-                },
-                error_message=str(exc),
-            )
-
-            logging.error(
-                "Zigbee permit pro prikaz %s selhal: %s",
-                command_id,
-                exc,
-            )
-            return
-
-        submit_command_result(
+        execute_zigbee_permit_join(
             identity=identity,
             command_id=command_id,
-            status="succeeded",
-            result={
-                "worker": "command_worker",
-                "executor": "zigbee_manager",
-                "phase": "permit_opened",
-                "service": permit_result["service"],
-                "duration_seconds": permit_result[
-                    "duration_seconds"
-                ],
-            },
-            error_message=None,
-        )
-
-        logging.info(
-            (
-                "Zigbee parovaci rezim byl otevren na %s sekund. "
-                "Prikaz: %s"
-            ),
-            permit_result["duration_seconds"],
-            command_id,
+            command_payload=command_payload,
         )
         return
 
@@ -263,6 +473,7 @@ def process_once() -> bool:
         identity=identity,
         command=command,
     )
+
     return True
 
 
@@ -301,4 +512,5 @@ if __name__ == "__main__":
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
     )
+
     main()
