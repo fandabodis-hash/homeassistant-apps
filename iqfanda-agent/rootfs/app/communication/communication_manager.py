@@ -1,4 +1,4 @@
-﻿"""Spravce komunikacniho centra TNG IQ FANDA Agentu."""
+"""Spravce komunikacniho centra TNG IQ FANDA Agentu."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from communication.json_utils import nacti_json
 from communication.models import (
     aktualni_cas_iso,
     vytvor_komunikator,
@@ -40,40 +41,6 @@ SYSTEM_USB_VENDOR_IDS = {
 
 logger = logging.getLogger(__name__)
 
-
-def nacti_json(
-    cesta: Path,
-) -> dict[str, Any] | None:
-    """Bezpecne nacte JSON objekt."""
-
-    if not cesta.exists():
-        return None
-
-    try:
-        with cesta.open(
-            "r",
-            encoding="utf-8-sig",
-        ) as soubor:
-            data = json.load(soubor)
-
-    except (
-        OSError,
-        json.JSONDecodeError,
-    ):
-        logger.exception(
-            "Nepodarilo se nacist JSON soubor %s.",
-            cesta,
-        )
-        return None
-
-    if not isinstance(data, dict):
-        logger.error(
-            "Soubor %s neobsahuje JSON objekt.",
-            cesta,
-        )
-        return None
-
-    return data
 
 
 def je_systemove_usb_zarizeni(
