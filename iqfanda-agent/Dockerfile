@@ -9,6 +9,7 @@ RUN apk add --no-cache \
     jq \
     networkmanager-cli \
     python3 \
+    py3-pyserial \
     yq
 
 WORKDIR /app
