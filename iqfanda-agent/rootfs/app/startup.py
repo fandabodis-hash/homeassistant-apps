@@ -4,6 +4,7 @@ import logging
 import threading
 import time
 
+from command_worker import main as command_worker_main
 from communication.communication_manager import main as communication_manager_main
 from device_config import main as device_config_main
 from heartbeat import main as heartbeat_main
@@ -29,6 +30,12 @@ def spustit_heartbeat() -> None:
     """Spusti heartbeat sluzbu."""
 
     heartbeat_main()
+
+
+def spustit_command_worker() -> None:
+    """Spusti vykonavatele cloudovych prikazu."""
+
+    command_worker_main()
 
 
 def spustit_synchronizaci_konfigurace() -> None:
@@ -211,6 +218,11 @@ def main() -> None:
         nazev="heartbeat",
     )
 
+    command_worker_thread = vytvorit_vlakno(
+        cil=spustit_command_worker,
+        nazev="command-worker",
+    )
+
     usb_inventory_thread = vytvorit_vlakno(
         cil=spustit_usb_inventory,
         nazev="usb-inventory",
@@ -223,6 +235,7 @@ def main() -> None:
 
     device_config_thread.start()
     heartbeat_thread.start()
+    command_worker_thread.start()
     usb_inventory_thread.start()
     communication_manager_thread.start()
 
@@ -233,6 +246,7 @@ def main() -> None:
             "access-point-manager": access_point_thread,
             "device-config-sync": device_config_thread,
             "heartbeat": heartbeat_thread,
+            "command-worker": command_worker_thread,
             "usb-inventory": usb_inventory_thread,
             "communication-manager": communication_manager_thread,
         }

@@ -25,7 +25,10 @@ class CloudClientConfig:
     def from_environment(cls) -> "CloudClientConfig":
         base_url = os.getenv(
             "IQF_CLOUD_API_URL",
-            DEFAULT_CLOUD_API_URL,
+            os.getenv(
+                "IQF_API_BASE_URL",
+                DEFAULT_CLOUD_API_URL,
+            ),
         ).strip()
 
         if not base_url:
@@ -450,6 +453,82 @@ class IQFCloudClient:
         return self._request_json(
             method="GET",
             path="/api/v1/device/config",
+            headers=headers,
+        )
+
+    def claim_device_command(
+        self,
+        *,
+        device_token: str,
+    ) -> dict[str, Any]:
+        """Vyzvedne nejstarsi dostupny prikaz zarizeni."""
+
+        try:
+            headers = self._device_authorization_headers(
+                device_token=device_token,
+            )
+        except ValueError as exc:
+            return {
+                "ok": False,
+                "status_code": None,
+                "data": None,
+                "error": str(exc),
+            }
+
+        return self._request_json(
+            method="POST",
+            path="/api/v1/device/commands/claim",
+            headers=headers,
+        )
+
+    def submit_device_command_result(
+        self,
+        *,
+        device_token: str,
+        command_id: str,
+        status: str,
+        result: dict[str, Any] | None = None,
+        error_message: str | None = None,
+    ) -> dict[str, Any]:
+        """Odesle prubezny nebo konecny stav prikazu."""
+
+        normalized_command_id = str(
+            command_id or ""
+        ).strip()
+
+        if not normalized_command_id:
+            return {
+                "ok": False,
+                "status_code": None,
+                "data": None,
+                "error": "ID prikazu nesmi byt prazdne.",
+            }
+
+        try:
+            headers = self._device_authorization_headers(
+                device_token=device_token,
+            )
+        except ValueError as exc:
+            return {
+                "ok": False,
+                "status_code": None,
+                "data": None,
+                "error": str(exc),
+            }
+
+        payload: dict[str, Any] = {
+            "status": str(status or "").strip(),
+            "result": result,
+            "error_message": error_message,
+        }
+
+        return self._request_json(
+            method="POST",
+            path=(
+                "/api/v1/device/commands/"
+                f"{normalized_command_id}/result"
+            ),
+            payload=payload,
             headers=headers,
         )
 
