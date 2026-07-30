@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from urllib import error, request
 
+from communication.json_utils import nacti_json
 from device_config import load_cached_cloud_config
 from sync_signal import request_config_sync
 
@@ -13,6 +14,13 @@ CONFIG_PATH = Path(
     os.getenv(
         "IQF_DEVICE_CONFIG_PATH",
         "/config/device.json",
+    )
+)
+
+COMMUNICATION_STATE_PATH = Path(
+    os.getenv(
+        "IQF_COMMUNICATION_STATE_PATH",
+        "/config/communication.json",
     )
 )
 
@@ -48,6 +56,14 @@ def load_device_config() -> dict:
             )
 
     return config
+
+
+def load_communication_state() -> dict | None:
+    """Nacte aktualni stav komunikacniho centra."""
+
+    return nacti_json(
+        COMMUNICATION_STATE_PATH
+    )
 
 
 def get_api_url(config: dict) -> str:
@@ -100,6 +116,7 @@ def send_heartbeat(config: dict) -> dict:
             "software_version",
             DEFAULT_SOFTWARE_VERSION,
         ),
+        "communication_state": load_communication_state(),
     }
 
     encoded_payload = json.dumps(payload).encode("utf-8")
