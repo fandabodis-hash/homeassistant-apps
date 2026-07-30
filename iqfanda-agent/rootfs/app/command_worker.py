@@ -10,6 +10,7 @@ from typing import Any
 from host.cloud_client import cloud_client
 from zigbee_manager import (
     HomeAssistantApiError,
+    find_existing_temperature_devices,
     get_home_assistant_entity_ids,
     open_zigbee_permit,
     wait_for_new_device,
@@ -204,76 +205,155 @@ def execute_zigbee_permit_join(
     ).strip()
 
     try:
-        entity_ids_before = (
-            get_home_assistant_entity_ids()
+        existing_devices = (
+            find_existing_temperature_devices()
         )
 
-        logging.info(
-            (
-                "Pred Zigbee parovanim bylo nalezeno "
-                "%s Home Assistant entit. Prikaz: %s"
-            ),
-            len(entity_ids_before),
-            command_id,
-        )
+        if len(existing_devices) > 1:
+            candidate_names = [
+                str(
+                    candidate.get(
+                        "device",
+                        {},
+                    ).get("name")
+                    or candidate.get(
+                        "device",
+                        {},
+                    ).get("model")
+                    or "Nezname Zigbee zarizeni"
+                )
+                for candidate in existing_devices
+                if isinstance(candidate, dict)
+            ]
 
-        submit_command_result(
-            identity=identity,
-            command_id=command_id,
-            status="running",
-            result={
-                "worker": "command_worker",
-                "executor": "zigbee_manager",
-                "phase": "snapshot_created",
-                "entity_count_before": len(
-                    entity_ids_before
+            raise HomeAssistantApiError(
+                (
+                    "Bylo nalezeno vice vhodnych "
+                    "ZHA teplotnich zarizeni: "
+                    + ", ".join(candidate_names)
+                    + ". Je nutne doplnit vyber "
+                    "konkretniho zarizeni."
+                )
+            )
+
+        if len(existing_devices) == 1:
+            discovery_result = existing_devices[0]
+            discovery_source = (
+                "existing_home_assistant_device"
+            )
+            permit_result = {
+                "service": None,
+            }
+
+            submit_command_result(
+                identity=identity,
+                command_id=command_id,
+                status="running",
+                result={
+                    "worker": "command_worker",
+                    "executor": "zigbee_manager",
+                    "phase": "existing_device_found",
+                    "candidate_count": 1,
+                    "expected_device_type": (
+                        expected_device_type
+                    ),
+                    "building_module_id": (
+                        building_module_id
+                    ),
+                },
+            )
+
+            logging.info(
+                (
+                    "Bylo nalezeno existujici vhodne "
+                    "ZHA teplotni zarizeni. Prikaz: %s"
                 ),
-                "duration_seconds": duration_seconds,
-                "expected_device_type": (
-                    expected_device_type
+                command_id,
+            )
+
+        else:
+            discovery_source = "newly_paired_device"
+
+            entity_ids_before = (
+                get_home_assistant_entity_ids()
+            )
+
+            logging.info(
+                (
+                    "Pred Zigbee parovanim bylo nalezeno "
+                    "%s Home Assistant entit. Prikaz: %s"
                 ),
-                "building_module_id": building_module_id,
-            },
-        )
+                len(entity_ids_before),
+                command_id,
+            )
 
-        permit_result = open_zigbee_permit(
-            duration_seconds=duration_seconds,
-        )
+            submit_command_result(
+                identity=identity,
+                command_id=command_id,
+                status="running",
+                result={
+                    "worker": "command_worker",
+                    "executor": "zigbee_manager",
+                    "phase": "snapshot_created",
+                    "entity_count_before": len(
+                        entity_ids_before
+                    ),
+                    "duration_seconds": (
+                        duration_seconds
+                    ),
+                    "expected_device_type": (
+                        expected_device_type
+                    ),
+                    "building_module_id": (
+                        building_module_id
+                    ),
+                },
+            )
 
-        submit_command_result(
-            identity=identity,
-            command_id=command_id,
-            status="running",
-            result={
-                "worker": "command_worker",
-                "executor": "zigbee_manager",
-                "phase": "waiting_for_device",
-                "service": permit_result["service"],
-                "duration_seconds": duration_seconds,
-                "entity_count_before": len(
-                    entity_ids_before
+            permit_result = open_zigbee_permit(
+                duration_seconds=duration_seconds,
+            )
+
+            submit_command_result(
+                identity=identity,
+                command_id=command_id,
+                status="running",
+                result={
+                    "worker": "command_worker",
+                    "executor": "zigbee_manager",
+                    "phase": "waiting_for_device",
+                    "service": (
+                        permit_result["service"]
+                    ),
+                    "duration_seconds": (
+                        duration_seconds
+                    ),
+                    "entity_count_before": len(
+                        entity_ids_before
+                    ),
+                    "expected_device_type": (
+                        expected_device_type
+                    ),
+                    "building_module_id": (
+                        building_module_id
+                    ),
+                },
+            )
+
+            logging.info(
+                (
+                    "Zigbee parovaci rezim byl otevren "
+                    "na %s sekund. Cekam na nove "
+                    "zarizeni. Prikaz: %s"
                 ),
-                "expected_device_type": (
-                    expected_device_type
-                ),
-                "building_module_id": building_module_id,
-            },
-        )
+                duration_seconds,
+                command_id,
+            )
 
-        logging.info(
-            (
-                "Zigbee parovaci rezim byl otevren "
-                "na %s sekund. Cekam na nove zarizeni. "
-                "Prikaz: %s"
-            ),
-            duration_seconds,
-            command_id,
-        )
-
-        discovery_result = wait_for_new_device(
-            entity_ids_before=entity_ids_before,
-            timeout_seconds=duration_seconds,
-        )
+            discovery_result = wait_for_new_device(
+                entity_ids_before=entity_ids_before,
+                timeout_seconds=duration_seconds,
+            )
 
         device = discovery_result.get(
             "device"
@@ -342,7 +422,8 @@ def execute_zigbee_permit_join(
                     else None
                 ),
             },
-            "service": permit_result["service"],
+            "discovery_source": discovery_source,
+            "service": permit_result.get("service"),
             "duration_seconds": duration_seconds,
         }
 

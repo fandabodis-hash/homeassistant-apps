@@ -475,6 +475,165 @@ def find_entity_by_device_class(
     return None
 
 
+def get_integration_entity_ids(
+    integration: str,
+) -> list[str]:
+    """Nacte entity konkretni Home Assistant integrace."""
+
+    normalized_integration = str(
+        integration or ""
+    ).strip()
+
+    if not normalized_integration:
+        raise ValueError(
+            "Nazev integrace nesmi byt prazdny."
+        )
+
+    template = (
+        "{{ integration_entities("
+        + json.dumps(normalized_integration)
+        + ") | tojson }}"
+    )
+
+    result = render_home_assistant_template(
+        template
+    )
+
+    if isinstance(result, list):
+        entity_ids = result
+
+    elif isinstance(result, str):
+        try:
+            entity_ids = json.loads(result)
+        except json.JSONDecodeError as exc:
+            raise HomeAssistantApiError(
+                "Home Assistant vratil neplatny seznam "
+                "entit integrace."
+            ) from exc
+
+    else:
+        raise HomeAssistantApiError(
+            "Home Assistant vratil neocekavany format "
+            "entit integrace."
+        )
+
+    if not isinstance(entity_ids, list):
+        raise HomeAssistantApiError(
+            "Entity integrace nemaji platny format."
+        )
+
+    return sorted(
+        {
+            str(entity_id).strip()
+            for entity_id in entity_ids
+            if str(entity_id or "").strip()
+        }
+    )
+
+
+def find_existing_temperature_devices(
+) -> list[dict[str, Any]]:
+    """
+    Najde existujici ZHA zarizeni s platnou
+    teplotni entitou.
+    """
+
+    zha_entity_ids = set(
+        get_integration_entity_ids("zha")
+    )
+
+    if not zha_entity_ids:
+        return []
+
+    states_by_entity_id = {
+        str(state["entity_id"]): state
+        for state in get_home_assistant_states()
+        if str(state.get("entity_id") or "")
+        in zha_entity_ids
+    }
+
+    device_ids: set[str] = set()
+
+    for entity_id, state in states_by_entity_id.items():
+        attributes = state.get(
+            "attributes",
+            {},
+        )
+
+        if not isinstance(attributes, dict):
+            continue
+
+        device_class = str(
+            attributes.get("device_class") or ""
+        ).strip().lower()
+
+        entity_state = str(
+            state.get("state") or ""
+        ).strip().lower()
+
+        if device_class != "temperature":
+            continue
+
+        if entity_state in {
+            "",
+            "unknown",
+            "unavailable",
+            "none",
+        }:
+            continue
+
+        device_id = get_entity_device_id(
+            entity_id
+        )
+
+        if device_id:
+            device_ids.add(device_id)
+
+    candidates: list[dict[str, Any]] = []
+
+    for device_id in sorted(device_ids):
+        metadata = get_device_metadata(
+            device_id
+        )
+
+        entities = build_entity_inventory(
+            device_id
+        )
+
+        temperature_entity = (
+            find_entity_by_device_class(
+                entities,
+                "temperature",
+            )
+        )
+
+        if not isinstance(
+            temperature_entity,
+            dict,
+        ):
+            continue
+
+        battery_entity = (
+            find_entity_by_device_class(
+                entities,
+                "battery",
+            )
+        )
+
+        candidates.append(
+            {
+                "device": metadata,
+                "entities": entities,
+                "temperature_entity": (
+                    temperature_entity
+                ),
+                "battery_entity": battery_entity,
+            }
+        )
+
+    return candidates
+
+
 def wait_for_new_device(
     *,
     entity_ids_before: set[str],
