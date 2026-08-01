@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 import websocket
@@ -243,6 +244,288 @@ def home_assistant_websocket_request(
                 connection.close()
             except websocket.WebSocketException:
                 pass
+
+
+def get_zha_devices() -> list[dict[str, Any]]:
+    """Nacte kompletni seznam zarizeni integrace ZHA."""
+
+    result = home_assistant_websocket_request(
+        command_type="zha/devices",
+    )
+
+    if not isinstance(result, list):
+        raise HomeAssistantApiError(
+            "Home Assistant ZHA vratilo "
+            "neplatny seznam zarizeni."
+        )
+
+    return [
+        item
+        for item in result
+        if isinstance(item, dict)
+    ]
+
+
+def normalize_zha_device(
+    device: dict[str, Any],
+) -> dict[str, Any]:
+    """Normalizuje jedno ZHA zarizeni pro cloud."""
+
+    if not isinstance(device, dict):
+        raise ValueError(
+            "ZHA zarizeni nema platny format."
+        )
+
+    signature = device.get("signature")
+
+    if not isinstance(signature, dict):
+        signature = {}
+
+    entities = device.get("entities")
+
+    if not isinstance(entities, list):
+        entities = []
+
+    neighbors = device.get("neighbors")
+
+    if not isinstance(neighbors, list):
+        neighbors = []
+
+    routes = device.get("routes")
+
+    if not isinstance(routes, list):
+        routes = []
+
+    endpoint_names = device.get(
+        "endpoint_names"
+    )
+
+    if not isinstance(endpoint_names, list):
+        endpoint_names = []
+
+    normalized_entities = [
+        {
+            "entity_id": entity.get(
+                "entity_id"
+            ),
+            "name": entity.get("name"),
+        }
+        for entity in entities
+        if isinstance(entity, dict)
+        and entity.get("entity_id")
+    ]
+
+    normalized_neighbors = [
+        {
+            "ieee": neighbor.get("ieee"),
+            "nwk": neighbor.get("nwk"),
+            "lqi": neighbor.get("lqi"),
+            "device_type": neighbor.get(
+                "device_type"
+            ),
+            "relationship": neighbor.get(
+                "relationship"
+            ),
+            "rx_on_when_idle": neighbor.get(
+                "rx_on_when_idle"
+            ),
+        }
+        for neighbor in neighbors
+        if isinstance(neighbor, dict)
+    ]
+
+    normalized_routes = [
+        {
+            "destination": route.get(
+                "destination"
+            ),
+            "next_hop": route.get(
+                "next_hop"
+            ),
+            "status": route.get("status"),
+            "memory_constrained": route.get(
+                "memory_constrained"
+            ),
+            "many_to_one": route.get(
+                "many_to_one"
+            ),
+            "route_record_required": route.get(
+                "route_record_required"
+            ),
+        }
+        for route in routes
+        if isinstance(route, dict)
+    ]
+
+    normalized_endpoint_names = [
+        str(endpoint.get("name"))
+        for endpoint in endpoint_names
+        if isinstance(endpoint, dict)
+        and endpoint.get("name")
+    ]
+
+    manufacturer = (
+        device.get("manufacturer")
+        or signature.get("manufacturer")
+    )
+
+    model = (
+        device.get("model")
+        or signature.get("model")
+    )
+
+    return {
+        "device_reg_id": device.get(
+            "device_reg_id"
+        ),
+        "ieee": device.get("ieee"),
+        "nwk": device.get("nwk"),
+        "device_type": device.get(
+            "device_type"
+        ),
+        "active_coordinator": bool(
+            device.get("active_coordinator")
+        ),
+        "available": bool(
+            device.get("available")
+        ),
+        "lqi": device.get("lqi"),
+        "rssi": device.get("rssi"),
+        "last_seen": device.get(
+            "last_seen"
+        ),
+        "manufacturer": manufacturer,
+        "model": model,
+        "user_given_name": device.get(
+            "user_given_name"
+        ),
+        "area_id": device.get("area_id"),
+        "entities": normalized_entities,
+        "entity_count": len(
+            normalized_entities
+        ),
+        "endpoint_names": (
+            normalized_endpoint_names
+        ),
+        "neighbors": normalized_neighbors,
+        "neighbor_count": len(
+            normalized_neighbors
+        ),
+        "routes": normalized_routes,
+        "route_count": len(
+            normalized_routes
+        ),
+    }
+
+
+def get_zha_telemetry_snapshot() -> dict[str, Any]:
+    """Sestavi aktualni snapshot cele Zigbee site."""
+
+    devices = [
+        normalize_zha_device(device)
+        for device in get_zha_devices()
+    ]
+
+    coordinator = next(
+        (
+            device
+            for device in devices
+            if device.get(
+                "active_coordinator"
+            )
+        ),
+        None,
+    )
+
+    end_devices = [
+        device
+        for device in devices
+        if not device.get(
+            "active_coordinator"
+        )
+    ]
+
+    online_device_count = sum(
+        1
+        for device in end_devices
+        if device.get("available") is True
+    )
+
+    offline_device_count = (
+        len(end_devices)
+        - online_device_count
+    )
+
+    return {
+        "zha_available": True,
+        "network_initialized": (
+            coordinator is not None
+        ),
+        "updated_at": datetime.now(
+            timezone.utc
+        ).isoformat(),
+        "coordinator": coordinator,
+        "devices": end_devices,
+        "device_count": len(
+            end_devices
+        ),
+        "online_device_count": (
+            online_device_count
+        ),
+        "offline_device_count": (
+            offline_device_count
+        ),
+    }
+
+
+def get_zha_device_telemetry(
+    device_reg_id: str,
+    *,
+    snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Najde ZHA telemetrii podle HA device registry ID."""
+
+    normalized_device_reg_id = str(
+        device_reg_id or ""
+    ).strip()
+
+    if not normalized_device_reg_id:
+        raise ValueError(
+            "Device registry ID nesmi byt prazdne."
+        )
+
+    if snapshot is None:
+        snapshot = (
+            get_zha_telemetry_snapshot()
+        )
+
+    if not isinstance(snapshot, dict):
+        raise ValueError(
+            "Snapshot ZHA telemetrie "
+            "nema platny format."
+        )
+
+    devices = snapshot.get("devices")
+
+    if not isinstance(devices, list):
+        return None
+
+    for device in devices:
+        if not isinstance(device, dict):
+            continue
+
+        current_device_reg_id = str(
+            device.get("device_reg_id")
+            or ""
+        ).strip()
+
+        if (
+            current_device_reg_id
+            == normalized_device_reg_id
+        ):
+            return device
+
+    return None
 
 
 def render_home_assistant_template(
