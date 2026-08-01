@@ -3,6 +3,8 @@ import logging
 import os
 import time
 from typing import Any
+
+import websocket
 from urllib import error, request
 
 
@@ -126,6 +128,121 @@ def home_assistant_request(
             "Home Assistant API neni dostupne: "
             f"{exc.reason}"
         ) from exc
+
+
+def home_assistant_websocket_request(
+    *,
+    command_type: str,
+    payload: dict[str, Any] | None = None,
+) -> Any:
+    """Provede jeden prikaz pres Home Assistant WebSocket API."""
+
+    normalized_command_type = str(
+        command_type or ""
+    ).strip()
+
+    if not normalized_command_type:
+        raise ValueError(
+            "Typ Home Assistant WebSocket prikazu "
+            "nesmi byt prazdny."
+        )
+
+    websocket_url = os.environ.get(
+        "SUPERVISOR_CORE_WEBSOCKET_URL",
+        "ws://supervisor/core/websocket",
+    ).strip()
+
+    command: dict[str, Any] = {
+        "id": 1,
+        "type": normalized_command_type,
+    }
+
+    if payload:
+        command.update(payload)
+
+    connection = None
+
+    try:
+        connection = websocket.create_connection(
+            websocket_url,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            origin="http://supervisor",
+        )
+
+        hello_raw = connection.recv()
+        hello = json.loads(hello_raw)
+
+        if hello.get("type") != "auth_required":
+            raise HomeAssistantApiError(
+                "Home Assistant WebSocket nevyzadal "
+                "ocekavanou autentizaci."
+            )
+
+        connection.send(
+            json.dumps(
+                {
+                    "type": "auth",
+                    "access_token": get_supervisor_token(),
+                }
+            )
+        )
+
+        auth_raw = connection.recv()
+        auth = json.loads(auth_raw)
+
+        if auth.get("type") != "auth_ok":
+            raise HomeAssistantApiError(
+                "Autentizace Home Assistant WebSocket "
+                f"selhala: {auth}"
+            )
+
+        connection.send(
+            json.dumps(command)
+        )
+
+        response_raw = connection.recv()
+        response = json.loads(response_raw)
+
+        if response.get("id") != command["id"]:
+            raise HomeAssistantApiError(
+                "Home Assistant WebSocket vratil "
+                "odpoved pro jiny pozadavek."
+            )
+
+        if response.get("type") != "result":
+            raise HomeAssistantApiError(
+                "Home Assistant WebSocket vratil "
+                f"neocekavany typ odpovedi: {response}"
+            )
+
+        if response.get("success") is not True:
+            raise HomeAssistantApiError(
+                "Home Assistant WebSocket prikaz selhal: "
+                f"{response.get('error') or response}"
+            )
+
+        return response.get("result")
+
+    except HomeAssistantApiError:
+        raise
+
+    except (
+        OSError,
+        ValueError,
+        json.JSONDecodeError,
+        websocket.WebSocketException,
+    ) as exc:
+        raise HomeAssistantApiError(
+            "Home Assistant WebSocket neni dostupny "
+            f"nebo vratil neplatnou odpoved: {exc}"
+        ) from exc
+
+    finally:
+        if connection is not None:
+            try:
+                connection.close()
+            except websocket.WebSocketException:
+                pass
 
 
 def render_home_assistant_template(

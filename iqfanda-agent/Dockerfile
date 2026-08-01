@@ -10,6 +10,7 @@ RUN apk add --no-cache \
     networkmanager-cli \
     python3 \
     py3-pyserial \
+    py3-websocket-client \
     yq
 
 WORKDIR /app
