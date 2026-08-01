@@ -7,19 +7,13 @@ from urllib import error, request
 
 from communication.json_utils import nacti_json
 from device_config import load_cached_cloud_config
+from runtime_config import load_runtime_configuration
 from sync_signal import request_config_sync
 from zigbee_manager import (
     HomeAssistantApiError,
     get_zha_telemetry_snapshot,
 )
 
-
-CONFIG_PATH = Path(
-    os.getenv(
-        "IQF_DEVICE_CONFIG_PATH",
-        "/config/device.json",
-    )
-)
 
 COMMUNICATION_STATE_PATH = Path(
     os.getenv(
@@ -37,29 +31,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
 )
-
-
-def load_device_config() -> dict:
-    if not CONFIG_PATH.exists():
-        raise FileNotFoundError(
-            f"Konfigurační soubor neexistuje: {CONFIG_PATH}"
-        )
-
-    with CONFIG_PATH.open("r", encoding="utf-8-sig") as file:
-        config = json.load(file)
-
-    required_fields = (
-        "device_uuid",
-        "device_token",
-    )
-
-    for field in required_fields:
-        if not config.get(field):
-            raise ValueError(
-                f"V konfiguraci chybí povinné pole: {field}"
-            )
-
-    return config
 
 
 def load_communication_state() -> dict | None:
@@ -340,15 +311,14 @@ def process_config_version(heartbeat_response: dict) -> None:
 
 def main() -> None:
     logging.info(
-        "IQ FANDA heartbeat agent spuštěn. Konfigurace: %s",
-        CONFIG_PATH,
+        "IQ FANDA heartbeat agent spuštěn.",
     )
 
     while True:
         interval = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
 
         try:
-            config = load_device_config()
+            config = load_runtime_configuration()
             interval = get_heartbeat_interval(config)
 
             heartbeat_response = send_heartbeat(config)
