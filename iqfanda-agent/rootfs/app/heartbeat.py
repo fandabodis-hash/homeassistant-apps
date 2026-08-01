@@ -9,6 +9,8 @@ from communication.json_utils import nacti_json
 from device_config import load_cached_cloud_config
 from runtime_config import load_runtime_configuration
 from sync_signal import request_config_sync
+from system_telemetry import collect_system_telemetry
+
 from zigbee_manager import (
     HomeAssistantApiError,
     get_zha_telemetry_snapshot,
@@ -219,6 +221,8 @@ def get_heartbeat_interval(config: dict) -> int:
 
 
 def send_heartbeat(config: dict) -> dict:
+    system_telemetry = collect_system_telemetry()
+
     payload = {
         "device_uuid": config["device_uuid"],
         "status": "online",
@@ -226,6 +230,7 @@ def send_heartbeat(config: dict) -> dict:
             "software_version",
             DEFAULT_SOFTWARE_VERSION,
         ),
+        **system_telemetry,
         "communication_state": build_communication_state(),
     }
 
