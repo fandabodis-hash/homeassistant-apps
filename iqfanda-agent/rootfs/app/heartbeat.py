@@ -10,6 +10,7 @@ from device_config import load_cached_cloud_config
 from runtime_config import load_runtime_configuration
 from sync_signal import request_config_sync
 from system_telemetry import collect_system_telemetry
+from network_telemetry import collect_network_telemetry
 
 from zigbee_manager import (
     HomeAssistantApiError,
@@ -222,6 +223,18 @@ def get_heartbeat_interval(config: dict) -> int:
 
 def send_heartbeat(config: dict) -> dict:
     system_telemetry = collect_system_telemetry()
+    network_telemetry = collect_network_telemetry()
+
+    communication_state = build_communication_state()
+
+    network_state = network_telemetry.get(
+        "network_state"
+    )
+
+    if isinstance(network_state, dict):
+        communication_state[
+            "network_state"
+        ] = network_state
 
     payload = {
         "device_uuid": config["device_uuid"],
@@ -231,7 +244,23 @@ def send_heartbeat(config: dict) -> dict:
             DEFAULT_SOFTWARE_VERSION,
         ),
         **system_telemetry,
-        "communication_state": build_communication_state(),
+        "ip_address": network_telemetry.get(
+            "ip_address"
+        ),
+        "mac_address": network_telemetry.get(
+            "mac_address"
+        ),
+        "home_assistant_running": (
+            network_telemetry.get(
+                "home_assistant_running"
+            )
+        ),
+        "home_assistant_version": (
+            network_telemetry.get(
+                "home_assistant_version"
+            )
+        ),
+        "communication_state": communication_state,
     }
 
     encoded_payload = json.dumps(payload).encode("utf-8")
@@ -376,4 +405,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
