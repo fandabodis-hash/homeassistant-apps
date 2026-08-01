@@ -8,6 +8,10 @@ from urllib import error, request
 from communication.json_utils import nacti_json
 from device_config import load_cached_cloud_config
 from sync_signal import request_config_sync
+from zigbee_manager import (
+    HomeAssistantApiError,
+    get_zha_telemetry_snapshot,
+)
 
 
 CONFIG_PATH = Path(
@@ -66,6 +70,141 @@ def load_communication_state() -> dict | None:
     )
 
 
+def build_communication_state() -> dict:
+    """
+    Nacte existujici komunikacni stav a doplni
+    aktualni telemetrii Zigbee site.
+    """
+
+    communication_state = (
+        load_communication_state()
+    )
+
+    if not isinstance(
+        communication_state,
+        dict,
+    ):
+        communication_state = {}
+
+    try:
+        zigbee_telemetry = (
+            get_zha_telemetry_snapshot()
+        )
+
+        communication_state[
+            "zigbee_telemetry"
+        ] = zigbee_telemetry
+
+        communicators = (
+            communication_state.get(
+                "communicators"
+            )
+        )
+
+        if isinstance(communicators, list):
+            for communicator in communicators:
+                if not isinstance(
+                    communicator,
+                    dict,
+                ):
+                    continue
+
+                if (
+                    communicator.get("type")
+                    != "zigbee_coordinator"
+                ):
+                    continue
+
+                communicator[
+                    "zha_available"
+                ] = zigbee_telemetry.get(
+                    "zha_available"
+                )
+
+                communicator[
+                    "network_initialized"
+                ] = zigbee_telemetry.get(
+                    "network_initialized"
+                )
+
+                communicator[
+                    "paired_devices_count"
+                ] = zigbee_telemetry.get(
+                    "device_count"
+                )
+
+                communicator[
+                    "online_devices_count"
+                ] = zigbee_telemetry.get(
+                    "online_device_count"
+                )
+
+                communicator[
+                    "offline_devices_count"
+                ] = zigbee_telemetry.get(
+                    "offline_device_count"
+                )
+
+                communicator[
+                    "runtime_updated_at"
+                ] = zigbee_telemetry.get(
+                    "updated_at"
+                )
+
+                coordinator = (
+                    zigbee_telemetry.get(
+                        "coordinator"
+                    )
+                )
+
+                if isinstance(
+                    coordinator,
+                    dict,
+                ):
+                    communicator[
+                        "coordinator_telemetry"
+                    ] = coordinator
+
+                break
+
+    except (
+        HomeAssistantApiError,
+        OSError,
+        ValueError,
+    ) as exc:
+        logging.warning(
+            "ZHA telemetrii se nepodarilo "
+            "nacist: %s",
+            exc,
+        )
+
+        previous_telemetry = (
+            communication_state.get(
+                "zigbee_telemetry"
+            )
+        )
+
+        if not isinstance(
+            previous_telemetry,
+            dict,
+        ):
+            communication_state[
+                "zigbee_telemetry"
+            ] = {
+                "zha_available": False,
+                "network_initialized": None,
+                "updated_at": None,
+                "coordinator": None,
+                "devices": [],
+                "device_count": None,
+                "online_device_count": None,
+                "offline_device_count": None,
+                "error": str(exc),
+            }
+
+    return communication_state
+
+
 def get_api_url(config: dict) -> str:
     api_base_url = config.get(
         "api_base_url",
@@ -116,7 +255,7 @@ def send_heartbeat(config: dict) -> dict:
             "software_version",
             DEFAULT_SOFTWARE_VERSION,
         ),
-        "communication_state": load_communication_state(),
+        "communication_state": build_communication_state(),
     }
 
     encoded_payload = json.dumps(payload).encode("utf-8")
