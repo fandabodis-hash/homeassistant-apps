@@ -25,13 +25,13 @@ ALLOWED_DEVICE_IDS = (
 
 PROBE_BLOCKS = (
     {
-        "name": "legacy_identification",
-        "address": 0x0200,
+        "name": "et_operating_data",
+        "address": 35100,
         "count": 1,
     },
     {
-        "name": "et_operating_data",
-        "address": 35100,
+        "name": "legacy_identification",
+        "address": 0x0200,
         "count": 1,
     },
 )
@@ -226,6 +226,8 @@ def probe_goodwe_modbus(
         "attempts": [],
     }
 
+    first_exception_result: dict[str, Any] | None = None
+
     client = ModbusSerialClient(
         port=serial_path,
         baudrate=9600,
@@ -331,19 +333,21 @@ def probe_goodwe_modbus(
                         attempt
                     )
 
-                    result.update({
-                        "phase": (
-                            "modbus_exception_response"
-                        ),
-                        "communication_detected": True,
-                        "register_readable": False,
-                        "matched_device_id": device_id,
-                        "matched_block": block["name"],
-                        "exception_code": int(
-                            exception_code
-                        ),
-                    })
-                    return result
+                    if first_exception_result is None:
+                        first_exception_result = {
+                            "phase": (
+                                "modbus_exception_response"
+                            ),
+                            "communication_detected": True,
+                            "register_readable": False,
+                            "matched_device_id": device_id,
+                            "matched_block": block["name"],
+                            "exception_code": int(
+                                exception_code
+                            ),
+                        }
+
+                    continue
 
                 attempt.update({
                     "outcome": "modbus_io_error",
@@ -353,6 +357,10 @@ def probe_goodwe_modbus(
                 result["attempts"].append(
                     attempt
                 )
+
+        if first_exception_result is not None:
+            result.update(first_exception_result)
+            return result
 
         result["phase"] = "no_modbus_response"
         return result
