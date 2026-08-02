@@ -58,6 +58,26 @@ ET_SNAPSHOT_BLOCKS = (
         "address": 35100,
         "count": 11,
     },
+    {
+        "name": "inverter_data",
+        "address": 35121,
+        "count": 68,
+    },
+    {
+        "name": "energy_data",
+        "address": 35189,
+        "count": 23,
+    },
+    {
+        "name": "meter_data",
+        "address": 36000,
+        "count": 45,
+    },
+    {
+        "name": "bms_summary",
+        "address": 37000,
+        "count": 24,
+    },
 )
 
 
@@ -204,6 +224,36 @@ def _decode_u32(
     return (high_word << 16) | low_word
 
 
+def _decode_s16(
+    value: int,
+) -> int:
+    """Prevede 16bitove slovo na znamenkove cele cislo."""
+
+    normalized = int(value) & 0xFFFF
+
+    if normalized & 0x8000:
+        return normalized - 0x10000
+
+    return normalized
+
+
+def _decode_s32(
+    registers: list[int],
+    index: int,
+) -> int:
+    """Slozi dve slova na znamenkove 32bitove cislo."""
+
+    value = _decode_u32(
+        registers,
+        index,
+    )
+
+    if value & 0x80000000:
+        return value - 0x100000000
+
+    return value
+
+
 def _read_et_snapshot(
     *,
     client: ModbusSerialClient,
@@ -222,6 +272,10 @@ def _read_et_snapshot(
         "blocks": [],
         "identification": {},
         "operating_data": {},
+        "inverter_data": {},
+        "energy_data": {},
+        "meter_data": {},
+        "bms_summary": {},
     }
 
     for block in ET_SNAPSHOT_BLOCKS:
@@ -403,6 +457,471 @@ def _read_et_snapshot(
                     9,
                 ),
             },
+        }
+
+    for pv_name in ("pv1", "pv2"):
+        pv_data = snapshot["operating_data"].get(
+            pv_name
+        )
+
+        if isinstance(pv_data, dict):
+            power_raw = pv_data.get(
+                "power_raw_u32"
+            )
+
+            if isinstance(power_raw, int):
+                pv_data["power_w"] = round(
+                    power_raw / 10,
+                    1,
+                )
+
+    inverter_registers = successful_blocks.get(
+        "inverter_data"
+    )
+
+    if (
+        isinstance(inverter_registers, list)
+        and len(inverter_registers) == 68
+    ):
+        snapshot["inverter_data"] = {
+            "register_address": 35121,
+            "raw_registers": inverter_registers,
+            "grid": {
+                "r": {
+                    "voltage_v": round(
+                        inverter_registers[0] / 10,
+                        1,
+                    ),
+                    "current_a": round(
+                        inverter_registers[1] / 10,
+                        1,
+                    ),
+                    "frequency_hz": round(
+                        inverter_registers[2] / 100,
+                        2,
+                    ),
+                    "power_w": _decode_s16(
+                        inverter_registers[4]
+                    ),
+                },
+                "s": {
+                    "voltage_v": round(
+                        inverter_registers[5] / 10,
+                        1,
+                    ),
+                    "current_a": round(
+                        inverter_registers[6] / 10,
+                        1,
+                    ),
+                    "frequency_hz": round(
+                        inverter_registers[7] / 100,
+                        2,
+                    ),
+                    "power_w": _decode_s16(
+                        inverter_registers[9]
+                    ),
+                },
+                "t": {
+                    "voltage_v": round(
+                        inverter_registers[10] / 10,
+                        1,
+                    ),
+                    "current_a": round(
+                        inverter_registers[11] / 10,
+                        1,
+                    ),
+                    "frequency_hz": round(
+                        inverter_registers[12] / 100,
+                        2,
+                    ),
+                    "power_w": _decode_s16(
+                        inverter_registers[14]
+                    ),
+                },
+                "mode_raw": inverter_registers[15],
+            },
+            "inverter": {
+                "total_power_w": _decode_s16(
+                    inverter_registers[17]
+                ),
+                "active_power_w": _decode_s16(
+                    inverter_registers[19]
+                ),
+                "reactive_power_var": _decode_s16(
+                    inverter_registers[21]
+                ),
+                "apparent_power_va": _decode_s16(
+                    inverter_registers[23]
+                ),
+            },
+            "backup": {
+                "r": {
+                    "voltage_v": round(
+                        inverter_registers[24] / 10,
+                        1,
+                    ),
+                    "current_a": round(
+                        inverter_registers[25] / 10,
+                        1,
+                    ),
+                    "frequency_hz": round(
+                        inverter_registers[26] / 100,
+                        2,
+                    ),
+                    "mode_raw": inverter_registers[27],
+                    "power_w": _decode_s16(
+                        inverter_registers[29]
+                    ),
+                },
+                "s": {
+                    "voltage_v": round(
+                        inverter_registers[30] / 10,
+                        1,
+                    ),
+                    "current_a": round(
+                        inverter_registers[31] / 10,
+                        1,
+                    ),
+                    "frequency_hz": round(
+                        inverter_registers[32] / 100,
+                        2,
+                    ),
+                    "mode_raw": inverter_registers[33],
+                    "power_w": _decode_s16(
+                        inverter_registers[35]
+                    ),
+                },
+                "t": {
+                    "voltage_v": round(
+                        inverter_registers[36] / 10,
+                        1,
+                    ),
+                    "current_a": round(
+                        inverter_registers[37] / 10,
+                        1,
+                    ),
+                    "frequency_hz": round(
+                        inverter_registers[38] / 100,
+                        2,
+                    ),
+                    "mode_raw": inverter_registers[39],
+                    "power_w": _decode_s16(
+                        inverter_registers[41]
+                    ),
+                },
+                "total_power_w": _decode_s16(
+                    inverter_registers[49]
+                ),
+            },
+            "load": {
+                "r_power_w": _decode_s16(
+                    inverter_registers[43]
+                ),
+                "s_power_w": _decode_s16(
+                    inverter_registers[45]
+                ),
+                "t_power_w": _decode_s16(
+                    inverter_registers[47]
+                ),
+                "total_power_w": _decode_s16(
+                    inverter_registers[51]
+                ),
+                "backup_load_percent": round(
+                    inverter_registers[52] / 100,
+                    2,
+                ),
+            },
+            "temperatures": {
+                "air_c": round(
+                    _decode_s16(
+                        inverter_registers[53]
+                    ) / 10,
+                    1,
+                ),
+                "module_c": round(
+                    _decode_s16(
+                        inverter_registers[54]
+                    ) / 10,
+                    1,
+                ),
+                "radiator_c": round(
+                    _decode_s16(
+                        inverter_registers[55]
+                    ) / 10,
+                    1,
+                ),
+            },
+            "dc_bus": {
+                "positive_v": round(
+                    inverter_registers[57] / 10,
+                    1,
+                ),
+                "negative_v": round(
+                    inverter_registers[58] / 10,
+                    1,
+                ),
+            },
+            "battery": {
+                "voltage_v": round(
+                    inverter_registers[59] / 10,
+                    1,
+                ),
+                "current_a": round(
+                    _decode_s16(
+                        inverter_registers[60]
+                    ) / 10,
+                    1,
+                ),
+                "power_w": _decode_s16(
+                    inverter_registers[62]
+                ),
+                "mode_raw": inverter_registers[63],
+            },
+            "warning_code_raw": (
+                inverter_registers[64]
+            ),
+            "safety_country_raw": (
+                inverter_registers[65]
+            ),
+            "work_mode_raw": (
+                inverter_registers[66]
+            ),
+            "operation_mode_raw": (
+                inverter_registers[67]
+            ),
+        }
+
+    energy_registers = successful_blocks.get(
+        "energy_data"
+    )
+
+    if (
+        isinstance(energy_registers, list)
+        and len(energy_registers) == 23
+    ):
+        snapshot["energy_data"] = {
+            "register_address": 35189,
+            "raw_registers": energy_registers,
+            "error_message_raw": _decode_u32(
+                energy_registers,
+                0,
+            ),
+            "pv_total_kwh": round(
+                _decode_u32(
+                    energy_registers,
+                    2,
+                ) / 10,
+                1,
+            ),
+            "pv_today_kwh": round(
+                _decode_u32(
+                    energy_registers,
+                    4,
+                ) / 10,
+                1,
+            ),
+            "grid_sell_total_kwh": round(
+                _decode_u32(
+                    energy_registers,
+                    6,
+                ) / 10,
+                1,
+            ),
+            "grid_feed_hours": _decode_u32(
+                energy_registers,
+                8,
+            ),
+            "grid_sell_today_kwh": round(
+                energy_registers[10] / 10,
+                1,
+            ),
+            "grid_buy_total_kwh": round(
+                _decode_u32(
+                    energy_registers,
+                    11,
+                ) / 10,
+                1,
+            ),
+            "grid_buy_today_kwh": round(
+                energy_registers[13] / 10,
+                1,
+            ),
+            "load_total_kwh": round(
+                _decode_u32(
+                    energy_registers,
+                    14,
+                ) / 10,
+                1,
+            ),
+            "load_today_kwh": round(
+                energy_registers[16] / 10,
+                1,
+            ),
+            "battery_charge_total_kwh": round(
+                _decode_u32(
+                    energy_registers,
+                    17,
+                ) / 10,
+                1,
+            ),
+            "battery_charge_today_kwh": round(
+                energy_registers[19] / 10,
+                1,
+            ),
+            "battery_discharge_total_kwh": round(
+                _decode_u32(
+                    energy_registers,
+                    20,
+                ) / 10,
+                1,
+            ),
+            "battery_discharge_today_kwh": round(
+                energy_registers[22] / 10,
+                1,
+            ),
+        }
+
+    meter_registers = successful_blocks.get(
+        "meter_data"
+    )
+
+    if (
+        isinstance(meter_registers, list)
+        and len(meter_registers) == 45
+    ):
+        snapshot["meter_data"] = {
+            "register_address": 36000,
+            "raw_registers": meter_registers,
+            "connection_status_raw": (
+                meter_registers[3]
+            ),
+            "communication_status_raw": (
+                meter_registers[4]
+            ),
+            "frequency_hz": round(
+                meter_registers[14] / 100,
+                2,
+            ),
+            "power_factor": {
+                "r": round(
+                    meter_registers[10] / 100,
+                    2,
+                ),
+                "s": round(
+                    meter_registers[11] / 100,
+                    2,
+                ),
+                "t": round(
+                    meter_registers[12] / 100,
+                    2,
+                ),
+                "total": round(
+                    meter_registers[13] / 100,
+                    2,
+                ),
+            },
+            "active_power_w": {
+                "r": _decode_s32(
+                    meter_registers,
+                    19,
+                ),
+                "s": _decode_s32(
+                    meter_registers,
+                    21,
+                ),
+                "t": _decode_s32(
+                    meter_registers,
+                    23,
+                ),
+                "total": _decode_s32(
+                    meter_registers,
+                    25,
+                ),
+            },
+            "energy_total_sell_float_raw": (
+                meter_registers[15:17]
+            ),
+            "energy_total_buy_float_raw": (
+                meter_registers[17:19]
+            ),
+            "meter_type_raw": meter_registers[43],
+            "software_version_raw": (
+                meter_registers[44]
+            ),
+        }
+
+    bms_registers = successful_blocks.get(
+        "bms_summary"
+    )
+
+    if (
+        isinstance(bms_registers, list)
+        and len(bms_registers) == 24
+    ):
+        snapshot["bms_summary"] = {
+            "register_address": 37000,
+            "raw_registers": bms_registers,
+            "drm_status_raw": bms_registers[0],
+            "battery_type_index_raw": (
+                bms_registers[1]
+            ),
+            "status_raw": bms_registers[2],
+            "pack_temperature_c": round(
+                bms_registers[3] / 10,
+                1,
+            ),
+            "charge_current_limit_a": (
+                bms_registers[4]
+            ),
+            "discharge_current_limit_a": (
+                bms_registers[5]
+            ),
+            "error_code_raw": (
+                (bms_registers[12] << 16)
+                | bms_registers[6]
+            ),
+            "soc_percent": bms_registers[7],
+            "soh_percent": bms_registers[8],
+            "battery_strings": bms_registers[9],
+            "warning_code_raw": (
+                (bms_registers[13] << 16)
+                | bms_registers[10]
+            ),
+            "battery_protocol_raw": (
+                bms_registers[11]
+            ),
+            "software_version_raw": (
+                bms_registers[14]
+            ),
+            "hardware_version_raw": (
+                bms_registers[15]
+            ),
+            "maximum_cell_temperature_id": (
+                bms_registers[16]
+            ),
+            "minimum_cell_temperature_id": (
+                bms_registers[17]
+            ),
+            "maximum_cell_voltage_id": (
+                bms_registers[18]
+            ),
+            "minimum_cell_voltage_id": (
+                bms_registers[19]
+            ),
+            "maximum_cell_temperature_c": round(
+                bms_registers[20] / 10,
+                1,
+            ),
+            "minimum_cell_temperature_c": round(
+                bms_registers[21] / 10,
+                1,
+            ),
+            "maximum_cell_voltage_mv": (
+                bms_registers[22]
+            ),
+            "minimum_cell_voltage_mv": (
+                bms_registers[23]
+            ),
         }
 
     snapshot["complete"] = (
