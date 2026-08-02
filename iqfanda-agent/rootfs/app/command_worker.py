@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from communication.goodwe_probe import probe_goodwe_modbus
 from host.cloud_client import cloud_client
 from zigbee_manager import (
     HomeAssistantApiError,
@@ -484,6 +485,88 @@ def execute_zigbee_permit_join(
         )
 
 
+
+def execute_photovoltaic_modbus_probe(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Provede bezpecny pouze cteci test GoodWe Modbus RTU."""
+
+    try:
+        probe_result = probe_goodwe_modbus(
+            command_payload
+        )
+
+        if not isinstance(probe_result, dict):
+            raise RuntimeError(
+                "GoodWe probe vratila neplatny format."
+            )
+
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": "goodwe_probe",
+                "phase": "probe_failed",
+                "read_only": True,
+                "error_type": type(exc).__name__,
+            },
+            error_message=str(exc),
+        )
+
+        logging.exception(
+            "GoodWe Modbus probe pro prikaz %s selhala.",
+            command_id,
+        )
+        return
+
+    communication_detected = bool(
+        probe_result.get(
+            "communication_detected"
+        )
+    )
+
+    probe_result["worker"] = "command_worker"
+
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status=(
+            "succeeded"
+            if communication_detected
+            else "failed"
+        ),
+        result=probe_result,
+        error_message=(
+            None
+            if communication_detected
+            else (
+                "Menic GoodWe neodpovedel na povolene "
+                "cteci Modbus RTU dotazy."
+            )
+        ),
+    )
+
+    if communication_detected:
+        logging.info(
+            "GoodWe Modbus komunikace byla potvrzena. "
+            "Prikaz: %s, adresa menice: %s, faze: %s.",
+            command_id,
+            probe_result.get("matched_device_id"),
+            probe_result.get("phase"),
+        )
+    else:
+        logging.warning(
+            "GoodWe Modbus komunikace nebyla potvrzena. "
+            "Prikaz: %s.",
+            command_id,
+        )
+
 def execute_command(
     *,
     identity: dict[str, Any],
@@ -521,6 +604,14 @@ def execute_command(
 
     if command_type == "zigbee_permit_join":
         execute_zigbee_permit_join(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "photovoltaic_modbus_probe":
+        execute_photovoltaic_modbus_probe(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
