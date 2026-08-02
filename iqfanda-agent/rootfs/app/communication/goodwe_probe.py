@@ -37,6 +37,30 @@ PROBE_BLOCKS = (
 )
 
 
+ET_SNAPSHOT_BLOCKS = (
+    {
+        "name": "protocol_version",
+        "address": 35000,
+        "count": 1,
+    },
+    {
+        "name": "serial_number",
+        "address": 35003,
+        "count": 8,
+    },
+    {
+        "name": "device_type",
+        "address": 35011,
+        "count": 5,
+    },
+    {
+        "name": "operating_data",
+        "address": 35100,
+        "count": 11,
+    },
+)
+
+
 def _required_text(
     payload: dict[str, Any],
     field_name: str,
@@ -146,6 +170,247 @@ def _find_communicator(
         )
 
     return communicator, preferred_path
+
+
+def _decode_ascii_registers(
+    registers: list[int],
+) -> str:
+    """Prevede dvojice bajtu registru na bezpecny ASCII text."""
+
+    raw = bytearray()
+
+    for register in registers:
+        value = int(register) & 0xFFFF
+        raw.append((value >> 8) & 0xFF)
+        raw.append(value & 0xFF)
+
+    return (
+        bytes(raw)
+        .decode("ascii", errors="ignore")
+        .replace("\x00", "")
+        .strip()
+    )
+
+
+def _decode_u32(
+    registers: list[int],
+    index: int,
+) -> int:
+    """Slozi dve po sobe jdouci 16bitova slova."""
+
+    high_word = int(registers[index]) & 0xFFFF
+    low_word = int(registers[index + 1]) & 0xFFFF
+
+    return (high_word << 16) | low_word
+
+
+def _read_et_snapshot(
+    *,
+    client: ModbusSerialClient,
+    device_id: int,
+) -> dict[str, Any]:
+    """
+    Nacte omezeny diagnosticky snimek GoodWe ET.
+
+    Pouziva vyhradne funkci 03H a pevne read-only registry.
+    """
+
+    snapshot: dict[str, Any] = {
+        "read_only": True,
+        "device_id": device_id,
+        "complete": False,
+        "blocks": [],
+        "identification": {},
+        "operating_data": {},
+    }
+
+    for block in ET_SNAPSHOT_BLOCKS:
+        block_result: dict[str, Any] = {
+            "name": block["name"],
+            "address": block["address"],
+            "count": block["count"],
+        }
+
+        try:
+            response = client.read_holding_registers(
+                address=block["address"],
+                count=block["count"],
+                device_id=device_id,
+            )
+        except Exception as exc:
+            block_result.update({
+                "outcome": "client_exception",
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            })
+            snapshot["blocks"].append(block_result)
+            continue
+
+        if response is None:
+            block_result["outcome"] = "no_response"
+            snapshot["blocks"].append(block_result)
+            continue
+
+        response_type = type(response).__name__
+
+        if response.isError():
+            block_result.update({
+                "outcome": "modbus_error",
+                "response_type": response_type,
+            })
+
+            exception_code = getattr(
+                response,
+                "exception_code",
+                None,
+            )
+
+            if exception_code is not None:
+                block_result["exception_code"] = int(
+                    exception_code
+                )
+
+            snapshot["blocks"].append(block_result)
+            continue
+
+        registers = [
+            int(value)
+            for value in getattr(
+                response,
+                "registers",
+                [],
+            )
+        ]
+
+        if len(registers) != block["count"]:
+            block_result.update({
+                "outcome": "invalid_register_count",
+                "response_type": response_type,
+                "registers": registers,
+            })
+            snapshot["blocks"].append(block_result)
+            continue
+
+        block_result.update({
+            "outcome": "register_response",
+            "response_type": response_type,
+            "registers": registers,
+        })
+        snapshot["blocks"].append(block_result)
+
+    successful_blocks = {
+        block["name"]: block["registers"]
+        for block in snapshot["blocks"]
+        if block.get("outcome") == "register_response"
+    }
+
+    protocol_registers = successful_blocks.get(
+        "protocol_version"
+    )
+
+    if protocol_registers:
+        snapshot["identification"][
+            "protocol_version_raw"
+        ] = protocol_registers[0]
+
+    serial_registers = successful_blocks.get(
+        "serial_number"
+    )
+
+    if serial_registers:
+        snapshot["identification"]["serial_number"] = (
+            _decode_ascii_registers(serial_registers)
+        )
+
+    type_registers = successful_blocks.get(
+        "device_type"
+    )
+
+    if type_registers:
+        snapshot["identification"]["device_type"] = (
+            _decode_ascii_registers(type_registers)
+        )
+
+    operating_registers = successful_blocks.get(
+        "operating_data"
+    )
+
+    if (
+        isinstance(operating_registers, list)
+        and len(operating_registers) == 11
+    ):
+        snapshot["operating_data"] = {
+            "register_address": 35100,
+            "raw_registers": operating_registers,
+            "rtc": {
+                "year": (
+                    2000
+                    + (
+                        operating_registers[0]
+                        >> 8
+                    )
+                ),
+                "month": (
+                    operating_registers[0]
+                    & 0xFF
+                ),
+                "day": (
+                    operating_registers[1]
+                    >> 8
+                ),
+                "hour": (
+                    operating_registers[1]
+                    & 0xFF
+                ),
+                "minute": (
+                    operating_registers[2]
+                    >> 8
+                ),
+                "second": (
+                    operating_registers[2]
+                    & 0xFF
+                ),
+            },
+            "pv1": {
+                "voltage_raw": operating_registers[3],
+                "voltage_v": round(
+                    operating_registers[3] / 10,
+                    1,
+                ),
+                "current_raw": operating_registers[4],
+                "current_a": round(
+                    operating_registers[4] / 10,
+                    1,
+                ),
+                "power_raw_u32": _decode_u32(
+                    operating_registers,
+                    5,
+                ),
+            },
+            "pv2": {
+                "voltage_raw": operating_registers[7],
+                "voltage_v": round(
+                    operating_registers[7] / 10,
+                    1,
+                ),
+                "current_raw": operating_registers[8],
+                "current_a": round(
+                    operating_registers[8] / 10,
+                    1,
+                ),
+                "power_raw_u32": _decode_u32(
+                    operating_registers,
+                    9,
+                ),
+            },
+        }
+
+    snapshot["complete"] = (
+        len(successful_blocks)
+        == len(ET_SNAPSHOT_BLOCKS)
+    )
+
+    return snapshot
 
 
 def probe_goodwe_modbus(
@@ -313,6 +578,15 @@ def probe_goodwe_modbus(
                         "matched_block": block["name"],
                         "raw_registers": registers,
                     })
+
+                    if block["name"] == "et_operating_data":
+                        result["et_snapshot"] = (
+                            _read_et_snapshot(
+                                client=client,
+                                device_id=device_id,
+                            )
+                        )
+
                     return result
 
                 exception_code = getattr(
