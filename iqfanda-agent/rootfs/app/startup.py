@@ -13,6 +13,7 @@ from host.iqf_host_api import main as host_api_main
 from installer.access_point_service import request_access_point
 from installer.installer_api import spustit_api
 from provisioning import DEVICE_CONFIG_PATH
+from telemetrie_modulu import main as telemetrie_modulu_main
 from usb_inventory import main as usb_inventory_main
 
 
@@ -72,6 +73,12 @@ def spustit_communication_manager() -> None:
     """Spusti spravu komunikacniho centra."""
 
     communication_manager_main()
+
+
+def spustit_telemetrii_modulu() -> None:
+    """Spusti periodickou telemetrii modulu."""
+
+    telemetrie_modulu_main()
 
 
 def cekat_na_registraci_zarizeni(
@@ -233,11 +240,17 @@ def main() -> None:
         nazev="communication-manager",
     )
 
+    module_telemetry_thread = vytvorit_vlakno(
+        cil=spustit_telemetrii_modulu,
+        nazev="module-telemetry",
+    )
+
     device_config_thread.start()
     heartbeat_thread.start()
     command_worker_thread.start()
     usb_inventory_thread.start()
     communication_manager_thread.start()
+    module_telemetry_thread.start()
 
     kontrolovat_sluzby(
         {
@@ -249,6 +262,7 @@ def main() -> None:
             "command-worker": command_worker_thread,
             "usb-inventory": usb_inventory_thread,
             "communication-manager": communication_manager_thread,
+            "module-telemetry": module_telemetry_thread,
         }
     )
 

@@ -532,6 +532,125 @@ class IQFCloudClient:
             headers=headers,
         )
 
+    def submit_module_telemetry(
+        self,
+        *,
+        device_uuid: str,
+        device_token: str,
+        module_key: str,
+        source: str,
+        captured_at: str,
+        entities: list[dict[str, Any]],
+        snapshot_complete: bool,
+    ) -> dict[str, Any]:
+        """Odesle provozni entity instalacniho modulu."""
+        normalized_uuid = str(
+            device_uuid or ""
+        ).strip()
+
+        normalized_module_key = str(
+            module_key or ""
+        ).strip()
+
+        normalized_source = str(
+            source or ""
+        ).strip()
+
+        normalized_captured_at = str(
+            captured_at or ""
+        ).strip()
+
+        if not normalized_uuid:
+            return {
+                "ok": False,
+                "status_code": None,
+                "data": None,
+                "error": "Device UUID nesmi byt prazdne.",
+            }
+
+        if not normalized_module_key:
+            return {
+                "ok": False,
+                "status_code": None,
+                "data": None,
+                "error": "Klic modulu nesmi byt prazdny.",
+            }
+
+        if not normalized_source:
+            return {
+                "ok": False,
+                "status_code": None,
+                "data": None,
+                "error": "Zdroj telemetrie nesmi byt prazdny.",
+            }
+
+        if not normalized_captured_at:
+            return {
+                "ok": False,
+                "status_code": None,
+                "data": None,
+                "error": "Cas telemetrie nesmi byt prazdny.",
+            }
+
+        if (
+            not isinstance(entities, list)
+            or not 1 <= len(entities) <= 200
+            or not all(
+                isinstance(entity, dict)
+                for entity in entities
+            )
+        ):
+            return {
+                "ok": False,
+                "status_code": None,
+                "data": None,
+                "error": (
+                    "Telemetrie musi obsahovat "
+                    "1 az 200 platnych entit."
+                ),
+            }
+
+        if type(snapshot_complete) is not bool:
+            return {
+                "ok": False,
+                "status_code": None,
+                "data": None,
+                "error": (
+                    "Priznak uplnosti snapshotu "
+                    "musi byt boolean."
+                ),
+            }
+
+        try:
+            headers = self._device_authorization_headers(
+                device_token=device_token,
+            )
+        except ValueError as exc:
+            return {
+                "ok": False,
+                "status_code": None,
+                "data": None,
+                "error": str(exc),
+            }
+
+        payload: dict[str, Any] = {
+            "schema_version": 1,
+            "device_uuid": normalized_uuid,
+            "module_key": normalized_module_key,
+            "source": normalized_source,
+            "captured_at": normalized_captured_at,
+            "snapshot_complete": snapshot_complete,
+            "entities": entities,
+        }
+
+        return self._request_json(
+            method="POST",
+            path="/api/v1/device/module-telemetry",
+            payload=payload,
+            headers=headers,
+        )
+
+
     def health(self) -> dict[str, Any]:
         """
         Ověří dostupnost veřejného health endpointu cloudu.

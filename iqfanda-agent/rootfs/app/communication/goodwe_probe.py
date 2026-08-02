@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,9 @@ ALLOWED_DEVICE_IDS = (
     247,
     1,
 )
+
+GOODWE_MODBUS_LOCK = threading.Lock()
+
 
 PROBE_BLOCKS = (
     {
@@ -932,7 +936,7 @@ def _read_et_snapshot(
     return snapshot
 
 
-def probe_goodwe_modbus(
+def _probe_goodwe_modbus_unlocked(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     """
@@ -1160,3 +1164,158 @@ def probe_goodwe_modbus(
 
     finally:
         client.close()
+
+
+def read_goodwe_et_snapshot(
+    runtime_configuration: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Nacte provozni GoodWe ET snapshot podle cloudove konfigurace.
+
+    Pouziva pouze pevne read-only registry a overenou Modbus adresu.
+    """
+    if not isinstance(runtime_configuration, dict):
+        raise ValueError(
+            "Runtime konfigurace GoodWe nema platny format."
+        )
+
+    module_key = str(
+        runtime_configuration.get("module_key") or ""
+    ).strip().lower()
+
+    manufacturer = str(
+        runtime_configuration.get("manufacturer") or ""
+    ).strip().lower()
+
+    inverter_model = str(
+        runtime_configuration.get("model") or ""
+    ).strip()
+
+    communication_type = str(
+        runtime_configuration.get(
+            "communication_type"
+        )
+        or ""
+    ).strip().lower()
+
+    communicator_id = str(
+        runtime_configuration.get("communicator_id") or ""
+    ).strip()
+
+    device_id = runtime_configuration.get(
+        "modbus_device_id"
+    )
+
+    if module_key != "photovoltaic":
+        raise ValueError(
+            "Runtime reader podporuje pouze modul photovoltaic."
+        )
+
+    if manufacturer != "goodwe":
+        raise ValueError(
+            "Runtime reader podporuje pouze GoodWe."
+        )
+
+    if not inverter_model:
+        raise ValueError(
+            "Runtime konfigurace neobsahuje model menice."
+        )
+
+    if communication_type != "rs485":
+        raise ValueError(
+            "GoodWe runtime vyzaduje komunikaci RS485."
+        )
+
+    if not communicator_id:
+        raise ValueError(
+            "Runtime konfigurace neobsahuje communicator_id."
+        )
+
+    if runtime_configuration.get(
+        "telemetry_enabled"
+    ) is not True:
+        raise ValueError(
+            "Telemetrie modulu neni povolena."
+        )
+
+    if runtime_configuration.get("read_only") is not True:
+        raise ValueError(
+            "Runtime konfigurace neni pouze cteci."
+        )
+
+    if (
+        type(device_id) is not int
+        or device_id not in ALLOWED_DEVICE_IDS
+    ):
+        raise ValueError(
+            "Runtime konfigurace obsahuje nepovolenou "
+            "Modbus adresu."
+        )
+
+    with GOODWE_MODBUS_LOCK:
+        _communicator, serial_path = (
+            _find_communicator(
+                communicator_id
+            )
+        )
+
+        client = ModbusSerialClient(
+            port=serial_path,
+            baudrate=9600,
+            bytesize=8,
+            parity="N",
+            stopbits=1,
+            timeout=1.0,
+            retries=0,
+        )
+
+        try:
+            if not client.connect():
+                raise RuntimeError(
+                    "Seriovy port GoodWe nelze otevrit."
+                )
+
+            snapshot = _read_et_snapshot(
+                client=client,
+                device_id=device_id,
+            )
+        finally:
+            client.close()
+
+    identification = snapshot.get(
+        "identification"
+    )
+
+    if not isinstance(identification, dict):
+        raise RuntimeError(
+            "GoodWe snapshot neobsahuje identifikaci."
+        )
+
+    detected_model = str(
+        identification.get("device_type") or ""
+    ).strip()
+
+    if (
+        detected_model
+        and detected_model != inverter_model
+    ):
+        raise RuntimeError(
+            "Detekovany model GoodWe neodpovida "
+            "runtime konfiguraci."
+        )
+
+    return snapshot
+
+
+def probe_goodwe_modbus(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Provede instalacni GoodWe probe pod spolecnym zamkem.
+
+    Zachovava puvodni verejny kontrakt command workeru.
+    """
+    with GOODWE_MODBUS_LOCK:
+        return _probe_goodwe_modbus_unlocked(
+            payload
+        )
