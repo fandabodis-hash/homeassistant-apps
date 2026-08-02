@@ -140,7 +140,7 @@ DEFINICE_ENTIT = (
         36020,
         {
             "device_class": "power",
-            "sign_convention": "goodwe_raw",
+            "sign_convention": "negative_import_positive_export",
         },
     ),
     (
@@ -153,7 +153,7 @@ DEFINICE_ENTIT = (
         36021,
         {
             "device_class": "power",
-            "sign_convention": "goodwe_raw",
+            "sign_convention": "negative_import_positive_export",
         },
     ),
     (
@@ -166,7 +166,7 @@ DEFINICE_ENTIT = (
         36023,
         {
             "device_class": "power",
-            "sign_convention": "goodwe_raw",
+            "sign_convention": "negative_import_positive_export",
         },
     ),
     (
@@ -179,7 +179,7 @@ DEFINICE_ENTIT = (
         36025,
         {
             "device_class": "power",
-            "sign_convention": "goodwe_raw_pending_verification",
+            "sign_convention": "negative_import_positive_export",
         },
     ),
     (
@@ -325,7 +325,7 @@ DEFINICE_ENTIT = (
         35182,
         {
             "device_class": "power",
-            "sign_convention": "goodwe_raw_pending_verification",
+            "sign_convention": "negative_charging_positive_discharging",
         },
     ),
     (

@@ -474,10 +474,7 @@ def _read_et_snapshot(
             )
 
             if isinstance(power_raw, int):
-                pv_data["power_w"] = round(
-                    power_raw / 10,
-                    1,
-                )
+                pv_data["power_w"] = power_raw
 
     inverter_registers = successful_blocks.get(
         "inverter_data"
