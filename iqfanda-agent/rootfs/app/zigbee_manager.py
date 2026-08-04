@@ -1044,6 +1044,13 @@ def find_existing_temperature_devices(
         ):
             continue
 
+        humidity_entity = (
+            find_entity_by_device_class(
+                entities,
+                "humidity",
+            )
+        )
+
         battery_entity = (
             find_entity_by_device_class(
                 entities,
@@ -1058,6 +1065,7 @@ def find_existing_temperature_devices(
                 "temperature_entity": (
                     temperature_entity
                 ),
+                "humidity_entity": humidity_entity,
                 "battery_entity": battery_entity,
             }
         )
@@ -1069,6 +1077,7 @@ def wait_for_new_device(
     *,
     entity_ids_before: set[str],
     timeout_seconds: int,
+    excluded_device_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     """
     Ceka na novou entitu a vrati kompletni inventar
@@ -1086,6 +1095,14 @@ def wait_for_new_device(
         raise ValueError(
             "Cas cekani musi byt vetsi nez nula."
         )
+
+    normalized_excluded_device_ids = {
+        str(device_id or "").strip()
+        for device_id in (
+            excluded_device_ids or set()
+        )
+        if str(device_id or "").strip()
+    }
 
     deadline = time.monotonic() + timeout
 
@@ -1106,9 +1123,17 @@ def wait_for_new_device(
                 entity_id
             )
 
-            if device_id:
-                detected_device_id = device_id
-                break
+            if not device_id:
+                continue
+
+            if (
+                device_id
+                in normalized_excluded_device_ids
+            ):
+                continue
+
+            detected_device_id = device_id
+            break
 
         if detected_device_id:
             # ZHA muze entity pridavat postupne.
@@ -1129,6 +1154,13 @@ def wait_for_new_device(
                 )
             )
 
+            humidity_entity = (
+                find_entity_by_device_class(
+                    entities,
+                    "humidity",
+                )
+            )
+
             battery_entity = (
                 find_entity_by_device_class(
                     entities,
@@ -1142,6 +1174,7 @@ def wait_for_new_device(
                 "temperature_entity": (
                     temperature_entity
                 ),
+                "humidity_entity": humidity_entity,
                 "battery_entity": battery_entity,
             }
 

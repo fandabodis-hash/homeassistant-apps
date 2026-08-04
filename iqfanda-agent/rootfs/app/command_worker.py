@@ -205,9 +205,36 @@ def execute_zigbee_permit_join(
         or ""
     ).strip()
 
+    replacement_mode = bool(
+        command_payload.get(
+            "replacement_mode",
+            False,
+        )
+    )
+
+    current_device_id = str(
+        command_payload.get(
+            "current_device_id",
+            "",
+        )
+        or ""
+    ).strip()
+
+    if replacement_mode and not current_device_id:
+        raise ValueError(
+            "V režimu výměny musí být předáno "
+            "current_device_id původního zařízení."
+        )
+
     try:
-        existing_devices = (
+        all_existing_devices = (
             find_existing_temperature_devices()
+        )
+
+        existing_devices = (
+            []
+            if replacement_mode
+            else all_existing_devices
         )
 
         if len(existing_devices) > 1:
@@ -354,6 +381,11 @@ def execute_zigbee_permit_join(
             discovery_result = wait_for_new_device(
                 entity_ids_before=entity_ids_before,
                 timeout_seconds=duration_seconds,
+                excluded_device_ids=(
+                    {current_device_id}
+                    if current_device_id
+                    else set()
+                ),
             )
 
         device = discovery_result.get(
@@ -366,6 +398,10 @@ def execute_zigbee_permit_join(
 
         temperature_entity = discovery_result.get(
             "temperature_entity"
+        )
+
+        humidity_entity = discovery_result.get(
+            "humidity_entity"
         )
 
         battery_entity = discovery_result.get(
@@ -401,6 +437,11 @@ def execute_zigbee_permit_join(
             "entities": entities,
             "entity_count": len(entities),
             "temperature_entity": temperature_entity,
+            "humidity_entity": (
+                humidity_entity
+                if isinstance(humidity_entity, dict)
+                else None
+            ),
             "battery_entity": (
                 battery_entity
                 if isinstance(battery_entity, dict)
@@ -411,6 +452,16 @@ def execute_zigbee_permit_join(
                     temperature_entity.get(
                         "entity_id"
                     )
+                ),
+                "building_indoor_humidity": (
+                    humidity_entity.get(
+                        "entity_id"
+                    )
+                    if isinstance(
+                        humidity_entity,
+                        dict,
+                    )
+                    else None
                 ),
                 "device_battery": (
                     battery_entity.get(
@@ -423,6 +474,12 @@ def execute_zigbee_permit_join(
                     else None
                 ),
             },
+            "replacement_mode": replacement_mode,
+            "replaced_device_id": (
+                current_device_id
+                if replacement_mode
+                else None
+            ),
             "discovery_source": discovery_source,
             "service": permit_result.get("service"),
             "duration_seconds": duration_seconds,
@@ -440,11 +497,19 @@ def execute_zigbee_permit_join(
             (
                 "Nove Zigbee zarizeni bylo overeno. "
                 "Device ID: %s, teplota: %s, "
-                "baterie: %s, pocet entit: %s, "
-                "prikaz: %s"
+                "vlhkost: %s, baterie: %s, "
+                "pocet entit: %s, prikaz: %s"
             ),
             device.get("device_id"),
             temperature_entity.get("entity_id"),
+            (
+                humidity_entity.get("entity_id")
+                if isinstance(
+                    humidity_entity,
+                    dict,
+                )
+                else "neni dostupna"
+            ),
             (
                 battery_entity.get("entity_id")
                 if isinstance(
