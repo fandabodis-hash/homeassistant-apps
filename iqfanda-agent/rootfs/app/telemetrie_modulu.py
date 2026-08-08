@@ -18,6 +18,7 @@ from device_config import (
     load_device_identity,
 )
 from host.cloud_client import cloud_client
+from zigbee_manager import get_entity_state
 
 
 DEFAULT_TELEMETRY_INTERVAL_SECONDS = 60
@@ -90,6 +91,511 @@ def najdi_goodwe_fve_runtime(
             return runtime_configuration
 
     return None
+
+
+
+def najdi_pv_surplus_runtime(
+    cloud_config: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Najde povolenou runtime konfiguraci rizeni prebytku."""
+    runtime_configurations = cloud_config.get(
+        "module_runtime_configurations"
+    )
+
+    if not isinstance(runtime_configurations, list):
+        return None
+
+    for runtime_configuration in runtime_configurations:
+        if not isinstance(runtime_configuration, dict):
+            continue
+
+        module_key = str(
+            runtime_configuration.get("module_key") or ""
+        ).strip().lower()
+
+        if (
+            module_key == "pv_surplus_control"
+            and runtime_configuration.get(
+                "telemetry_enabled"
+            )
+            is True
+            and runtime_configuration.get("read_only") is True
+        ):
+            return runtime_configuration
+
+    return None
+
+
+def vytvorit_klic_cile(
+    target: dict[str, Any],
+    index: int,
+) -> str:
+    """Vrati stabilni a unikatni prefix entity ciloveho prvku."""
+    target_id = str(
+        target.get("id") or ""
+    ).strip().lower()
+
+    normalized_id = "".join(
+        character
+        for character in target_id
+        if character.isalnum()
+    )
+
+    if normalized_id:
+        return f"cil.{normalized_id}"
+
+    return f"cil.index{index}"
+
+
+def ziskej_kvalitu_ha_stavu(
+    state: dict[str, Any] | None,
+) -> str:
+    """Prevede stav HA na kvalitu module telemetry."""
+    if not isinstance(state, dict):
+        return "error"
+
+    raw_state = str(
+        state.get("state") or ""
+    ).strip().lower()
+
+    if raw_state == "unavailable":
+        return "unavailable"
+
+    if raw_state == "unknown":
+        return "unknown"
+
+    return "good"
+
+
+def normalizovat_ha_hodnotu(
+    entity_id: str,
+    state: dict[str, Any] | None,
+) -> tuple[
+    bool | int | float | str | None,
+    str,
+    str | None,
+]:
+    """Prevede HA stav na hodnotu podporovanou module telemetry."""
+    normalized_entity_id = str(
+        entity_id or ""
+    ).strip()
+
+    is_switch = normalized_entity_id.startswith(
+        "switch."
+    )
+
+    if not isinstance(state, dict):
+        return (
+            None,
+            "boolean" if is_switch else "number",
+            None,
+        )
+
+    raw_state = str(
+        state.get("state") or ""
+    ).strip()
+
+    attributes = state.get("attributes")
+
+    if not isinstance(attributes, dict):
+        attributes = {}
+
+    unit = attributes.get("unit_of_measurement")
+
+    if unit is not None:
+        unit = str(unit).strip() or None
+
+    lowered = raw_state.lower()
+
+    if lowered in {"unknown", "unavailable"}:
+        return (
+            None,
+            "boolean" if is_switch else "number",
+            unit,
+        )
+
+    if is_switch:
+        if lowered == "on":
+            return True, "boolean", unit
+
+        if lowered == "off":
+            return False, "boolean", unit
+
+        return raw_state, "text", unit
+
+    try:
+        numeric_value = float(raw_state)
+    except (TypeError, ValueError):
+        return raw_state, "text", unit
+
+    return numeric_value, "number", unit
+
+
+def nacist_ha_stav(
+    entity_id: str,
+) -> dict[str, Any] | None:
+    """Bezpecne nacte jednu HA entitu."""
+    try:
+        state = get_entity_state(entity_id)
+    except Exception as exc:
+        logging.warning(
+            "Nacteni HA entity %s selhalo: %s",
+            entity_id,
+            exc,
+        )
+        return None
+
+    if not isinstance(state, dict):
+        logging.warning(
+            "HA entita %s vratila neplatny stav.",
+            entity_id,
+        )
+        return None
+
+    return state
+
+
+def vytvorit_pv_surplus_entity(
+    runtime_configuration: dict[str, Any],
+) -> tuple[list[dict[str, Any]], bool]:
+    """Sestavi provozni entity overenych cilu prebytku."""
+    configuration = runtime_configuration.get(
+        "configuration"
+    )
+
+    if not isinstance(configuration, dict):
+        return [], False
+
+    targets = configuration.get("targets")
+
+    if not isinstance(targets, list):
+        return [], False
+
+    entities: list[dict[str, Any]] = []
+    snapshot_complete = True
+
+    for index, target in enumerate(targets):
+        if not isinstance(target, dict):
+            continue
+
+        if target.get("enabled") is not True:
+            continue
+
+        if (
+            target.get("configuration_status")
+            != "verified"
+        ):
+            continue
+
+        target_name = str(
+            target.get("name") or "Cil"
+        ).strip()
+
+        target_id = str(
+            target.get("id") or ""
+        ).strip()
+
+        prefix = vytvorit_klic_cile(
+            target,
+            index,
+        )
+
+        sensors = target.get("sensors")
+
+        if isinstance(sensors, list):
+            for sensor in sensors:
+                if not isinstance(sensor, dict):
+                    continue
+
+                if sensor.get("status") != "verified":
+                    continue
+
+                role = str(
+                    sensor.get("role") or ""
+                ).strip().lower()
+
+                reference = str(
+                    sensor.get("reference") or ""
+                ).strip()
+
+                if (
+                    role != "water_temperature"
+                    or not reference
+                ):
+                    continue
+
+                state = nacist_ha_stav(reference)
+
+                if state is None:
+                    snapshot_complete = False
+
+                value, value_type, unit = (
+                    normalizovat_ha_hodnotu(
+                        reference,
+                        state,
+                    )
+                )
+
+                entities.append(
+                    {
+                        "entity_key":
+                            f"{prefix}.teplota",
+                        "category":
+                            "pv_surplus_target",
+                        "name":
+                            f"{target_name} teplota",
+                        "value":
+                            value,
+                        "unit":
+                            unit,
+                        "value_type":
+                            value_type,
+                        "quality":
+                            ziskej_kvalitu_ha_stavu(
+                                state
+                            ),
+                        "source_address":
+                            None,
+                        "attributes": {
+                            "target_id":
+                                target_id,
+                            "target_name":
+                                target_name,
+                            "ha_entity_id":
+                                reference,
+                            "role":
+                                "water_temperature",
+                        },
+                    }
+                )
+
+        output = target.get("output")
+
+        if not isinstance(output, dict):
+            continue
+
+        if output.get("status") != "verified":
+            continue
+
+        output_reference = str(
+            output.get("reference") or ""
+        ).strip()
+
+        if output_reference:
+            state = nacist_ha_stav(
+                output_reference
+            )
+
+            if state is None:
+                snapshot_complete = False
+
+            value, value_type, unit = (
+                normalizovat_ha_hodnotu(
+                    output_reference,
+                    state,
+                )
+            )
+
+            entities.append(
+                {
+                    "entity_key":
+                        f"{prefix}.stav",
+                    "category":
+                        "pv_surplus_target",
+                    "name":
+                        f"{target_name} stav",
+                    "value":
+                        value,
+                    "unit":
+                        unit,
+                    "value_type":
+                        value_type,
+                    "quality":
+                        ziskej_kvalitu_ha_stavu(
+                            state
+                        ),
+                    "source_address":
+                        None,
+                    "attributes": {
+                        "target_id":
+                            target_id,
+                        "target_name":
+                            target_name,
+                        "ha_entity_id":
+                            output_reference,
+                    },
+                }
+            )
+
+        measurements = output.get(
+            "measurements"
+        )
+
+        if not isinstance(measurements, dict):
+            continue
+
+        measurement_definitions = (
+            (
+                "power_entity_id",
+                "vykon",
+                "Vykon",
+            ),
+            (
+                "energy_entity_id",
+                "energie_celkem",
+                "Energie celkem",
+            ),
+            (
+                "current_entity_id",
+                "proud",
+                "Proud",
+            ),
+            (
+                "voltage_entity_id",
+                "napeti",
+                "Napeti",
+            ),
+        )
+
+        for (
+            configuration_key,
+            entity_suffix,
+            display_name,
+        ) in measurement_definitions:
+            reference = str(
+                measurements.get(
+                    configuration_key
+                )
+                or ""
+            ).strip()
+
+            if not reference:
+                continue
+
+            state = nacist_ha_stav(reference)
+
+            if state is None:
+                snapshot_complete = False
+
+            value, value_type, unit = (
+                normalizovat_ha_hodnotu(
+                    reference,
+                    state,
+                )
+            )
+
+            entities.append(
+                {
+                    "entity_key":
+                        f"{prefix}.{entity_suffix}",
+                    "category":
+                        "pv_surplus_target",
+                    "name":
+                        f"{target_name} {display_name}",
+                    "value":
+                        value,
+                    "unit":
+                        unit,
+                    "value_type":
+                        value_type,
+                    "quality":
+                        ziskej_kvalitu_ha_stavu(
+                            state
+                        ),
+                    "source_address":
+                        None,
+                    "attributes": {
+                        "target_id":
+                            target_id,
+                        "target_name":
+                            target_name,
+                        "ha_entity_id":
+                            reference,
+                    },
+                }
+            )
+
+    keys = [
+        entity["entity_key"]
+        for entity in entities
+    ]
+
+    if len(keys) != len(set(keys)):
+        raise RuntimeError(
+            "PV surplus mapper vytvoril "
+            "duplicitni entity_key."
+        )
+
+    return entities, snapshot_complete
+
+
+def odeslat_pv_surplus_telemetrii(
+    *,
+    identity: dict[str, Any],
+    cloud_config: dict[str, Any],
+) -> None:
+    """Odesle jeden samostatny snapshot rizeni prebytku."""
+    runtime_configuration = najdi_pv_surplus_runtime(
+        cloud_config
+    )
+
+    if runtime_configuration is None:
+        return
+
+    entities, snapshot_complete = (
+        vytvorit_pv_surplus_entity(
+            runtime_configuration
+        )
+    )
+
+    if not entities:
+        logging.info(
+            "PV surplus nema zadne aktivni "
+            "overene telemetricke entity."
+        )
+        return
+
+    response = cloud_client.submit_module_telemetry(
+        device_uuid=str(
+            identity["device_uuid"]
+        ),
+        device_token=str(
+            identity["device_token"]
+        ),
+        module_key="pv_surplus_control",
+        source="home_assistant",
+        captured_at=vytvorit_cas_snapshotu(),
+        entities=entities,
+        snapshot_complete=snapshot_complete,
+    )
+
+    if (
+        not isinstance(response, dict)
+        or not response.get("ok")
+    ):
+        status_code = (
+            response.get("status_code")
+            if isinstance(response, dict)
+            else None
+        )
+
+        error = (
+            response.get("error")
+            if isinstance(response, dict)
+            else "Neplatna odpoved cloudoveho klienta."
+        )
+
+        raise RuntimeError(
+            "Odeslani PV surplus telemetrie selhalo. "
+            f"HTTP: {status_code}, chyba: {error}"
+        )
+
+    logging.info(
+        "PV surplus telemetrie odeslana. "
+        "Pocet entit: %s, uplny snapshot: %s.",
+        len(entities),
+        snapshot_complete,
+    )
 
 
 def vytvorit_cas_snapshotu() -> str:
@@ -198,6 +704,19 @@ def odeslat_telemetrii_jednou() -> int:
         snapshot_complete,
         next_interval,
     )
+
+
+    try:
+        odeslat_pv_surplus_telemetrii(
+            identity=identity,
+            cloud_config=cloud_config,
+        )
+    except Exception as exc:
+        logging.warning(
+            "PV surplus telemetrie selhala, "
+            "GoodWe telemetrie zustava aktivni: %s",
+            exc,
+        )
 
     return next_interval
 
