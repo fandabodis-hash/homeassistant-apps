@@ -138,6 +138,14 @@ def vyhodnotit_battery_soc_source(
         konfigurace.get("require_no_grid_import") is True
     )
 
+    maximum_grid_import = _cislo(
+        konfigurace.get(
+            "maximum_grid_import_w",
+            0,
+        ),
+        "maximum_grid_import_w",
+    )
+
     if not 0 <= disable_soc <= enable_soc <= 100:
         raise ValueError(
             "SOC hystereze nema platne meze."
@@ -148,8 +156,13 @@ def vyhodnotit_battery_soc_source(
             "minimum_pv_power_w nesmi byt zaporne."
         )
 
+    if maximum_grid_import < 0:
+        raise ValueError(
+            "maximum_grid_import_w nesmi byt zaporne."
+        )
+
     pv_vykon = pv1 + pv2
-    odber_ze_site = sit < 0
+    odber_ze_site = sit < -maximum_grid_import
 
     blokace: list[str] = []
 
