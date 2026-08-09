@@ -11,6 +11,7 @@ from communication.fve_entity_mapper import (
     vytvorit_goodwe_fve_entity,
 )
 from communication.goodwe_probe import (
+    read_goodwe_control_snapshot,
     read_goodwe_et_snapshot,
 )
 from device_config import (
@@ -20,11 +21,21 @@ from device_config import (
 from host.cloud_client import cloud_client
 from zigbee_manager import get_entity_state
 
+from pv_surplus_decision import (
+    STAV_OFF,
+    vyhodnotit_cil_prebytku,
+    vyhodnotit_stav_prebytku,
+    vyhodnotit_teplotu_cile,
+)
+
 
 DEFAULT_TELEMETRY_INTERVAL_SECONDS = 60
 MIN_TELEMETRY_INTERVAL_SECONDS = 5
 MAX_TELEMETRY_INTERVAL_SECONDS = 3600
 ERROR_RETRY_INTERVAL_SECONDS = 15
+
+PV_SURPLUS_CONTROL_INTERVAL_SECONDS = 5
+PV_SURPLUS_CONTROL_ERROR_RETRY_SECONDS = 5
 
 
 def ziskej_interval_telemetrie(
@@ -598,6 +609,353 @@ def odeslat_pv_surplus_telemetrii(
     )
 
 
+_pv_surplus_dry_run_state: dict[str, Any] = {
+    "state": STAV_OFF,
+    "confirming_since": None,
+}
+
+
+def vyhodnotit_pv_surplus_dry_run(
+    *,
+    cloud_config: dict[str, Any],
+    goodwe_entities: list[dict[str, Any]],
+    now: float,
+) -> dict[str, Any] | None:
+    """
+    Vyhodnoti zivy PV surplus runtime pouze v dry-run rezimu.
+
+    Funkce nikdy fyzicky neovlada vystup.
+    """
+    runtime_configuration = najdi_pv_surplus_runtime(
+        cloud_config
+    )
+
+    if runtime_configuration is None:
+        return None
+
+    configuration = runtime_configuration.get(
+        "configuration"
+    )
+
+    if not isinstance(configuration, dict):
+        return None
+
+    surplus_source = configuration.get(
+        "surplus_source"
+    )
+
+    if not isinstance(surplus_source, dict):
+        return None
+
+    if surplus_source.get("type") != "battery_soc":
+        logging.info(
+            "PV surplus dry-run: zdroj %s zatim "
+            "neni podporovan Decision Enginem.",
+            surplus_source.get("type"),
+        )
+        return None
+
+    battery_soc = surplus_source.get(
+        "battery_soc"
+    )
+
+    if not isinstance(battery_soc, dict):
+        return None
+
+    source_configuration = {
+        **battery_soc,
+        "confirmation_seconds":
+            surplus_source.get(
+                "confirmation_seconds",
+                30,
+            ),
+    }
+
+    targets = configuration.get("targets")
+
+    if not isinstance(targets, list):
+        return None
+
+    target = next(
+        (
+            item
+            for item in sorted(
+                (
+                    item
+                    for item in targets
+                    if isinstance(item, dict)
+                    and item.get("enabled") is True
+                    and item.get(
+                        "configuration_status"
+                    )
+                    == "verified"
+                ),
+                key=lambda item: int(
+                    item.get("priority") or 999999
+                ),
+            )
+        ),
+        None,
+    )
+
+    if target is None:
+        return None
+
+    sensors = target.get("sensors")
+
+    if not isinstance(sensors, list):
+        return None
+
+    temperature_sensor = next(
+        (
+            sensor
+            for sensor in sensors
+            if isinstance(sensor, dict)
+            and sensor.get("status") == "verified"
+            and sensor.get("role")
+            == "water_temperature"
+            and str(
+                sensor.get("reference") or ""
+            ).strip()
+        ),
+        None,
+    )
+
+    if temperature_sensor is None:
+        return None
+
+    temperature_reference = str(
+        temperature_sensor["reference"]
+    ).strip()
+
+    temperature_state = nacist_ha_stav(
+        temperature_reference
+    )
+
+    temperature_value, _, _ = (
+        normalizovat_ha_hodnotu(
+            temperature_reference,
+            temperature_state,
+        )
+    )
+
+    output = target.get("output")
+
+    if not isinstance(output, dict):
+        return None
+
+    output_reference = str(
+        output.get("reference") or ""
+    ).strip()
+
+    if not output_reference:
+        return None
+
+    output_state = nacist_ha_stav(
+        output_reference
+    )
+
+    output_value, _, _ = normalizovat_ha_hodnotu(
+        output_reference,
+        output_state,
+    )
+
+    output_active = output_value is True
+
+    previous_state = str(
+        _pv_surplus_dry_run_state.get(
+            "state"
+        )
+        or STAV_OFF
+    )
+
+    confirming_since = (
+        _pv_surplus_dry_run_state.get(
+            "confirming_since"
+        )
+    )
+
+    energy_result = vyhodnotit_stav_prebytku(
+        konfigurace=source_configuration,
+        goodwe_entity=goodwe_entities,
+        predchozi_stav=previous_state,
+        confirming_since=confirming_since,
+        now=now,
+    )
+
+    target_result = vyhodnotit_teplotu_cile(
+        target=target,
+        temperature_c=temperature_value,
+        vystup_aktivni=output_active,
+    )
+
+    combined_result = vyhodnotit_cil_prebytku(
+        surplus_result=energy_result,
+        target_result=target_result,
+    )
+
+    _pv_surplus_dry_run_state["state"] = (
+        energy_result["state"]
+    )
+
+    _pv_surplus_dry_run_state[
+        "confirming_since"
+    ] = energy_result.get(
+        "confirming_since"
+    )
+
+    if combined_result["should_be_on"]:
+        would_action = (
+            "NONE_ALREADY_ON"
+            if output_active
+            else "WOULD_TURN_ON"
+        )
+    else:
+        would_action = (
+            "WOULD_TURN_OFF"
+            if output_active
+            else "NONE_ALREADY_OFF"
+        )
+
+    result = {
+        "target_name":
+            target.get("name") or "Cil",
+        "energy_state":
+            energy_result["state"],
+        "energy_reason":
+            energy_result["reason"],
+        "target_state":
+            target_result["state"],
+        "target_reason":
+            target_result["reason"],
+        "heat_demand":
+            target_result["heat_demand"],
+        "should_be_on":
+            combined_result["should_be_on"],
+        "would_action":
+            would_action,
+        "actual_output_on":
+            output_active,
+        "soc_percent":
+            energy_result.get("soc_percent"),
+        "pv_power_w":
+            energy_result.get("pv_power_w"),
+        "grid_power_w":
+            energy_result.get("grid_power_w"),
+        "temperature_c":
+            target_result.get("temperature_c"),
+    }
+
+    logging.info(
+        "PV SURPLUS DRY-RUN | "
+        "cil=%s | energy=%s/%s | "
+        "target=%s/%s | "
+        "soc=%s %% | pv=%s W | grid=%s W | "
+        "teplota=%s C | actual=%s | "
+        "should_be_on=%s | action=%s",
+        result["target_name"],
+        result["energy_state"],
+        result["energy_reason"],
+        result["target_state"],
+        result["target_reason"],
+        result["soc_percent"],
+        result["pv_power_w"],
+        result["grid_power_w"],
+        result["temperature_c"],
+        result["actual_output_on"],
+        result["should_be_on"],
+        result["would_action"],
+    )
+
+    return result
+
+
+def vyhodnotit_pv_surplus_control_jednou(
+    *,
+    now: float | None = None,
+) -> dict[str, Any] | None:
+    """
+    Provede jeden rychly PV surplus dry-run cyklus.
+
+    Funkce pouze cte GoodWe a Home Assistant.
+    Nikdy fyzicky neovlada zadny vystup.
+    """
+    cloud_config = load_cached_cloud_config()
+
+    if not isinstance(cloud_config, dict):
+        raise RuntimeError(
+            "Cloudova konfigurace zatim neni dostupna."
+        )
+
+    goodwe_runtime = najdi_goodwe_fve_runtime(
+        cloud_config
+    )
+
+    if goodwe_runtime is None:
+        return None
+
+    pv_surplus_runtime = najdi_pv_surplus_runtime(
+        cloud_config
+    )
+
+    if pv_surplus_runtime is None:
+        return None
+
+    control_entities = read_goodwe_control_snapshot(
+        goodwe_runtime
+    )
+
+    if (
+        not isinstance(control_entities, list)
+        or len(control_entities) != 4
+    ):
+        raise RuntimeError(
+            "GoodWe control reader nevratil "
+            "ocekavane ctyri entity."
+        )
+
+    evaluation_time = (
+        time.monotonic()
+        if now is None
+        else float(now)
+    )
+
+    return vyhodnotit_pv_surplus_dry_run(
+        cloud_config=cloud_config,
+        goodwe_entities=control_entities,
+        now=evaluation_time,
+    )
+
+
+def pv_surplus_control_main() -> None:
+    """
+    Spusti rychly PV surplus Decision Engine v dry-run rezimu.
+
+    Worker nikdy fyzicky neovlada vystup.
+    """
+    logging.info(
+        "PV surplus control worker byl spusten "
+        "v DRY-RUN rezimu. Interval: %s s.",
+        PV_SURPLUS_CONTROL_INTERVAL_SECONDS,
+    )
+
+    while True:
+        interval = PV_SURPLUS_CONTROL_INTERVAL_SECONDS
+
+        try:
+            vyhodnotit_pv_surplus_control_jednou()
+        except Exception as exc:
+            logging.warning(
+                "PV surplus control dry-run cyklus selhal: %s",
+                exc,
+            )
+            interval = (
+                PV_SURPLUS_CONTROL_ERROR_RETRY_SECONDS
+            )
+
+        time.sleep(interval)
+
+
 def vytvorit_cas_snapshotu() -> str:
     """Vrati aktualni UTC cas ve formatu ISO 8601."""
     return (
@@ -705,6 +1063,18 @@ def odeslat_telemetrii_jednou() -> int:
         next_interval,
     )
 
+
+    try:
+        vyhodnotit_pv_surplus_dry_run(
+            cloud_config=cloud_config,
+            goodwe_entities=entities,
+            now=time.monotonic(),
+        )
+    except Exception as exc:
+        logging.warning(
+            "PV surplus Decision Engine dry-run selhal: %s",
+            exc,
+        )
 
     try:
         odeslat_pv_surplus_telemetrii(

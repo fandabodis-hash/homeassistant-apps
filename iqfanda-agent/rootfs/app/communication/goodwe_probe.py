@@ -1163,6 +1163,222 @@ def _probe_goodwe_modbus_unlocked(
         client.close()
 
 
+def read_goodwe_control_snapshot(
+    runtime_configuration: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """
+    Nacte minimalni read-only GoodWe data pro rychle rizeni.
+
+    Pouziva pouze pevne registry potrebne pro Decision Engine:
+    - PV1 a PV2 vykon,
+    - celkovy vykon smartmetru,
+    - SOC baterie.
+    """
+    if not isinstance(runtime_configuration, dict):
+        raise ValueError(
+            "Runtime konfigurace GoodWe nema platny format."
+        )
+
+    module_key = str(
+        runtime_configuration.get("module_key") or ""
+    ).strip().lower()
+
+    manufacturer = str(
+        runtime_configuration.get("manufacturer") or ""
+    ).strip().lower()
+
+    inverter_model = str(
+        runtime_configuration.get("model") or ""
+    ).strip()
+
+    communication_type = str(
+        runtime_configuration.get(
+            "communication_type"
+        )
+        or ""
+    ).strip().lower()
+
+    communicator_id = str(
+        runtime_configuration.get("communicator_id") or ""
+    ).strip()
+
+    device_id = runtime_configuration.get(
+        "modbus_device_id"
+    )
+
+    if module_key != "photovoltaic":
+        raise ValueError(
+            "Control reader podporuje pouze modul photovoltaic."
+        )
+
+    if manufacturer != "goodwe":
+        raise ValueError(
+            "Control reader podporuje pouze GoodWe."
+        )
+
+    if not inverter_model:
+        raise ValueError(
+            "Runtime konfigurace neobsahuje model menice."
+        )
+
+    if communication_type != "rs485":
+        raise ValueError(
+            "GoodWe control reader vyzaduje komunikaci RS485."
+        )
+
+    if not communicator_id:
+        raise ValueError(
+            "Runtime konfigurace neobsahuje communicator_id."
+        )
+
+    if runtime_configuration.get(
+        "telemetry_enabled"
+    ) is not True:
+        raise ValueError(
+            "Telemetrie modulu neni povolena."
+        )
+
+    if runtime_configuration.get("read_only") is not True:
+        raise ValueError(
+            "Runtime konfigurace neni pouze cteci."
+        )
+
+    if (
+        type(device_id) is not int
+        or device_id not in ALLOWED_DEVICE_IDS
+    ):
+        raise ValueError(
+            "Runtime konfigurace obsahuje nepovolenou "
+            "Modbus adresu."
+        )
+
+    blocks = (
+        ("pv_power", 35105, 6),
+        ("grid_power", 36025, 2),
+        ("battery_soc", 37007, 1),
+    )
+
+    registers_by_name: dict[str, list[int]] = {}
+
+    with GOODWE_MODBUS_LOCK:
+        _communicator, serial_path = (
+            _find_communicator(
+                communicator_id
+            )
+        )
+
+        client = ModbusSerialClient(
+            port=serial_path,
+            baudrate=9600,
+            bytesize=8,
+            parity="N",
+            stopbits=1,
+            timeout=1.0,
+            retries=0,
+        )
+
+        try:
+            if not client.connect():
+                raise RuntimeError(
+                    "Seriovy port GoodWe nelze otevrit."
+                )
+
+            for name, address, count in blocks:
+                try:
+                    response = client.read_holding_registers(
+                        address=address,
+                        count=count,
+                        device_id=device_id,
+                    )
+                except Exception as exc:
+                    raise RuntimeError(
+                        "GoodWe control cteni registru "
+                        f"{address}/{count} selhalo: {exc}"
+                    ) from exc
+
+                if response is None:
+                    raise RuntimeError(
+                        "GoodWe control cteni registru "
+                        f"{address}/{count} nevratilo odpoved."
+                    )
+
+                if response.isError():
+                    raise RuntimeError(
+                        "GoodWe control cteni registru "
+                        f"{address}/{count} vratilo Modbus chybu."
+                    )
+
+                registers = [
+                    int(value)
+                    for value in getattr(
+                        response,
+                        "registers",
+                        [],
+                    )
+                ]
+
+                if len(registers) != count:
+                    raise RuntimeError(
+                        "GoodWe control cteni registru "
+                        f"{address}/{count} vratilo "
+                        f"{len(registers)} registru."
+                    )
+
+                registers_by_name[name] = registers
+        finally:
+            client.close()
+
+    pv_registers = registers_by_name["pv_power"]
+    grid_registers = registers_by_name["grid_power"]
+    soc_registers = registers_by_name["battery_soc"]
+
+    pv1_power_w = _decode_u32(
+        pv_registers,
+        0,
+    )
+
+    pv2_power_w = _decode_u32(
+        pv_registers,
+        4,
+    )
+
+    grid_power_w = _decode_s32(
+        grid_registers,
+        0,
+    )
+
+    soc_percent = int(
+        soc_registers[0]
+    )
+
+    return [
+        {
+            "entity_key": "baterie.soc",
+            "value": soc_percent,
+            "unit": "%",
+            "quality": "good",
+        },
+        {
+            "entity_key": "pv1.vykon",
+            "value": pv1_power_w,
+            "unit": "W",
+            "quality": "good",
+        },
+        {
+            "entity_key": "pv2.vykon",
+            "value": pv2_power_w,
+            "unit": "W",
+            "quality": "good",
+        },
+        {
+            "entity_key": "smartmeter.vykon_celkem",
+            "value": grid_power_w,
+            "unit": "W",
+            "quality": "good",
+        },
+    ]
+
+
 def read_goodwe_et_snapshot(
     runtime_configuration: dict[str, Any],
 ) -> dict[str, Any]:
