@@ -11,7 +11,6 @@ from communication.fve_entity_mapper import (
     vytvorit_goodwe_fve_entity,
 )
 from communication.goodwe_probe import (
-    read_goodwe_control_snapshot,
     read_goodwe_et_snapshot,
 )
 from device_config import (
@@ -963,6 +962,7 @@ def provest_pv_surplus_action(
 
 def vyhodnotit_pv_surplus_control_jednou(
     *,
+    fve_entities: list[dict[str, Any]],
     now: float | None = None,
 ) -> dict[str, Any] | None:
     """
@@ -980,13 +980,6 @@ def vyhodnotit_pv_surplus_control_jednou(
             "Cloudova konfigurace zatim neni dostupna."
         )
 
-    goodwe_runtime = najdi_goodwe_fve_runtime(
-        cloud_config
-    )
-
-    if goodwe_runtime is None:
-        return None
-
     pv_surplus_runtime = najdi_pv_surplus_runtime(
         cloud_config
     )
@@ -994,18 +987,16 @@ def vyhodnotit_pv_surplus_control_jednou(
     if pv_surplus_runtime is None:
         return None
 
-    control_entities = read_goodwe_control_snapshot(
-        goodwe_runtime
-    )
-
     if (
-        not isinstance(control_entities, list)
-        or len(control_entities) != 4
+        not isinstance(fve_entities, list)
+        or not fve_entities
     ):
         raise RuntimeError(
-            "GoodWe control reader nevratil "
-            "ocekavane ctyri entity."
+            "FVE entity pro rizeni prebytku "
+            "nejsou dostupne."
         )
+
+    control_entities = fve_entities
 
     evaluation_time = (
         time.monotonic()
@@ -1070,37 +1061,6 @@ def vyhodnotit_pv_surplus_control_jednou(
     return result
 
 
-def pv_surplus_control_main() -> None:
-    """
-    Spusti rychly PV surplus control worker.
-
-    Fyzicke ovladani je vychozene zakazane
-    a vyzaduje actuation_enabled == True.
-    """
-    logging.info(
-        "PV surplus control worker byl spusten. "
-        "Fyzicke ovladani vyzaduje explicitni "
-        "actuation_enabled=True. Interval: %s s.",
-        PV_SURPLUS_CONTROL_INTERVAL_SECONDS,
-    )
-
-    while True:
-        interval = PV_SURPLUS_CONTROL_INTERVAL_SECONDS
-
-        try:
-            vyhodnotit_pv_surplus_control_jednou()
-        except Exception as exc:
-            logging.warning(
-                "PV surplus control dry-run cyklus selhal: %s",
-                exc,
-            )
-            interval = (
-                PV_SURPLUS_CONTROL_ERROR_RETRY_SECONDS
-            )
-
-        time.sleep(interval)
-
-
 def vytvorit_cas_snapshotu() -> str:
     """Vrati aktualni UTC cas ve formatu ISO 8601."""
     return (
@@ -1149,6 +1109,17 @@ def odeslat_telemetrii_jednou() -> int:
     if not isinstance(entities, list) or not entities:
         raise RuntimeError(
             "Mapper GoodWe nevratil zadne FVE entity."
+        )
+
+    try:
+        vyhodnotit_pv_surplus_control_jednou(
+            fve_entities=entities,
+            now=time.monotonic(),
+        )
+    except Exception as exc:
+        logging.warning(
+            "PV surplus Decision Engine selhal: %s",
+            exc,
         )
 
     captured_at = vytvorit_cas_snapshotu()
@@ -1208,18 +1179,6 @@ def odeslat_telemetrii_jednou() -> int:
         next_interval,
     )
 
-
-    try:
-        vyhodnotit_pv_surplus_dry_run(
-            cloud_config=cloud_config,
-            goodwe_entities=entities,
-            now=time.monotonic(),
-        )
-    except Exception as exc:
-        logging.warning(
-            "PV surplus Decision Engine dry-run selhal: %s",
-            exc,
-        )
 
     try:
         odeslat_pv_surplus_telemetrii(

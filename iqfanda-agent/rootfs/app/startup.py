@@ -15,7 +15,6 @@ from installer.installer_api import spustit_api
 from provisioning import DEVICE_CONFIG_PATH
 from telemetrie_modulu import (
     main as telemetrie_modulu_main,
-    pv_surplus_control_main,
 )
 from usb_inventory import main as usb_inventory_main
 
@@ -82,12 +81,6 @@ def spustit_telemetrii_modulu() -> None:
     """Spusti periodickou telemetrii modulu."""
 
     telemetrie_modulu_main()
-
-
-def spustit_pv_surplus_control() -> None:
-    """Spusti rychly PV surplus control v dry-run rezimu."""
-
-    pv_surplus_control_main()
 
 
 def cekat_na_registraci_zarizeni(
@@ -254,18 +247,12 @@ def main() -> None:
         nazev="module-telemetry",
     )
 
-    pv_surplus_control_thread = vytvorit_vlakno(
-        cil=spustit_pv_surplus_control,
-        nazev="pv-surplus-control",
-    )
-
     device_config_thread.start()
     heartbeat_thread.start()
     command_worker_thread.start()
     usb_inventory_thread.start()
     communication_manager_thread.start()
     module_telemetry_thread.start()
-    pv_surplus_control_thread.start()
 
     kontrolovat_sluzby(
         {
@@ -278,7 +265,6 @@ def main() -> None:
             "usb-inventory": usb_inventory_thread,
             "communication-manager": communication_manager_thread,
             "module-telemetry": module_telemetry_thread,
-            "pv-surplus-control": pv_surplus_control_thread,
         }
     )
 
