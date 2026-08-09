@@ -134,10 +134,6 @@ def vyhodnotit_battery_soc_source(
         "minimum_pv_power_w",
     )
 
-    require_no_grid_import = (
-        konfigurace.get("require_no_grid_import") is True
-    )
-
     maximum_grid_import = _cislo(
         konfigurace.get(
             "maximum_grid_import_w",
@@ -162,14 +158,25 @@ def vyhodnotit_battery_soc_source(
         )
 
     pv_vykon = pv1 + pv2
-    odber_ze_site = sit < -maximum_grid_import
+
+    grid_import_w = max(
+        0.0,
+        -sit,
+    )
+
+    grid_import = grid_import_w > 0
+
+    prekrocen_grid_limit = (
+        grid_import_w
+        > maximum_grid_import
+    )
 
     blokace: list[str] = []
 
     if pv_vykon < minimum_pv:
         blokace.append("minimum_pv_power")
 
-    if require_no_grid_import and odber_ze_site:
+    if prekrocen_grid_limit:
         blokace.append("grid_import")
 
     if blokace:
@@ -180,7 +187,7 @@ def vyhodnotit_battery_soc_source(
             "soc_percent": soc,
             "pv_power_w": pv_vykon,
             "grid_power_w": sit,
-            "grid_import": odber_ze_site,
+            "grid_import": grid_import,
         }
 
     aktivni_predtim = predchozi_stav in {
@@ -201,7 +208,7 @@ def vyhodnotit_battery_soc_source(
             "soc_percent": soc,
             "pv_power_w": pv_vykon,
             "grid_power_w": sit,
-            "grid_import": odber_ze_site,
+            "grid_import": grid_import,
         }
 
     return {
@@ -211,7 +218,7 @@ def vyhodnotit_battery_soc_source(
         "soc_percent": soc,
         "pv_power_w": pv_vykon,
         "grid_power_w": sit,
-        "grid_import": odber_ze_site,
+        "grid_import": grid_import,
     }
 
 def vyhodnotit_stav_prebytku(
