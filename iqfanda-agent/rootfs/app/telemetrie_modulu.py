@@ -19,7 +19,10 @@ from device_config import (
     load_device_identity,
 )
 from host.cloud_client import cloud_client
-from zigbee_manager import get_entity_state
+from zigbee_manager import (
+    call_home_assistant_service,
+    get_entity_state,
+)
 
 from pv_surplus_decision import (
     STAV_OFF,
@@ -820,6 +823,8 @@ def vyhodnotit_pv_surplus_dry_run(
     result = {
         "target_name":
             target.get("name") or "Cil",
+        "output_reference":
+            output_reference,
         "energy_state":
             energy_result["state"],
         "energy_reason":
@@ -870,15 +875,103 @@ def vyhodnotit_pv_surplus_dry_run(
     return result
 
 
+def provest_pv_surplus_action(
+    *,
+    output_reference: str,
+    should_be_on: bool,
+    actual_output_on: bool,
+) -> dict[str, Any]:
+    """
+    Provede jeden fyzicky povel PV surplus vystupu.
+
+    Funkce smi ovladat pouze Home Assistant switch entity.
+    Pokud je vystup jiz v pozadovanem stavu, nic nevola.
+    """
+    normalized_reference = str(
+        output_reference or ""
+    ).strip()
+
+    if not normalized_reference.startswith("switch."):
+        raise ValueError(
+            "PV surplus actuator smi ovladat "
+            "pouze switch.* entitu."
+        )
+
+    requested_on = bool(should_be_on)
+    actual_on = bool(actual_output_on)
+
+    if requested_on == actual_on:
+        return {
+            "action": (
+                "NONE_ALREADY_ON"
+                if requested_on
+                else "NONE_ALREADY_OFF"
+            ),
+            "service_called": False,
+            "output_reference": normalized_reference,
+        }
+
+    service = (
+        "turn_on"
+        if requested_on
+        else "turn_off"
+    )
+
+    call_home_assistant_service(
+        domain="switch",
+        service=service,
+        payload={
+            "entity_id": normalized_reference,
+        },
+    )
+
+    readback_state = get_entity_state(
+        normalized_reference
+    )
+
+    readback_raw = str(
+        readback_state.get("state") or ""
+    ).strip().lower()
+
+    if readback_raw not in {"on", "off"}:
+        raise RuntimeError(
+            "PV surplus actuator read-back vratil "
+            f"neplatny stav: {readback_raw!r}."
+        )
+
+    readback_on = readback_raw == "on"
+
+    if readback_on != requested_on:
+        raise RuntimeError(
+            "PV surplus actuator nebyl potvrzen "
+            "read-back kontrolou."
+        )
+
+    return {
+        "action": (
+            "TURNED_ON"
+            if requested_on
+            else "TURNED_OFF"
+        ),
+        "service_called": True,
+        "service": f"switch.{service}",
+        "output_reference": normalized_reference,
+        "readback_verified": True,
+        "readback_state": readback_raw,
+    }
+
+
 def vyhodnotit_pv_surplus_control_jednou(
     *,
     now: float | None = None,
 ) -> dict[str, Any] | None:
     """
-    Provede jeden rychly PV surplus dry-run cyklus.
+    Provede jeden rychly PV surplus control cyklus.
 
-    Funkce pouze cte GoodWe a Home Assistant.
-    Nikdy fyzicky neovlada zadny vystup.
+    Fyzicke ovladani je povoleno pouze pri
+    configuration.actuation_enabled == True.
+    Bez explicitni hodnoty True zustava cyklus
+    pouze v dry-run rezimu.
     """
     cloud_config = load_cached_cloud_config()
 
@@ -920,22 +1013,74 @@ def vyhodnotit_pv_surplus_control_jednou(
         else float(now)
     )
 
-    return vyhodnotit_pv_surplus_dry_run(
+    result = vyhodnotit_pv_surplus_dry_run(
         cloud_config=cloud_config,
         goodwe_entities=control_entities,
         now=evaluation_time,
     )
 
+    if result is None:
+        return None
+
+    configuration = pv_surplus_runtime.get(
+        "configuration"
+    )
+
+    if not isinstance(configuration, dict):
+        raise RuntimeError(
+            "PV surplus runtime nema platnou konfiguraci."
+        )
+
+    actuation_enabled = (
+        configuration.get("actuation_enabled") is True
+    )
+
+    result["actuation_enabled"] = actuation_enabled
+    result["actuator_result"] = None
+
+    if not actuation_enabled:
+        logging.info(
+            "PV SURPLUS ACTUATOR | "
+            "cil=%s | enabled=False | "
+            "action=DRY_RUN_ONLY",
+            result["target_name"],
+        )
+
+        return result
+
+    actuator_result = provest_pv_surplus_action(
+        output_reference=result["output_reference"],
+        should_be_on=result["should_be_on"],
+        actual_output_on=result["actual_output_on"],
+    )
+
+    result["actuator_result"] = actuator_result
+
+    logging.info(
+        "PV SURPLUS ACTUATOR | "
+        "cil=%s | enabled=True | "
+        "output=%s | action=%s | "
+        "readback=%s",
+        result["target_name"],
+        result["output_reference"],
+        actuator_result["action"],
+        actuator_result.get("readback_state"),
+    )
+
+    return result
+
 
 def pv_surplus_control_main() -> None:
     """
-    Spusti rychly PV surplus Decision Engine v dry-run rezimu.
+    Spusti rychly PV surplus control worker.
 
-    Worker nikdy fyzicky neovlada vystup.
+    Fyzicke ovladani je vychozene zakazane
+    a vyzaduje actuation_enabled == True.
     """
     logging.info(
-        "PV surplus control worker byl spusten "
-        "v DRY-RUN rezimu. Interval: %s s.",
+        "PV surplus control worker byl spusten. "
+        "Fyzicke ovladani vyzaduje explicitni "
+        "actuation_enabled=True. Interval: %s s.",
         PV_SURPLUS_CONTROL_INTERVAL_SECONDS,
     )
 
