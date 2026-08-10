@@ -374,6 +374,35 @@ def normalize_zha_device(
         or signature.get("model")
     )
 
+    telemetry_entity_inventory = None
+
+    device_reg_id = str(
+        device.get("device_reg_id") or ""
+    ).strip()
+
+    if device_reg_id:
+        try:
+            telemetry_entity_inventory = (
+                build_entity_inventory(
+                    device_reg_id
+                )
+            )
+        except HomeAssistantApiError:
+            telemetry_entity_inventory = None
+
+    if (
+        isinstance(
+            telemetry_entity_inventory,
+            list,
+        )
+        and telemetry_entity_inventory
+    ):
+        normalized_entities = [
+            entity
+            for entity in telemetry_entity_inventory
+            if isinstance(entity, dict)
+        ]
+
     return {
         "device_reg_id": device.get(
             "device_reg_id"
