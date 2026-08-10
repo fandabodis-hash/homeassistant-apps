@@ -24,6 +24,8 @@ from zigbee_manager import (
 )
 
 from pv_surplus_decision import (
+    STAV_ACTIVE,
+    STAV_FAULT,
     STAV_OFF,
     vyhodnotit_cil_prebytku,
     vyhodnotit_stav_prebytku,
@@ -38,6 +40,11 @@ ERROR_RETRY_INTERVAL_SECONDS = 15
 
 PV_SURPLUS_CONTROL_INTERVAL_SECONDS = 5
 PV_SURPLUS_CONTROL_ERROR_RETRY_SECONDS = 5
+
+# Kratkodoby vypadek FVE dat nesmi okamzite
+# vypnout jiz bezici spotrebic.
+# Po 180 sekundach souvisleho FAULTu plati FAIL-SAFE.
+PV_SURPLUS_TELEMETRY_GRACE_SECONDS = 180.0
 
 
 def ziskej_interval_telemetrie(
@@ -617,6 +624,126 @@ _pv_surplus_dry_run_state: dict[str, Any] = {
 }
 
 
+def aplikovat_pv_surplus_telemetry_grace(
+    *,
+    energy_result: dict[str, Any],
+    previous_state: str,
+    output_active: bool,
+    now: float,
+) -> dict[str, Any]:
+    """
+    Zachova bezici cil pri kratkodobem vypadku FVE dat.
+
+    Grace plati pouze kdyz:
+    - energeticke rozhodnuti je FAULT,
+    - predchozi stav byl ACTIVE,
+    - fyzicky vystup uz je ON.
+
+    Platne OFF/BLOCKED rozhodnuti se nemeni.
+    """
+    if (
+        energy_result.get("state")
+        != STAV_FAULT
+    ):
+        _pv_surplus_dry_run_state[
+            "telemetry_fault_since"
+        ] = None
+
+        return energy_result
+
+    if (
+        previous_state != STAV_ACTIVE
+        or not output_active
+    ):
+        _pv_surplus_dry_run_state[
+            "telemetry_fault_since"
+        ] = None
+
+        return energy_result
+
+    now_value = float(now)
+
+    fault_since = (
+        _pv_surplus_dry_run_state.get(
+            "telemetry_fault_since"
+        )
+    )
+
+    if fault_since is None:
+        fault_since = now_value
+
+        _pv_surplus_dry_run_state[
+            "telemetry_fault_since"
+        ] = fault_since
+
+    else:
+        fault_since = float(
+            fault_since
+        )
+
+    if fault_since > now_value:
+        fault_since = now_value
+
+        _pv_surplus_dry_run_state[
+            "telemetry_fault_since"
+        ] = fault_since
+
+    elapsed = (
+        now_value
+        - fault_since
+    )
+
+    if (
+        elapsed
+        >= PV_SURPLUS_TELEMETRY_GRACE_SECONDS
+    ):
+        return {
+            **energy_result,
+            "reason": (
+                "telemetry_fault_timeout/"
+                + str(
+                    energy_result.get(
+                        "reason"
+                    )
+                    or "unknown"
+                )
+            ),
+            "telemetry_grace_active":
+                False,
+            "telemetry_fault_elapsed_seconds":
+                elapsed,
+            "telemetry_fault_timeout_seconds":
+                PV_SURPLUS_TELEMETRY_GRACE_SECONDS,
+        }
+
+    return {
+        **energy_result,
+        "state":
+            STAV_ACTIVE,
+        "reason": (
+            "telemetry_grace/"
+            + str(
+                energy_result.get(
+                    "reason"
+                )
+                or "unknown"
+            )
+        ),
+        "surplus_available":
+            True,
+        "confirming_since":
+            None,
+        "confirmation_elapsed_seconds":
+            0.0,
+        "telemetry_grace_active":
+            True,
+        "telemetry_fault_elapsed_seconds":
+            elapsed,
+        "telemetry_fault_timeout_seconds":
+            PV_SURPLUS_TELEMETRY_GRACE_SECONDS,
+    }
+
+
 def vyhodnotit_pv_surplus_dry_run(
     *,
     cloud_config: dict[str, Any],
@@ -782,6 +909,13 @@ def vyhodnotit_pv_surplus_dry_run(
         goodwe_entity=goodwe_entities,
         predchozi_stav=previous_state,
         confirming_since=confirming_since,
+        now=now,
+    )
+
+    energy_result = aplikovat_pv_surplus_telemetry_grace(
+        energy_result=energy_result,
+        previous_state=previous_state,
+        output_active=output_active,
         now=now,
     )
 
