@@ -1,5 +1,5 @@
 name: "TNG IQ FANDA Agent"
-version: "0.1.52"
+version: "0.1.53"
 slug: "tng_iq_fanda_agent"
 description: "LokĂˇlnĂ­Â­ runtime a cloudovĂˇ komunikace TNG IQ FANDA"
 url: "https://github.com/fandabodis-hash/homeassistant-apps"

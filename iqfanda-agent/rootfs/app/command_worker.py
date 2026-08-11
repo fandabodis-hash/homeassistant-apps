@@ -9,6 +9,7 @@ from typing import Any
 
 from communication.goodwe_probe import probe_goodwe_modbus
 from host.cloud_client import cloud_client
+from spot_boiler_intent import save_spot_boiler_intent
 from zigbee_manager import (
     HomeAssistantApiError,
     find_existing_temperature_devices,
@@ -632,6 +633,83 @@ def execute_photovoltaic_modbus_probe(
             command_id,
         )
 
+def execute_spot_boiler_intent(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """
+    Ulozi spotovy pozadavek.
+
+    Zamerne zde nevola Home Assistant service.
+    Fyzicky vystup zustava pouze v jednom
+    spolecnem actuatoru.
+    """
+
+    try:
+        stored = save_spot_boiler_intent(
+            command_payload
+        )
+
+    except (
+        OSError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": "spot_boiler_intent",
+                "phase": "intent_rejected",
+                "payload_received": command_payload,
+            },
+            error_message=str(exc),
+        )
+
+        logging.error(
+            "Spot boiler intent %s selhal: %s",
+            command_id,
+            exc,
+        )
+        return
+
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result={
+            "worker": "command_worker",
+            "executor": "spot_boiler_intent",
+            "phase": "intent_stored",
+            "resource_key": stored[
+                "resource_key"
+            ],
+            "output_reference": stored[
+                "output_reference"
+            ],
+            "action": stored["action"],
+            "desired_on": stored["desired_on"],
+            "valid_until": stored[
+                "valid_until"
+            ],
+        },
+        error_message=None,
+    )
+
+    logging.info(
+        "Spot boiler intent ulozen. "
+        "Prikaz=%s action=%s output=%s valid_until=%s",
+        command_id,
+        stored["action"],
+        stored["output_reference"],
+        stored["valid_until"],
+    )
+
+
 def execute_command(
     *,
     identity: dict[str, Any],
@@ -669,6 +747,14 @@ def execute_command(
 
     if command_type == "zigbee_permit_join":
         execute_zigbee_permit_join(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "spot_boiler_intent":
+        execute_spot_boiler_intent(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,

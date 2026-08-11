@@ -23,6 +23,11 @@ from zigbee_manager import (
     get_entity_state,
 )
 
+from spot_boiler_intent import (
+    combine_boiler_requests,
+    load_spot_boiler_intent,
+)
+
 from pv_surplus_decision import (
     STAV_ACTIVE,
     STAV_FAULT,
@@ -1163,6 +1168,58 @@ def vyhodnotit_pv_surplus_control_jednou(
     result["actuation_enabled"] = actuation_enabled
     result["actuator_result"] = None
 
+
+    #
+    # SPOT + PV SURPLUS ARBITRAZ
+    #
+    # Existuje pouze jeden fyzicky actuator.
+    # PV a spot pouze vytvareji spolecny pozadavek.
+    #
+    pv_should_be_on = bool(
+        result["should_be_on"]
+    )
+
+    spot_intent = load_spot_boiler_intent()
+
+    #
+    # Intent patri pouze vystupu, pro ktery
+    # byl cloudem vytvoren.
+    #
+    if (
+        isinstance(spot_intent, dict)
+        and str(
+            spot_intent.get(
+                "output_reference"
+            ) or ""
+        ).strip()
+        != str(
+            result["output_reference"]
+        ).strip()
+    ):
+        spot_intent = None
+
+    combined_control = combine_boiler_requests(
+        pv_should_be_on=pv_should_be_on,
+        spot_intent=spot_intent,
+    )
+
+    result["pv_should_be_on"] = (
+        combined_control["pv_should_be_on"]
+    )
+
+    result["spot_should_be_on"] = (
+        combined_control["spot_should_be_on"]
+    )
+
+    result["control_source"] = (
+        combined_control["source"]
+    )
+
+    result["spot_intent"] = spot_intent
+
+    result["should_be_on"] = (
+        combined_control["should_be_on"]
+    )
     if not actuation_enabled:
         logging.info(
             "PV SURPLUS ACTUATOR | "
