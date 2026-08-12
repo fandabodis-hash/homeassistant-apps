@@ -7,8 +7,12 @@ import time
 from pathlib import Path
 from typing import Any
 
+from communication.goodwe_ems_controller import (
+    preview_goodwe_ems_action,
+)
 from communication.goodwe_probe import probe_goodwe_modbus
 from host.cloud_client import cloud_client
+from spot_battery_intent import save_spot_battery_intent
 from spot_boiler_intent import save_spot_boiler_intent
 from zigbee_manager import (
     HomeAssistantApiError,
@@ -710,6 +714,115 @@ def execute_spot_boiler_intent(
     )
 
 
+def execute_spot_battery_intent(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """
+    Overi battery intent a provede pouze
+    GoodWe EMS DRY-RUN.
+
+    G4 zamerne neobsahuje zadnou cestu
+    k realnemu Modbus write.
+    """
+
+    try:
+        stored = save_spot_battery_intent(
+            command_payload
+        )
+
+        preview = preview_goodwe_ems_action(
+            device_id=247,
+            action=stored["action"],
+            allowed_charge_power_w=stored[
+                "allowed_charge_power_w"
+            ],
+        )
+
+    except (
+        OSError,
+        TypeError,
+        ValueError,
+        RuntimeError,
+    ) as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": "spot_battery_intent",
+                "phase": "ems_dry_run_rejected",
+                "payload_received": command_payload,
+            },
+            error_message=str(exc),
+        )
+
+        logging.error(
+            "Spot battery EMS DRY-RUN %s selhal: %s",
+            command_id,
+            exc,
+        )
+        return
+
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result={
+            "worker": "command_worker",
+            "executor": "spot_battery_intent",
+            "phase": "ems_dry_run",
+            "real_modbus_write": False,
+            "action": preview.action,
+            "requested_charge_power_w": (
+                stored[
+                    "requested_charge_power_w"
+                ]
+            ),
+            "allowed_charge_power_w": (
+                preview.applied_power_w
+            ),
+            "target_soc_percent": stored[
+                "target_soc_percent"
+            ],
+            "current_soc_percent": stored[
+                "current_soc_percent"
+            ],
+            "ems_mode_register": 47511,
+            "ems_mode_value": (
+                preview.ems_mode
+            ),
+            "ems_power_register": 47512,
+            "ems_power_value": (
+                preview.ems_power_register
+            ),
+            "valid_until": stored[
+                "valid_until"
+            ],
+        },
+        error_message=None,
+    )
+
+    logging.info(
+        "Spot battery EMS DRY-RUN | "
+        "prikaz=%s action=%s "
+        "allowed=%s W "
+        "EMS_MODE=%s EMS_POWER=%s "
+        "SOC=%s/%s "
+        "REAL_MODBUS_WRITE=False",
+        command_id,
+        preview.action,
+        preview.applied_power_w,
+        preview.ems_mode,
+        preview.ems_power_register,
+        stored["current_soc_percent"],
+        stored["target_soc_percent"],
+    )
+
+
 def execute_command(
     *,
     identity: dict[str, Any],
@@ -755,6 +868,14 @@ def execute_command(
 
     if command_type == "spot_boiler_intent":
         execute_spot_boiler_intent(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "spot_battery_intent":
+        execute_spot_battery_intent(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
