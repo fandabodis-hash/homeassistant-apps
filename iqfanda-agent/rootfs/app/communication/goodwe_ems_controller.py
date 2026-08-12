@@ -5,6 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from pymodbus.client import ModbusSerialClient
+
+from communication.goodwe_probe import (
+    GOODWE_MODBUS_LOCK,
+    _find_communicator,
+)
+
 
 EMS_MODE_REGISTER = 47511
 EMS_POWER_REGISTER = 47512
@@ -32,6 +39,7 @@ class GoodweEmsResult:
     ems_mode: int
     ems_power_register: int
     verified: bool
+    write_performed: bool = False
 
 
 def _validate_device_id(
@@ -411,6 +419,273 @@ def apply_goodwe_ems_action(
         verified=True,
     )
 
+
+def _select_goodwe_runtime_configuration(
+    cloud_config: dict[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(cloud_config, dict):
+        raise RuntimeError(
+            "Cloudova konfigurace neni dostupna."
+        )
+
+    runtime_configurations = cloud_config.get(
+        "module_runtime_configurations"
+    )
+
+    if not isinstance(
+        runtime_configurations,
+        list,
+    ):
+        raise RuntimeError(
+            "Cloudova konfigurace neobsahuje "
+            "runtime konfigurace modulu."
+        )
+
+    matches = []
+
+    for runtime in runtime_configurations:
+        if not isinstance(runtime, dict):
+            continue
+
+        if (
+            str(
+                runtime.get("module_key")
+                or ""
+            ).strip().lower()
+            == "photovoltaic"
+            and str(
+                runtime.get("manufacturer")
+                or ""
+            ).strip().lower()
+            == "goodwe"
+            and str(
+                runtime.get("communication_type")
+                or ""
+            ).strip().lower()
+            == "rs485"
+        ):
+            matches.append(runtime)
+
+    if len(matches) != 1:
+        raise RuntimeError(
+            "GoodWe FVE runtime konfigurace "
+            "nebyla nalezena jednoznacne."
+        )
+
+    runtime = matches[0]
+
+    communicator_id = str(
+        runtime.get("communicator_id")
+        or ""
+    ).strip()
+
+    if not communicator_id:
+        raise RuntimeError(
+            "GoodWe runtime nema communicator_id."
+        )
+
+    device_id = runtime.get(
+        "modbus_device_id"
+    )
+
+    _validate_device_id(
+        device_id
+    )
+
+    return runtime
+
+
+def execute_goodwe_ems_from_cloud_config(
+    *,
+    cloud_config: dict[str, Any],
+    action: str,
+    allowed_charge_power_w: int,
+    target_soc_percent: float,
+) -> GoodweEmsResult:
+    """
+    Provede fyzicke EMS rizeni pres stejnou
+    RS485 cestu a stejny zamek jako telemetrie.
+
+    DISCHARGE neni podporovan.
+    Pred CHARGE_GRID znovu kontroluje lokalni
+    SOC a BMS charge-current limit.
+    """
+
+    runtime = (
+        _select_goodwe_runtime_configuration(
+            cloud_config
+        )
+    )
+
+    communicator_id = str(
+        runtime["communicator_id"]
+    ).strip()
+
+    device_id = _validate_device_id(
+        runtime["modbus_device_id"]
+    )
+
+    action = _validate_action(
+        action
+    )
+
+    power_w = _validate_charge_power(
+        allowed_charge_power_w
+    )
+
+    target_soc = float(
+        target_soc_percent
+    )
+
+    if (
+        target_soc < 0
+        or target_soc > 100
+    ):
+        raise ValueError(
+            "Target SOC je mimo rozsah 0 az 100 %."
+        )
+
+    with GOODWE_MODBUS_LOCK:
+        _communicator, serial_path = (
+            _find_communicator(
+                communicator_id
+            )
+        )
+
+        client = ModbusSerialClient(
+            port=serial_path,
+            baudrate=9600,
+            bytesize=8,
+            parity="N",
+            stopbits=1,
+            timeout=1.0,
+            retries=0,
+        )
+
+        try:
+            if not client.connect():
+                raise RuntimeError(
+                    "GoodWe EMS nelze otevrit "
+                    "seriovy port."
+                )
+
+            current_mode = _read_single_register(
+                client=client,
+                device_id=device_id,
+                address=EMS_MODE_REGISTER,
+            )
+
+            current_power = _read_single_register(
+                client=client,
+                device_id=device_id,
+                address=EMS_POWER_REGISTER,
+            )
+
+            if action == "charge_grid":
+                local_soc = _read_single_register(
+                    client=client,
+                    device_id=device_id,
+                    address=37007,
+                )
+
+                charge_current_limit = (
+                    _read_single_register(
+                        client=client,
+                        device_id=device_id,
+                        address=37004,
+                    )
+                )
+
+                if (
+                    local_soc
+                    >= target_soc
+                ):
+                    if (
+                        current_mode
+                        != EMS_MODE_AUTO
+                        or current_power != 0
+                    ):
+                        apply_goodwe_ems_action(
+                            client=client,
+                            device_id=device_id,
+                            action="auto",
+                            allowed_charge_power_w=0,
+                        )
+
+                    raise RuntimeError(
+                        "Lokalni SOC dosahl "
+                        "cilove hodnoty."
+                    )
+
+                if charge_current_limit <= 0:
+                    if (
+                        current_mode
+                        != EMS_MODE_AUTO
+                        or current_power != 0
+                    ):
+                        apply_goodwe_ems_action(
+                            client=client,
+                            device_id=device_id,
+                            action="auto",
+                            allowed_charge_power_w=0,
+                        )
+
+                    raise RuntimeError(
+                        "BMS nepovoluje nabijeci proud."
+                    )
+
+                desired_mode = (
+                    EMS_MODE_CHARGE_FROM_GRID
+                )
+
+                desired_power = power_w
+
+            else:
+                desired_mode = EMS_MODE_AUTO
+                desired_power = 0
+
+            if (
+                current_mode == desired_mode
+                and current_power
+                == desired_power
+            ):
+                return GoodweEmsResult(
+                    action=action,
+                    requested_power_w=power_w,
+                    applied_power_w=power_w,
+                    ems_mode=desired_mode,
+                    ems_power_register=(
+                        desired_power
+                    ),
+                    verified=True,
+                    write_performed=False,
+                )
+
+            result = apply_goodwe_ems_action(
+                client=client,
+                device_id=device_id,
+                action=action,
+                allowed_charge_power_w=power_w,
+            )
+
+            return GoodweEmsResult(
+                action=result.action,
+                requested_power_w=(
+                    result.requested_power_w
+                ),
+                applied_power_w=(
+                    result.applied_power_w
+                ),
+                ems_mode=result.ems_mode,
+                ems_power_register=(
+                    result.ems_power_register
+                ),
+                verified=result.verified,
+                write_performed=True,
+            )
+
+        finally:
+            client.close()
 
 def execute_goodwe_ems_with_client_factory(
     *,

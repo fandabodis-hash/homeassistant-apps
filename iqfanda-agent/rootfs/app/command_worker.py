@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from communication.goodwe_ems_controller import (
-    preview_goodwe_ems_action,
+    execute_goodwe_ems_from_cloud_config,
 )
 from communication.goodwe_probe import probe_goodwe_modbus
+from device_config import load_cached_cloud_config
 from host.cloud_client import cloud_client
 from spot_battery_intent import save_spot_battery_intent
 from spot_boiler_intent import save_spot_boiler_intent
@@ -721,11 +722,14 @@ def execute_spot_battery_intent(
     command_payload: dict[str, Any],
 ) -> None:
     """
-    Overi battery intent a provede pouze
-    GoodWe EMS DRY-RUN.
+    Overi spot battery intent a provede
+    fyzicke GoodWe EMS rizeni.
 
-    G4 zamerne neobsahuje zadnou cestu
-    k realnemu Modbus write.
+    Povolene akce:
+    - auto
+    - charge_grid
+
+    Discharge zustava hard-block.
     """
 
     try:
@@ -733,20 +737,33 @@ def execute_spot_battery_intent(
             command_payload
         )
 
-        preview = preview_goodwe_ems_action(
-            device_id=247,
-            action=stored["action"],
-            allowed_charge_power_w=stored[
-                "allowed_charge_power_w"
-            ],
+        cloud_config = (
+            load_cached_cloud_config()
         )
 
-    except (
-        OSError,
-        TypeError,
-        ValueError,
-        RuntimeError,
-    ) as exc:
+        if not isinstance(
+            cloud_config,
+            dict,
+        ):
+            raise RuntimeError(
+                "Cloudova konfigurace "
+                "neni lokalne dostupna."
+            )
+
+        applied = (
+            execute_goodwe_ems_from_cloud_config(
+                cloud_config=cloud_config,
+                action=stored["action"],
+                allowed_charge_power_w=stored[
+                    "allowed_charge_power_w"
+                ],
+                target_soc_percent=stored[
+                    "target_soc_percent"
+                ],
+            )
+        )
+
+    except Exception as exc:
         submit_command_result(
             identity=identity,
             command_id=command_id,
@@ -754,16 +771,18 @@ def execute_spot_battery_intent(
             result={
                 "worker": "command_worker",
                 "executor": "spot_battery_intent",
-                "phase": "ems_dry_run_rejected",
-                "payload_received": command_payload,
+                "phase": "ems_apply_failed",
+                "physical_control_active": True,
+                "payload_received": (
+                    command_payload
+                ),
             },
             error_message=str(exc),
         )
 
-        logging.error(
-            "Spot battery EMS DRY-RUN %s selhal: %s",
+        logging.exception(
+            "Spot battery EMS prikaz %s selhal.",
             command_id,
-            exc,
         )
         return
 
@@ -774,16 +793,20 @@ def execute_spot_battery_intent(
         result={
             "worker": "command_worker",
             "executor": "spot_battery_intent",
-            "phase": "ems_dry_run",
-            "real_modbus_write": False,
-            "action": preview.action,
+            "phase": "ems_applied",
+            "physical_control_active": True,
+            "real_modbus_write": (
+                applied.write_performed
+            ),
+            "verified": applied.verified,
+            "action": applied.action,
             "requested_charge_power_w": (
                 stored[
                     "requested_charge_power_w"
                 ]
             ),
             "allowed_charge_power_w": (
-                preview.applied_power_w
+                applied.applied_power_w
             ),
             "target_soc_percent": stored[
                 "target_soc_percent"
@@ -793,11 +816,11 @@ def execute_spot_battery_intent(
             ],
             "ems_mode_register": 47511,
             "ems_mode_value": (
-                preview.ems_mode
+                applied.ems_mode
             ),
             "ems_power_register": 47512,
             "ems_power_value": (
-                preview.ems_power_register
+                applied.ems_power_register
             ),
             "valid_until": stored[
                 "valid_until"
@@ -807,19 +830,20 @@ def execute_spot_battery_intent(
     )
 
     logging.info(
-        "Spot battery EMS DRY-RUN | "
+        "Spot battery EMS | "
         "prikaz=%s action=%s "
         "allowed=%s W "
         "EMS_MODE=%s EMS_POWER=%s "
         "SOC=%s/%s "
-        "REAL_MODBUS_WRITE=False",
+        "REAL_MODBUS_WRITE=%s",
         command_id,
-        preview.action,
-        preview.applied_power_w,
-        preview.ems_mode,
-        preview.ems_power_register,
+        applied.action,
+        applied.applied_power_w,
+        applied.ems_mode,
+        applied.ems_power_register,
         stored["current_soc_percent"],
         stored["target_soc_percent"],
+        applied.write_performed,
     )
 
 
