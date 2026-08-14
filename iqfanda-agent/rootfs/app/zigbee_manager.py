@@ -911,6 +911,13 @@ def find_entity_by_device_class(
         if not isinstance(entity, dict):
             continue
 
+        entity_id = str(
+            entity.get("entity_id") or ""
+        ).strip()
+
+        if not entity_id.startswith("sensor."):
+            continue
+
         entity_device_class = str(
             entity.get("device_class") or ""
         ).strip().lower()
