@@ -211,6 +211,30 @@ def execute_zigbee_permit_join(
         or ""
     ).strip()
 
+    pv_surplus_module_id = str(
+        command_payload.get(
+            "pv_surplus_module_id",
+            "",
+        )
+        or ""
+    ).strip()
+
+    energy_target_id = str(
+        command_payload.get(
+            "energy_target_id",
+            "",
+        )
+        or ""
+    ).strip()
+
+    entity_role = str(
+        command_payload.get(
+            "entity_role",
+            "",
+        )
+        or ""
+    ).strip().lower()
+
     replacement_mode = bool(
         command_payload.get(
             "replacement_mode",
@@ -226,6 +250,76 @@ def execute_zigbee_permit_join(
         or ""
     ).strip()
 
+    building_context = bool(
+        building_module_id
+    )
+
+    energy_context_values = (
+        pv_surplus_module_id,
+        energy_target_id,
+        entity_role,
+    )
+
+    energy_context_count = sum(
+        bool(value)
+        for value in energy_context_values
+    )
+
+    energy_target_context = (
+        energy_context_count
+        == len(energy_context_values)
+    )
+
+    if building_context and energy_context_count:
+        raise ValueError(
+            "Zigbee prikaz obsahuje vice instalacnich kontextu."
+        )
+
+    if not building_context and energy_context_count == 0:
+        raise ValueError(
+            "Zigbee prikaz neobsahuje instalacni kontext."
+        )
+
+    if (
+        not building_context
+        and not energy_target_context
+    ):
+        raise ValueError(
+            "Kontext energetickeho cile neni uplny."
+        )
+
+    if building_context:
+        if (
+            expected_device_type
+            != "indoor_temperature_humidity_sensor"
+        ):
+            raise ValueError(
+                "Modul Budova vyzaduje vnitrni teplotni cidlo."
+            )
+    else:
+        if (
+            expected_device_type
+            != "energy_target_temperature_sensor"
+        ):
+            raise ValueError(
+                "Energeticky cil vyzaduje teplotni cidlo."
+            )
+
+        if entity_role != "water_temperature":
+            raise ValueError(
+                "Nepodporovana role energetickeho cile."
+            )
+
+        if replacement_mode:
+            raise ValueError(
+                "Vymena zatim neni pro energeticky cil podporovana."
+            )
+
+        if current_device_id:
+            raise ValueError(
+                "current_device_id nelze pouzit pro energeticky cil."
+            )
+
     if replacement_mode and not current_device_id:
         raise ValueError(
             "V režimu výměny musí být předáno "
@@ -235,6 +329,8 @@ def execute_zigbee_permit_join(
     try:
         all_existing_devices = (
             find_existing_temperature_devices()
+            if building_context
+            else []
         )
 
         existing_devices = (
@@ -438,7 +534,26 @@ def execute_zigbee_permit_join(
             "executor": "zigbee_manager",
             "phase": "device_verified",
             "expected_device_type": expected_device_type,
-            "building_module_id": building_module_id,
+            "building_module_id": (
+                building_module_id
+                if building_context
+                else None
+            ),
+            "pv_surplus_module_id": (
+                pv_surplus_module_id
+                if energy_target_context
+                else None
+            ),
+            "energy_target_id": (
+                energy_target_id
+                if energy_target_context
+                else None
+            ),
+            "entity_role": (
+                entity_role
+                if energy_target_context
+                else None
+            ),
             "device": device,
             "entities": entities,
             "entity_count": len(entities),
@@ -453,33 +568,53 @@ def execute_zigbee_permit_join(
                 if isinstance(battery_entity, dict)
                 else None
             ),
-            "system_roles": {
-                "building_indoor_temperature": (
-                    temperature_entity.get(
-                        "entity_id"
-                    )
-                ),
-                "building_indoor_humidity": (
-                    humidity_entity.get(
-                        "entity_id"
-                    )
-                    if isinstance(
-                        humidity_entity,
-                        dict,
-                    )
-                    else None
-                ),
-                "device_battery": (
-                    battery_entity.get(
-                        "entity_id"
-                    )
-                    if isinstance(
-                        battery_entity,
-                        dict,
-                    )
-                    else None
-                ),
-            },
+            "system_roles": (
+                {
+                    "building_indoor_temperature": (
+                        temperature_entity.get(
+                            "entity_id"
+                        )
+                    ),
+                    "building_indoor_humidity": (
+                        humidity_entity.get(
+                            "entity_id"
+                        )
+                        if isinstance(
+                            humidity_entity,
+                            dict,
+                        )
+                        else None
+                    ),
+                    "device_battery": (
+                        battery_entity.get(
+                            "entity_id"
+                        )
+                        if isinstance(
+                            battery_entity,
+                            dict,
+                        )
+                        else None
+                    ),
+                }
+                if building_context
+                else {
+                    "water_temperature": (
+                        temperature_entity.get(
+                            "entity_id"
+                        )
+                    ),
+                    "device_battery": (
+                        battery_entity.get(
+                            "entity_id"
+                        )
+                        if isinstance(
+                            battery_entity,
+                            dict,
+                        )
+                        else None
+                    ),
+                }
+            ),
             "replacement_mode": replacement_mode,
             "replaced_device_id": (
                 current_device_id
@@ -544,7 +679,26 @@ def execute_zigbee_permit_join(
                 "expected_device_type": (
                     expected_device_type
                 ),
-                "building_module_id": building_module_id,
+                "building_module_id": (
+                    building_module_id
+                    if building_context
+                    else None
+                ),
+                "pv_surplus_module_id": (
+                    pv_surplus_module_id
+                    if energy_target_context
+                    else None
+                ),
+                "energy_target_id": (
+                    energy_target_id
+                    if energy_target_context
+                    else None
+                ),
+                "entity_role": (
+                    entity_role
+                    if energy_target_context
+                    else None
+                ),
             },
             error_message=str(exc),
         )
