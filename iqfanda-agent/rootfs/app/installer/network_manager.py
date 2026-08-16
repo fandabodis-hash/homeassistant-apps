@@ -1,8 +1,10 @@
 """Sitove funkce Installeru TNG IQ FANDA."""
 
 import json
+import os
 import re
 import subprocess
+import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 WIFI_INTERFACE = "wlan0"
@@ -315,6 +317,15 @@ def connect_wifi(
             "error": "Heslo Wi-Fi musí mít alespoň 8 znaků.",
         }
 
+    if "\n" in password or "\r" in password:
+        return {
+            "ok": False,
+            "error": (
+                "Heslo Wi-Fi obsahuje nepodporovany "
+                "znak noveho radku."
+            ),
+        }
+
     profile_name = "IQF Client WiFi"
 
     # Instalační AP zde nevypínáme ani nemažeme.
@@ -389,11 +400,70 @@ def connect_wifi(
             ),
         }
 
-    up_result = run_nmcli(
-        "connection",
-        "up",
-        profile_name,
-    )
+    # ======================================================
+    # PHASE 20 WIFI PASSWD FILE FIX START
+    #
+    # Home Assistant OS muze pri aktivaci Wi-Fi profilu
+    # znovu vyzadat WPA-PSK secret. Add-on nema interaktivni
+    # secret agent, proto PSK predame pres docasny nmcli
+    # passwd-file.
+    #
+    # Soubor existuje pouze po dobu aktivace, ma prava 0600
+    # a je odstranen i pri chybe.
+    # ======================================================
+
+    password_file_path = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            prefix="iqf-wifi-",
+            suffix=".passwd",
+            dir="/tmp",
+            delete=False,
+        ) as password_file:
+            password_file.write(
+                "802-11-wireless-security.psk:"
+                + password
+                + "\n"
+            )
+            password_file.flush()
+            os.fsync(
+                password_file.fileno()
+            )
+
+            password_file_path = (
+                password_file.name
+            )
+
+        os.chmod(
+            password_file_path,
+            0o600,
+        )
+
+        up_result = run_nmcli(
+            "connection",
+            "up",
+            profile_name,
+            "ifname",
+            interface,
+            "passwd-file",
+            password_file_path,
+        )
+
+    finally:
+        if password_file_path:
+            try:
+                os.unlink(
+                    password_file_path
+                )
+            except FileNotFoundError:
+                pass
+
+    # ======================================================
+    # PHASE 20 WIFI PASSWD FILE FIX END
+    # ======================================================
 
     if up_result.returncode != 0:
         return {

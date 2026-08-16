@@ -88,10 +88,10 @@ def cekat_na_registraci_zarizeni(
     host_api_thread: threading.Thread,
     access_point_thread: threading.Thread,
 ) -> None:
-    """Ceka na vytvoreni identity zarizeni."""
+    """Ceka na dokonceni cloudove registrace zarizeni."""
 
     logging.info(
-        "Kontroluji, zda je zarizeni pripraveno k registraci."
+        "Kontroluji, zda je dokoncena cloudova registrace zarizeni."
     )
 
     access_point_requested = False
@@ -115,7 +115,7 @@ def cekat_na_registraci_zarizeni(
 
         if DEVICE_CONFIG_PATH.exists():
             logging.info(
-                "Identita zarizeni byla vytvorena: %s",
+                "Cloudova identita zarizeni byla vytvorena: %s",
                 DEVICE_CONFIG_PATH,
             )
             return
@@ -142,7 +142,7 @@ def cekat_na_registraci_zarizeni(
 
         logging.info(
             "Zarizeni ceka na dokonceni instalace "
-            "a vytvoreni identity. "
+            "a cloudovou registraci. "
             "Dalsi kontrola za %s sekund.",
             PROVISIONING_RETRY_SECONDS,
         )

@@ -536,10 +536,13 @@ class SetupManager:
             or "TNG IQ FANDA"
         )
 
+        identity_software_version = str(
+            device_identity.get("software_version") or ""
+        ).strip()
+
         software_version = (
-            str(software_version).strip()
-            if software_version is not None
-            else None
+            str(software_version or "").strip()
+            or identity_software_version
         )
 
         if not ssid:
@@ -568,6 +571,7 @@ class SetupManager:
             "hardware_revision": hardware_revision,
             "device_hostname": device_hostname,
             "device_name": device_name,
+            "software_version": software_version,
         }
 
         missing_registration_fields = [
