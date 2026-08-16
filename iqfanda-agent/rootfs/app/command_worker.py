@@ -185,7 +185,7 @@ def execute_zigbee_permit_join(
 ) -> None:
     """
     Otevre parovani, ceka na nove zarizeni
-    a overi jeho teplotni entitu.
+    a overi entity podle instalacniho kontextu.
     """
 
     duration_seconds = normalize_duration_seconds(
@@ -297,17 +297,26 @@ def execute_zigbee_permit_join(
                 "Modul Budova vyzaduje vnitrni teplotni cidlo."
             )
     else:
-        if (
-            expected_device_type
-            != "energy_target_temperature_sensor"
-        ):
-            raise ValueError(
-                "Energeticky cil vyzaduje teplotni cidlo."
-            )
+        expected_type_by_role = {
+            "water_temperature":
+                "energy_target_temperature_sensor",
+            "output_switch":
+                "energy_target_switch",
+        }
 
-        if entity_role != "water_temperature":
+        expected_type = expected_type_by_role.get(
+            entity_role
+        )
+
+        if expected_type is None:
             raise ValueError(
                 "Nepodporovana role energetickeho cile."
+            )
+
+        if expected_device_type != expected_type:
+            raise ValueError(
+                "Role energetickeho cile neodpovida "
+                "ocekavanemu typu Zigbee zarizeni."
             )
 
         if replacement_mode:
@@ -520,14 +529,100 @@ def execute_zigbee_permit_join(
                 "Nove zarizeni nema platny seznam entit."
             )
 
-        if not isinstance(
-            temperature_entity,
-            dict,
+        switch_entity = None
+        power_entity = None
+        energy_entity = None
+        current_entity = None
+        voltage_entity = None
+
+        if (
+            energy_target_context
+            and entity_role == "output_switch"
         ):
-            raise HomeAssistantApiError(
-                "Nove zarizeni nema dostupnou platnou "
-                "teplotni entitu."
+            switch_candidates = [
+                item
+                for item in entities
+                if (
+                    isinstance(item, dict)
+                    and str(
+                        item.get("entity_id") or ""
+                    ).strip().startswith("switch.")
+                )
+            ]
+
+            if len(switch_candidates) != 1:
+                raise HomeAssistantApiError(
+                    "Nove zarizeni musi obsahovat "
+                    "prave jednu switch entitu."
+                )
+
+            switch_entity = (
+                switch_candidates[0]
             )
+
+            def find_measurement_entity(
+                device_class: str,
+            ) -> dict[str, Any] | None:
+                candidates = [
+                    item
+                    for item in entities
+                    if (
+                        isinstance(item, dict)
+                        and str(
+                            item.get("entity_id") or ""
+                        ).strip().startswith("sensor.")
+                        and str(
+                            item.get("device_class") or ""
+                        ).strip().lower()
+                        == device_class
+                    )
+                ]
+
+                if len(candidates) > 1:
+                    raise HomeAssistantApiError(
+                        "Zigbee spinaci prvek obsahuje "
+                        "vice mericich entit device_class "
+                        f"{device_class}."
+                    )
+
+                if candidates:
+                    return candidates[0]
+
+                return None
+
+            power_entity = (
+                find_measurement_entity(
+                    "power"
+                )
+            )
+
+            energy_entity = (
+                find_measurement_entity(
+                    "energy"
+                )
+            )
+
+            current_entity = (
+                find_measurement_entity(
+                    "current"
+                )
+            )
+
+            voltage_entity = (
+                find_measurement_entity(
+                    "voltage"
+                )
+            )
+
+        else:
+            if not isinstance(
+                temperature_entity,
+                dict,
+            ):
+                raise HomeAssistantApiError(
+                    "Nove zarizeni nema dostupnou platnou "
+                    "teplotni entitu."
+                )
 
         result = {
             "worker": "command_worker",
@@ -568,6 +663,31 @@ def execute_zigbee_permit_join(
                 if isinstance(battery_entity, dict)
                 else None
             ),
+            "switch_entity": (
+                switch_entity
+                if isinstance(switch_entity, dict)
+                else None
+            ),
+            "power_entity": (
+                power_entity
+                if isinstance(power_entity, dict)
+                else None
+            ),
+            "energy_entity": (
+                energy_entity
+                if isinstance(energy_entity, dict)
+                else None
+            ),
+            "current_entity": (
+                current_entity
+                if isinstance(current_entity, dict)
+                else None
+            ),
+            "voltage_entity": (
+                voltage_entity
+                if isinstance(voltage_entity, dict)
+                else None
+            ),
             "system_roles": (
                 {
                     "building_indoor_temperature": (
@@ -597,23 +717,74 @@ def execute_zigbee_permit_join(
                     ),
                 }
                 if building_context
-                else {
-                    "water_temperature": (
-                        temperature_entity.get(
-                            "entity_id"
-                        )
-                    ),
-                    "device_battery": (
-                        battery_entity.get(
-                            "entity_id"
-                        )
-                        if isinstance(
-                            battery_entity,
-                            dict,
-                        )
-                        else None
-                    ),
-                }
+                else (
+                    {
+                        "water_temperature": (
+                            temperature_entity.get(
+                                "entity_id"
+                            )
+                        ),
+                        "device_battery": (
+                            battery_entity.get(
+                                "entity_id"
+                            )
+                            if isinstance(
+                                battery_entity,
+                                dict,
+                            )
+                            else None
+                        ),
+                    }
+                    if entity_role
+                    == "water_temperature"
+                    else {
+                        "output_switch": (
+                            switch_entity.get(
+                                "entity_id"
+                            )
+                        ),
+                        "output_power": (
+                            power_entity.get(
+                                "entity_id"
+                            )
+                            if isinstance(
+                                power_entity,
+                                dict,
+                            )
+                            else None
+                        ),
+                        "output_energy": (
+                            energy_entity.get(
+                                "entity_id"
+                            )
+                            if isinstance(
+                                energy_entity,
+                                dict,
+                            )
+                            else None
+                        ),
+                        "output_current": (
+                            current_entity.get(
+                                "entity_id"
+                            )
+                            if isinstance(
+                                current_entity,
+                                dict,
+                            )
+                            else None
+                        ),
+                        "output_voltage": (
+                            voltage_entity.get(
+                                "entity_id"
+                            )
+                            if isinstance(
+                                voltage_entity,
+                                dict,
+                            )
+                            else None
+                        ),
+                    }
+                )
             ),
             "replacement_mode": replacement_mode,
             "replaced_device_id": (
@@ -634,34 +805,84 @@ def execute_zigbee_permit_join(
             error_message=None,
         )
 
-        logging.info(
-            (
-                "Nove Zigbee zarizeni bylo overeno. "
-                "Device ID: %s, teplota: %s, "
-                "vlhkost: %s, baterie: %s, "
-                "pocet entit: %s, prikaz: %s"
-            ),
-            device.get("device_id"),
-            temperature_entity.get("entity_id"),
-            (
-                humidity_entity.get("entity_id")
-                if isinstance(
-                    humidity_entity,
-                    dict,
-                )
-                else "neni dostupna"
-            ),
-            (
-                battery_entity.get("entity_id")
-                if isinstance(
-                    battery_entity,
-                    dict,
-                )
-                else "neni dostupna"
-            ),
-            len(entities),
-            command_id,
-        )
+        if (
+            energy_target_context
+            and entity_role == "output_switch"
+        ):
+            logging.info(
+                (
+                    "Nove Zigbee zarizeni bylo overeno. "
+                    "Device ID: %s, switch: %s, "
+                    "power: %s, energy: %s, "
+                    "current: %s, voltage: %s, "
+                    "pocet entit: %s, prikaz: %s"
+                ),
+                device.get("device_id"),
+                switch_entity.get("entity_id"),
+                (
+                    power_entity.get("entity_id")
+                    if isinstance(
+                        power_entity,
+                        dict,
+                    )
+                    else "neni dostupna"
+                ),
+                (
+                    energy_entity.get("entity_id")
+                    if isinstance(
+                        energy_entity,
+                        dict,
+                    )
+                    else "neni dostupna"
+                ),
+                (
+                    current_entity.get("entity_id")
+                    if isinstance(
+                        current_entity,
+                        dict,
+                    )
+                    else "neni dostupna"
+                ),
+                (
+                    voltage_entity.get("entity_id")
+                    if isinstance(
+                        voltage_entity,
+                        dict,
+                    )
+                    else "neni dostupna"
+                ),
+                len(entities),
+                command_id,
+            )
+        else:
+            logging.info(
+                (
+                    "Nove Zigbee zarizeni bylo overeno. "
+                    "Device ID: %s, teplota: %s, "
+                    "vlhkost: %s, baterie: %s, "
+                    "pocet entit: %s, prikaz: %s"
+                ),
+                device.get("device_id"),
+                temperature_entity.get("entity_id"),
+                (
+                    humidity_entity.get("entity_id")
+                    if isinstance(
+                        humidity_entity,
+                        dict,
+                    )
+                    else "neni dostupna"
+                ),
+                (
+                    battery_entity.get("entity_id")
+                    if isinstance(
+                        battery_entity,
+                        dict,
+                    )
+                    else "neni dostupna"
+                ),
+                len(entities),
+                command_id,
+            )
 
     except (
         HomeAssistantApiError,
