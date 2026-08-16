@@ -17,6 +17,7 @@ from telemetrie_modulu import (
     main as telemetrie_modulu_main,
 )
 from usb_inventory import main as usb_inventory_main
+from zha_bootstrap import main as zha_bootstrap_main
 
 
 logging.basicConfig(
@@ -81,6 +82,12 @@ def spustit_telemetrii_modulu() -> None:
     """Spusti periodickou telemetrii modulu."""
 
     telemetrie_modulu_main()
+
+
+def spustit_zha_bootstrap() -> None:
+    """Spusti automatickou inicializaci ZHA."""
+
+    zha_bootstrap_main()
 
 
 def cekat_na_registraci_zarizeni(
@@ -247,12 +254,18 @@ def main() -> None:
         nazev="module-telemetry",
     )
 
+    zha_bootstrap_thread = vytvorit_vlakno(
+        cil=spustit_zha_bootstrap,
+        nazev="zha-bootstrap",
+    )
+
     device_config_thread.start()
     heartbeat_thread.start()
     command_worker_thread.start()
     usb_inventory_thread.start()
     communication_manager_thread.start()
     module_telemetry_thread.start()
+    zha_bootstrap_thread.start()
 
     kontrolovat_sluzby(
         {
@@ -265,6 +278,7 @@ def main() -> None:
             "usb-inventory": usb_inventory_thread,
             "communication-manager": communication_manager_thread,
             "module-telemetry": module_telemetry_thread,
+            "zha-bootstrap": zha_bootstrap_thread,
         }
     )
 
