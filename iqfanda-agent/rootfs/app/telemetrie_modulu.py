@@ -11,6 +11,7 @@ from communication.fve_entity_mapper import (
     vytvorit_goodwe_fve_entity,
 )
 from communication.goodwe_probe import (
+    read_goodwe_control_snapshot,
     read_goodwe_et_snapshot,
 )
 from device_config import (
@@ -1303,8 +1304,20 @@ def odeslat_telemetrii_jednou() -> int:
         )
 
     try:
+        try:
+            control_entities = read_goodwe_control_snapshot(
+                runtime_configuration
+            )
+        except Exception as exc:
+            logging.warning(
+                "PV surplus control reader selhal; "
+                "pouzivam FVE snapshot: %s",
+                exc,
+            )
+            control_entities = entities
+
         vyhodnotit_pv_surplus_control_jednou(
-            fve_entities=entities,
+            fve_entities=control_entities,
             now=time.monotonic(),
         )
     except Exception as exc:
