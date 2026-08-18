@@ -1,0 +1,540 @@
+{
+  "schema_version": 1,
+  "profile_id": "foxess_h3_10_0_e",
+  "manufacturer": "foxess",
+  "manufacturer_name": "FoxESS",
+  "family": "h3_legacy",
+  "models": [
+    "H3-10.0-E"
+  ],
+  "verification_status": "physically_verified_00007",
+
+  "protocol": {
+    "type": "modbus_rtu",
+    "function_code": 3,
+    "baudrate": 9600,
+    "bytesize": 8,
+    "parity": "N",
+    "stopbits": 1,
+    "timeout_seconds": 1.0,
+    "retries": 0,
+    "allowed_device_ids": [
+      247
+    ]
+  },
+
+  "identification": {
+    "model": {
+      "address": 30000,
+      "count": 12,
+      "decoder": "ascii_low_byte",
+      "expected_values": [
+        "H3-10.0-E"
+      ]
+    },
+    "versions": {
+      "address": 30016,
+      "count": 3
+    }
+  },
+
+  "read_blocks": [
+    {
+      "address": 31000,
+      "count": 16
+    },
+    {
+      "address": 31016,
+      "count": 10
+    },
+    {
+      "address": 31026,
+      "count": 13
+    },
+    {
+      "address": 31041,
+      "count": 1
+    }
+  ],
+
+  "entities": [
+    {
+      "entity_key": "pv1.napeti",
+      "category": "pv_vstup",
+      "name": "Napětí PV1",
+      "address": 31000,
+      "register_type": "uint16",
+      "scale": 0.1,
+      "unit": "V",
+      "value_type": "number",
+      "device_class": "voltage",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "pv1.proud",
+      "category": "pv_vstup",
+      "name": "Proud PV1",
+      "address": 31001,
+      "register_type": "int16",
+      "scale": 0.1,
+      "unit": "A",
+      "value_type": "number",
+      "device_class": "current",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "pv1.vykon",
+      "category": "pv_vstup",
+      "name": "Výkon PV1",
+      "address": 31002,
+      "register_type": "int16",
+      "scale": 1,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "positive_generation",
+      "verification_status": "physically_verified_00007"
+    },
+
+    {
+      "entity_key": "pv2.napeti",
+      "category": "pv_vstup",
+      "name": "Napětí PV2",
+      "address": 31003,
+      "register_type": "uint16",
+      "scale": 0.1,
+      "unit": "V",
+      "value_type": "number",
+      "device_class": "voltage",
+      "verification_status": "map_confirmed_output_zero"
+    },
+    {
+      "entity_key": "pv2.proud",
+      "category": "pv_vstup",
+      "name": "Proud PV2",
+      "address": 31004,
+      "register_type": "int16",
+      "scale": 0.1,
+      "unit": "A",
+      "value_type": "number",
+      "device_class": "current",
+      "verification_status": "map_confirmed_output_zero"
+    },
+    {
+      "entity_key": "pv2.vykon",
+      "category": "pv_vstup",
+      "name": "Výkon PV2",
+      "address": 31005,
+      "register_type": "int16",
+      "scale": 1,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "positive_generation",
+      "verification_status": "map_confirmed_output_zero"
+    },
+
+    {
+      "entity_key": "sit.napeti_l1",
+      "category": "sit",
+      "name": "Napětí sítě L1",
+      "address": 31006,
+      "register_type": "uint16",
+      "scale": 0.1,
+      "unit": "V",
+      "value_type": "number",
+      "device_class": "voltage",
+      "verification_status": "physically_verified_grid_off"
+    },
+    {
+      "entity_key": "sit.napeti_l2",
+      "category": "sit",
+      "name": "Napětí sítě L2",
+      "address": 31007,
+      "register_type": "uint16",
+      "scale": 0.1,
+      "unit": "V",
+      "value_type": "number",
+      "device_class": "voltage",
+      "verification_status": "physically_verified_grid_off"
+    },
+    {
+      "entity_key": "sit.napeti_l3",
+      "category": "sit",
+      "name": "Napětí sítě L3",
+      "address": 31008,
+      "register_type": "uint16",
+      "scale": 0.1,
+      "unit": "V",
+      "value_type": "number",
+      "device_class": "voltage",
+      "verification_status": "physically_verified_grid_off"
+    },
+    {
+      "entity_key": "sit.frekvence",
+      "category": "sit",
+      "name": "Frekvence sítě",
+      "address": 31015,
+      "register_type": "uint16",
+      "scale": 0.01,
+      "unit": "Hz",
+      "value_type": "number",
+      "device_class": "frequency",
+      "verification_status": "physically_verified_grid_off"
+    },
+
+    {
+      "entity_key": "stridac.teplota_chladice",
+      "category": "stridac",
+      "name": "Teplota střídače",
+      "address": 31032,
+      "register_type": "int16",
+      "scale": 0.1,
+      "unit": "°C",
+      "value_type": "number",
+      "device_class": "temperature",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "stridac.teplota_vzduchu",
+      "category": "stridac",
+      "name": "Vnitřní teplota střídače",
+      "address": 31033,
+      "register_type": "int16",
+      "scale": 0.1,
+      "unit": "°C",
+      "value_type": "number",
+      "device_class": "temperature",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "stridac.pracovni_rezim",
+      "category": "stridac",
+      "name": "Pracovní režim střídače",
+      "address": 31041,
+      "register_type": "uint16",
+      "scale": 1,
+      "unit": null,
+      "value_type": "integer",
+      "verification_status": "physically_verified_00007",
+      "value_map": {
+        "3": "eps_off_grid"
+      }
+    },
+
+    {
+      "entity_key": "backup.napeti_l1",
+      "category": "backup",
+      "name": "Backup napětí L1",
+      "address": 31016,
+      "register_type": "uint16",
+      "scale": 0.1,
+      "unit": "V",
+      "value_type": "number",
+      "device_class": "voltage",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "backup.napeti_l2",
+      "category": "backup",
+      "name": "Backup napětí L2",
+      "address": 31017,
+      "register_type": "uint16",
+      "scale": 0.1,
+      "unit": "V",
+      "value_type": "number",
+      "device_class": "voltage",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "backup.napeti_l3",
+      "category": "backup",
+      "name": "Backup napětí L3",
+      "address": 31018,
+      "register_type": "uint16",
+      "scale": 0.1,
+      "unit": "V",
+      "value_type": "number",
+      "device_class": "voltage",
+      "verification_status": "physically_verified_00007"
+    },
+
+    {
+      "entity_key": "backup.proud_l1",
+      "category": "backup",
+      "name": "Backup proud L1",
+      "address": 31019,
+      "register_type": "int16",
+      "scale": 0.1,
+      "unit": "A",
+      "value_type": "number",
+      "device_class": "current",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "backup.proud_l2",
+      "category": "backup",
+      "name": "Backup proud L2",
+      "address": 31020,
+      "register_type": "int16",
+      "scale": 0.1,
+      "unit": "A",
+      "value_type": "number",
+      "device_class": "current",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "backup.proud_l3",
+      "category": "backup",
+      "name": "Backup proud L3",
+      "address": 31021,
+      "register_type": "int16",
+      "scale": 0.1,
+      "unit": "A",
+      "value_type": "number",
+      "device_class": "current",
+      "verification_status": "physically_verified_00007"
+    },
+
+    {
+      "entity_key": "backup.vykon_l1",
+      "category": "backup",
+      "name": "Backup výkon L1",
+      "address": 31022,
+      "register_type": "int16",
+      "scale": 1,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "positive_consumption",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "backup.vykon_l2",
+      "category": "backup",
+      "name": "Backup výkon L2",
+      "address": 31023,
+      "register_type": "int16",
+      "scale": 1,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "positive_consumption",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "backup.vykon_l3",
+      "category": "backup",
+      "name": "Backup výkon L3",
+      "address": 31024,
+      "register_type": "int16",
+      "scale": 1,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "positive_consumption",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "backup.vykon_celkem",
+      "category": "backup",
+      "name": "Backup výkon celkem",
+      "derived": {
+        "operation": "sum",
+        "entity_keys": [
+          "backup.vykon_l1",
+          "backup.vykon_l2",
+          "backup.vykon_l3"
+        ]
+      },
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "positive_consumption",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "backup.frekvence",
+      "category": "backup",
+      "name": "Backup frekvence",
+      "address": 31025,
+      "register_type": "uint16",
+      "scale": 0.01,
+      "unit": "Hz",
+      "value_type": "number",
+      "device_class": "frequency",
+      "verification_status": "physically_verified_00007"
+    },
+
+    {
+      "entity_key": "spotreba.vykon_l1",
+      "category": "spotreba",
+      "name": "Spotřeba L1",
+      "address": 31029,
+      "register_type": "int16",
+      "scale": 1,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "positive_consumption",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "spotreba.vykon_l2",
+      "category": "spotreba",
+      "name": "Spotřeba L2",
+      "address": 31030,
+      "register_type": "int16",
+      "scale": 1,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "positive_consumption",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "spotreba.vykon_l3",
+      "category": "spotreba",
+      "name": "Spotřeba L3",
+      "address": 31031,
+      "register_type": "int16",
+      "scale": 1,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "positive_consumption",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "spotreba.vykon_celkem",
+      "category": "spotreba",
+      "name": "Spotřeba celkem",
+      "derived": {
+        "operation": "sum",
+        "entity_keys": [
+          "spotreba.vykon_l1",
+          "spotreba.vykon_l2",
+          "spotreba.vykon_l3"
+        ]
+      },
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "positive_consumption",
+      "verification_status": "physically_verified_00007"
+    },
+
+    {
+      "entity_key": "baterie.napeti",
+      "category": "baterie_souhrn",
+      "name": "Napětí baterie",
+      "address": 31034,
+      "register_type": "int16",
+      "scale": 0.1,
+      "unit": "V",
+      "value_type": "number",
+      "device_class": "voltage",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "baterie.proud",
+      "category": "baterie_souhrn",
+      "name": "Proud baterie",
+      "address": 31035,
+      "register_type": "int16",
+      "scale": 0.1,
+      "unit": "A",
+      "value_type": "number",
+      "device_class": "current",
+      "sign_convention": "negative_charging_positive_discharging",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "baterie.vykon",
+      "category": "baterie_souhrn",
+      "name": "Výkon baterie",
+      "address": 31036,
+      "register_type": "int16",
+      "scale": 1,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "negative_charging_positive_discharging",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "baterie.teplota",
+      "category": "baterie_souhrn",
+      "name": "Teplota baterie",
+      "address": 31037,
+      "register_type": "int16",
+      "scale": 0.1,
+      "unit": "°C",
+      "value_type": "number",
+      "device_class": "temperature",
+      "verification_status": "physically_verified_00007"
+    },
+    {
+      "entity_key": "baterie.soc",
+      "category": "baterie_souhrn",
+      "name": "Stav nabití baterie",
+      "address": 31038,
+      "register_type": "uint16",
+      "scale": 1,
+      "unit": "%",
+      "value_type": "integer",
+      "device_class": "battery",
+      "verification_status": "physically_verified_00007"
+    },
+
+    {
+      "entity_key": "smartmeter.vykon_l1",
+      "enabled": false,
+      "address": 31026,
+      "register_type": "int16",
+      "scale": 1,
+      "verification_status": "pending_grid_test"
+    },
+    {
+      "entity_key": "smartmeter.vykon_l2",
+      "enabled": false,
+      "address": 31027,
+      "register_type": "int16",
+      "scale": 1,
+      "verification_status": "pending_grid_test"
+    },
+    {
+      "entity_key": "smartmeter.vykon_l3",
+      "enabled": false,
+      "address": 31028,
+      "register_type": "int16",
+      "scale": 1,
+      "verification_status": "pending_grid_test"
+    },
+
+    {
+      "entity_key": "stridac.vykon_l1",
+      "enabled": false,
+      "address": 31012,
+      "register_type": "int16",
+      "scale": 1,
+      "verification_status": "pending_grid_test"
+    },
+    {
+      "entity_key": "stridac.vykon_l2",
+      "enabled": false,
+      "address": 31013,
+      "register_type": "int16",
+      "scale": 1,
+      "verification_status": "pending_grid_test"
+    },
+    {
+      "entity_key": "stridac.vykon_l3",
+      "enabled": false,
+      "address": 31014,
+      "register_type": "int16",
+      "scale": 1,
+      "verification_status": "pending_grid_test"
+    }
+  ]
+}

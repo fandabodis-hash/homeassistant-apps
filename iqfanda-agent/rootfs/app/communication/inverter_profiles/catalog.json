@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "profiles": [
+    {
+      "profile_id": "foxess_h3_10_0_e",
+      "manufacturer": "foxess",
+      "manufacturer_name": "FoxESS",
+      "models": [
+        "H3-10.0-E"
+      ],
+      "file": "foxess_h3_10_0_e.json",
+      "status": "physically_verified"
+    },
+    {
+      "profile_id": "goodwe_et",
+      "manufacturer": "goodwe",
+      "manufacturer_name": "GoodWe",
+      "models": [
+        "GW5K-ET"
+      ],
+      "file": "goodwe_et.json",
+      "status": "physically_verified"
+    }
+  ]
+}
