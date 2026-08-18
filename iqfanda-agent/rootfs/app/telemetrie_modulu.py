@@ -10,6 +10,10 @@ from typing import Any
 from communication.fve_entity_mapper import (
     vytvorit_goodwe_fve_entity,
 )
+from communication.inverter_adapter import (
+    read_inverter_snapshot,
+    select_inverter_profile,
+)
 from communication.goodwe_probe import (
     read_goodwe_control_snapshot,
     read_goodwe_et_snapshot,
@@ -118,6 +122,198 @@ def najdi_goodwe_fve_runtime(
 
     return None
 
+
+
+def najdi_fve_runtime(
+    cloud_config: dict[str, Any],
+) -> dict[str, Any] | None:
+    """
+    Najde aktivni read-only FVE runtime podporovany
+    univerzalnim profilem stridace.
+    """
+    runtime_configurations = cloud_config.get(
+        "module_runtime_configurations"
+    )
+
+    if not isinstance(
+        runtime_configurations,
+        list,
+    ):
+        return None
+
+    for runtime_configuration in runtime_configurations:
+        if not isinstance(
+            runtime_configuration,
+            dict,
+        ):
+            continue
+
+        module_key = str(
+            runtime_configuration.get(
+                "module_key"
+            )
+            or ""
+        ).strip().lower()
+
+        communication_type = str(
+            runtime_configuration.get(
+                "communication_type"
+            )
+            or ""
+        ).strip().lower()
+
+        if (
+            module_key != "photovoltaic"
+            or runtime_configuration.get(
+                "telemetry_enabled"
+            )
+            is not True
+            or runtime_configuration.get(
+                "read_only"
+            )
+            is not True
+            or communication_type != "rs485"
+        ):
+            continue
+
+        manufacturer = str(
+            runtime_configuration.get(
+                "manufacturer"
+            )
+            or ""
+        ).strip()
+
+        model = str(
+            runtime_configuration.get(
+                "model"
+            )
+            or ""
+        ).strip()
+
+        if (
+            not manufacturer
+            or not model
+        ):
+            continue
+
+        try:
+            select_inverter_profile(
+                manufacturer=manufacturer,
+                model=model,
+            )
+
+        except ValueError:
+            continue
+
+        return runtime_configuration
+
+    return None
+
+
+def nacti_fve_telemetrii(
+    runtime_configuration: dict[str, Any],
+) -> tuple[
+    dict[str, Any],
+    list[dict[str, Any]],
+    str,
+    str,
+]:
+    """
+    Nacte FVE data pres univerzalni adapter.
+
+    GoodWe ma docasny legacy fallback pro bezpecnou
+    migraci existujici produkcni instalace.
+    """
+    manufacturer = str(
+        runtime_configuration.get(
+            "manufacturer"
+        )
+        or ""
+    ).strip().lower()
+
+    if not manufacturer:
+        raise ValueError(
+            "FVE runtime nema vyrobce."
+        )
+
+    try:
+        snapshot = read_inverter_snapshot(
+            runtime_configuration
+        )
+
+        if not isinstance(
+            snapshot,
+            dict,
+        ):
+            raise RuntimeError(
+                "Universalni reader nevratil platny snapshot."
+            )
+
+        entities = snapshot.get(
+            "entities"
+        )
+
+        if (
+            not isinstance(
+                entities,
+                list,
+            )
+            or not entities
+        ):
+            raise RuntimeError(
+                "Universalni reader nevratil FVE entity."
+            )
+
+        return (
+            snapshot,
+            entities,
+            manufacturer + "_rs485",
+            "universal",
+        )
+
+    except Exception as exc:
+        if manufacturer != "goodwe":
+            raise
+
+        logging.warning(
+            "Universalni reader GoodWe selhal; "
+            "pouzivam docasny legacy fallback: %s",
+            exc,
+        )
+
+        snapshot = read_goodwe_et_snapshot(
+            runtime_configuration
+        )
+
+        if not isinstance(
+            snapshot,
+            dict,
+        ):
+            raise RuntimeError(
+                "Legacy GoodWe reader nevratil platny snapshot."
+            )
+
+        entities = vytvorit_goodwe_fve_entity(
+            snapshot
+        )
+
+        if (
+            not isinstance(
+                entities,
+                list,
+            )
+            or not entities
+        ):
+            raise RuntimeError(
+                "Legacy GoodWe mapper nevratil FVE entity."
+            )
+
+        return (
+            snapshot,
+            entities,
+            "goodwe_rs485",
+            "goodwe_legacy_fallback",
+        )
 
 
 def najdi_pv_surplus_runtime(
@@ -1276,50 +1472,74 @@ def odeslat_telemetrii_jednou() -> int:
         cloud_config
     )
 
-    runtime_configuration = najdi_goodwe_fve_runtime(
+    runtime_configuration = najdi_fve_runtime(
         cloud_config
     )
 
     if runtime_configuration is None:
         logging.info(
-            "Aktivni GoodWe FVE telemetrie neni "
+            "Aktivni podporovana FVE telemetrie neni "
             "v cloudove konfiguraci povolena."
         )
         return local_interval
 
-    snapshot = read_goodwe_et_snapshot(
+    (
+        snapshot,
+        entities,
+        telemetry_source,
+        telemetry_reader,
+    ) = nacti_fve_telemetrii(
         runtime_configuration
     )
 
-    if not isinstance(snapshot, dict):
-        raise RuntimeError(
-            "GoodWe runtime reader nevratil platny snapshot."
+    manufacturer = str(
+        runtime_configuration.get(
+            "manufacturer"
         )
+        or ""
+    ).strip().lower()
 
-    entities = vytvorit_goodwe_fve_entity(snapshot)
-
-    if not isinstance(entities, list) or not entities:
-        raise RuntimeError(
-            "Mapper GoodWe nevratil zadne FVE entity."
+    model = str(
+        runtime_configuration.get(
+            "model"
         )
+        or ""
+    ).strip()
+
+    logging.info(
+        "FVE telemetrie reader=%s, vyrobce=%s, model=%s.",
+        telemetry_reader,
+        manufacturer,
+        model,
+    )
 
     try:
-        try:
-            control_entities = read_goodwe_control_snapshot(
-                runtime_configuration
-            )
-        except Exception as exc:
-            logging.warning(
-                "PV surplus control reader selhal; "
-                "pouzivam FVE snapshot: %s",
-                exc,
-            )
-            control_entities = entities
+        control_entities = entities
+
+        #
+        # GoodWe control reader zustava zatim oddeleny
+        # od univerzalni read-only telemetry vrstvy.
+        #
+        if manufacturer == "goodwe":
+            try:
+                control_entities = read_goodwe_control_snapshot(
+                    runtime_configuration
+                )
+
+            except Exception as exc:
+                logging.warning(
+                    "PV surplus control reader selhal; "
+                    "pouzivam FVE snapshot: %s",
+                    exc,
+                )
+
+                control_entities = entities
 
         vyhodnotit_pv_surplus_control_jednou(
             fve_entities=control_entities,
             now=time.monotonic(),
         )
+
     except Exception as exc:
         logging.warning(
             "PV surplus Decision Engine selhal: %s",
@@ -1327,27 +1547,60 @@ def odeslat_telemetrii_jednou() -> int:
         )
 
     captured_at = vytvorit_cas_snapshotu()
-    snapshot_complete = snapshot.get("complete") is True
+
+    snapshot_complete = (
+        snapshot.get(
+            "complete"
+        )
+        is True
+    )
 
     response = cloud_client.submit_module_telemetry(
-        device_uuid=str(identity["device_uuid"]),
-        device_token=str(identity["device_token"]),
+        device_uuid=str(
+            identity[
+                "device_uuid"
+            ]
+        ),
+        device_token=str(
+            identity[
+                "device_token"
+            ]
+        ),
         module_key="photovoltaic",
-        source="goodwe_rs485",
+        source=telemetry_source,
         captured_at=captured_at,
         entities=entities,
         snapshot_complete=snapshot_complete,
     )
 
-    if not isinstance(response, dict) or not response.get("ok"):
+    if (
+        not isinstance(
+            response,
+            dict,
+        )
+        or not response.get(
+            "ok"
+        )
+    ):
         status_code = (
-            response.get("status_code")
-            if isinstance(response, dict)
+            response.get(
+                "status_code"
+            )
+            if isinstance(
+                response,
+                dict,
+            )
             else None
         )
+
         error = (
-            response.get("error")
-            if isinstance(response, dict)
+            response.get(
+                "error"
+            )
+            if isinstance(
+                response,
+                dict,
+            )
             else "Neplatna odpoved cloudoveho klienta."
         )
 
@@ -1356,14 +1609,20 @@ def odeslat_telemetrii_jednou() -> int:
             f"HTTP: {status_code}, chyba: {error}"
         )
 
-    response_data = response.get("data")
+    response_data = response.get(
+        "data"
+    )
 
-    if not isinstance(response_data, dict):
+    if not isinstance(
+        response_data,
+        dict,
+    ):
         response_data = {}
 
     next_interval = ziskej_interval_telemetrie(
         response_data
-        if "telemetry_interval_seconds" in response_data
+        if "telemetry_interval_seconds"
+        in response_data
         else cloud_config
     )
 
@@ -1373,30 +1632,35 @@ def odeslat_telemetrii_jednou() -> int:
         "uplny snapshot: %s, dalsi odeslani za %s s.",
         response_data.get(
             "entities_received",
-            len(entities),
+            len(
+                entities
+            ),
         ),
         response_data.get(
             "entities_updated",
-            len(entities),
+            len(
+                entities
+            ),
         ),
         snapshot_complete,
         next_interval,
     )
-
 
     try:
         odeslat_pv_surplus_telemetrii(
             identity=identity,
             cloud_config=cloud_config,
         )
+
     except Exception as exc:
         logging.warning(
             "PV surplus telemetrie selhala, "
-            "GoodWe telemetrie zustava aktivni: %s",
+            "FVE telemetrie zustava aktivni: %s",
             exc,
         )
 
     return next_interval
+
 
 
 def main() -> None:
