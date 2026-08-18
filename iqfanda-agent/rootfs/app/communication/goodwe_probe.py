@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import os
-import threading
 from pathlib import Path
 from typing import Any
 
 from pymodbus.client import ModbusSerialClient
 
 from communication.json_utils import nacti_json
+from communication.modbus_bus_lock import (
+    ziskej_zamek_modbus_sbernice,
+)
 
 
 COMMUNICATION_STATE_PATH = Path(
@@ -23,8 +25,6 @@ ALLOWED_DEVICE_IDS = (
     247,
     1,
 )
-
-GOODWE_MODBUS_LOCK = threading.Lock()
 
 
 PROBE_BLOCKS = (
@@ -933,7 +933,7 @@ def _read_et_snapshot(
     return snapshot
 
 
-def _probe_goodwe_modbus_unlocked(
+def _probe_goodwe_modbus_with_bus_lock(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     """
@@ -984,6 +984,10 @@ def _probe_goodwe_modbus_unlocked(
         )
     )
 
+    bus_lock = ziskej_zamek_modbus_sbernice(
+        serial_path
+    )
+
     result: dict[str, Any] = {
         "executor": "goodwe_probe",
         "phase": "probe_started",
@@ -1022,6 +1026,8 @@ def _probe_goodwe_modbus_unlocked(
         timeout=1.0,
         retries=0,
     )
+
+    bus_lock.acquire()
 
     try:
         if not client.connect():
@@ -1160,7 +1166,10 @@ def _probe_goodwe_modbus_unlocked(
         return result
 
     finally:
-        client.close()
+        try:
+            client.close()
+        finally:
+            bus_lock.release()
 
 
 def read_goodwe_control_snapshot(
@@ -1260,13 +1269,17 @@ def read_goodwe_control_snapshot(
 
     registers_by_name: dict[str, list[int]] = {}
 
-    with GOODWE_MODBUS_LOCK:
-        _communicator, serial_path = (
-            _find_communicator(
-                communicator_id
-            )
+    _communicator, serial_path = (
+        _find_communicator(
+            communicator_id
         )
+    )
 
+    bus_lock = ziskej_zamek_modbus_sbernice(
+        serial_path
+    )
+
+    with bus_lock:
         client = ModbusSerialClient(
             port=serial_path,
             baudrate=9600,
@@ -1465,13 +1478,17 @@ def read_goodwe_et_snapshot(
             "Modbus adresu."
         )
 
-    with GOODWE_MODBUS_LOCK:
-        _communicator, serial_path = (
-            _find_communicator(
-                communicator_id
-            )
+    _communicator, serial_path = (
+        _find_communicator(
+            communicator_id
         )
+    )
 
+    bus_lock = ziskej_zamek_modbus_sbernice(
+        serial_path
+    )
+
+    with bus_lock:
         client = ModbusSerialClient(
             port=serial_path,
             baudrate=9600,
@@ -1524,11 +1541,10 @@ def probe_goodwe_modbus(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     """
-    Provede instalacni GoodWe probe pod spolecnym zamkem.
+    Provede instalacni GoodWe probe pod per-port zamkem.
 
     Zachovava puvodni verejny kontrakt command workeru.
     """
-    with GOODWE_MODBUS_LOCK:
-        return _probe_goodwe_modbus_unlocked(
-            payload
-        )
+    return _probe_goodwe_modbus_with_bus_lock(
+        payload
+    )

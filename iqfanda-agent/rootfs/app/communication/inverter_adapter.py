@@ -8,6 +8,10 @@ import os
 from pathlib import Path
 from typing import Any
 
+from communication.modbus_bus_lock import (
+    ziskej_zamek_modbus_sbernice,
+)
+
 
 PROFILE_DIRECTORY = (
     Path(__file__).resolve().parent
@@ -1188,6 +1192,10 @@ def read_inverter_snapshot(
         communicator_id
     )
 
+    bus_lock = ziskej_zamek_modbus_sbernice(
+        serial_path
+    )
+
     #
     # Lazy import:
     # Windows fixture test nepotrebuje pymodbus.
@@ -1224,6 +1232,8 @@ def read_inverter_snapshot(
     )
 
     registers: dict[int, int] = {}
+
+    bus_lock.acquire()
 
     try:
         if not client.connect():
@@ -1306,7 +1316,10 @@ def read_inverter_snapshot(
                 ] = value
 
     finally:
-        client.close()
+        try:
+            client.close()
+        finally:
+            bus_lock.release()
 
     entities = decode_profile_entities(
         profile=profile,

@@ -8,8 +8,10 @@ from typing import Any, Callable
 from pymodbus.client import ModbusSerialClient
 
 from communication.goodwe_probe import (
-    GOODWE_MODBUS_LOCK,
     _find_communicator,
+)
+from communication.modbus_bus_lock import (
+    ziskej_zamek_modbus_sbernice,
 )
 
 
@@ -545,13 +547,17 @@ def execute_goodwe_ems_from_cloud_config(
             "Target SOC je mimo rozsah 0 az 100 %."
         )
 
-    with GOODWE_MODBUS_LOCK:
-        _communicator, serial_path = (
-            _find_communicator(
-                communicator_id
-            )
+    _communicator, serial_path = (
+        _find_communicator(
+            communicator_id
         )
+    )
 
+    bus_lock = ziskej_zamek_modbus_sbernice(
+        serial_path
+    )
+
+    with bus_lock:
         client = ModbusSerialClient(
             port=serial_path,
             baudrate=9600,
