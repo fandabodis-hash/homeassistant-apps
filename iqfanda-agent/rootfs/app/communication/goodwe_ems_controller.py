@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 from typing import Any, Callable
 
 from pymodbus.client import ModbusSerialClient
@@ -134,11 +135,27 @@ def _read_single_register(
     device_id: int,
     address: int,
 ) -> int:
-    result = client.read_holding_registers(
-        address=address,
-        count=1,
-        device_id=device_id,
-    )
+    result = None
+
+    for attempt in range(2):
+        try:
+            result = client.read_holding_registers(
+                address=address,
+                count=1,
+                device_id=device_id,
+            )
+        except Exception:
+            if attempt >= 1:
+                raise
+
+            time.sleep(0.15)
+            continue
+
+        if result is not None:
+            break
+
+        if attempt == 0:
+            time.sleep(0.15)
 
     if result is None:
         raise RuntimeError(
