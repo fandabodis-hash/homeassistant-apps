@@ -1347,3 +1347,540 @@ def read_inverter_snapshot(
             )
         },
     }
+
+
+# PHASE 21 GENERIC INVERTER PROBE START
+
+
+def probe_inverter_modbus(
+    command_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Profilovy pouze cteci instalacni Modbus RTU probe.
+
+    Vyrobce a model se nerozvetvuji v kodu.
+    Parametry, slave ID a identifikaci urcuje profil.
+    """
+    if not isinstance(
+        command_payload,
+        dict,
+    ):
+        raise ValueError(
+            "Payload inverter probe nema platny format."
+        )
+
+    if command_payload.get(
+        "read_only"
+    ) is not True:
+        raise ValueError(
+            "Inverter probe musi byt read-only."
+        )
+
+    manufacturer = str(
+        command_payload.get(
+            "manufacturer"
+        )
+        or ""
+    ).strip()
+
+    model = str(
+        command_payload.get(
+            "inverter_model"
+        )
+        or ""
+    ).strip()
+
+    communication_type = _normalize_text(
+        command_payload.get(
+            "communication_type"
+        )
+    )
+
+    communicator_id = str(
+        command_payload.get(
+            "communicator_id"
+        )
+        or ""
+    ).strip()
+
+    if not manufacturer:
+        raise ValueError(
+            "Inverter probe nema vyrobce."
+        )
+
+    if not model:
+        raise ValueError(
+            "Inverter probe nema model."
+        )
+
+    if communication_type != "rs485":
+        raise ValueError(
+            "Inverter probe vyzaduje RS485."
+        )
+
+    if not communicator_id:
+        raise ValueError(
+            "Inverter probe nema communicator_id."
+        )
+
+    profile = select_inverter_profile(
+        manufacturer=manufacturer,
+        model=model,
+    )
+
+    protocol = profile[
+        "protocol"
+    ]
+
+    device_ids = list(
+        protocol[
+            "allowed_device_ids"
+        ]
+    )
+
+    serial_path = _find_communicator_path(
+        communicator_id
+    )
+
+    bus_lock = ziskej_zamek_modbus_sbernice(
+        serial_path
+    )
+
+    from pymodbus.client import (
+        ModbusSerialClient,
+    )
+
+    client = ModbusSerialClient(
+        port=serial_path,
+        baudrate=int(
+            protocol["baudrate"]
+        ),
+        bytesize=int(
+            protocol["bytesize"]
+        ),
+        parity=str(
+            protocol["parity"]
+        ),
+        stopbits=int(
+            protocol["stopbits"]
+        ),
+        timeout=float(
+            protocol[
+                "timeout_seconds"
+            ]
+        ),
+        retries=int(
+            protocol.get(
+                "retries",
+                0,
+            )
+        ),
+    )
+
+    function_code = int(
+        protocol[
+            "function_code"
+        ]
+    )
+
+    attempts: list[
+        dict[str, Any]
+    ] = []
+
+    matched_device_id = None
+    matched_block = None
+    identified_model = None
+
+    communication_detected = False
+    register_readable = False
+    profile_verified = False
+
+    phase = "no_modbus_response"
+
+    identification = profile.get(
+        "identification"
+    )
+
+    model_identification = (
+        identification.get(
+            "model"
+        )
+        if isinstance(
+            identification,
+            dict,
+        )
+        else None
+    )
+
+    probe_blocks = profile.get(
+        "probe_blocks"
+    )
+
+    def read_block(
+        *,
+        device_id: int,
+        address: int,
+        count: int,
+    ):
+        try:
+            if function_code == 3:
+                response = (
+                    client.read_holding_registers(
+                        address=address,
+                        count=count,
+                        device_id=device_id,
+                    )
+                )
+
+            elif function_code == 4:
+                response = (
+                    client.read_input_registers(
+                        address=address,
+                        count=count,
+                        device_id=device_id,
+                    )
+                )
+
+            else:
+                raise RuntimeError(
+                    "Nepovoleny Modbus function code."
+                )
+
+        except Exception as exc:
+            return (
+                "transport_error",
+                None,
+                (
+                    type(exc).__name__
+                    + ": "
+                    + str(exc)
+                ),
+            )
+
+        if response is None:
+            return (
+                "no_response",
+                None,
+                None,
+            )
+
+        if response.isError():
+            return (
+                "modbus_exception_response",
+                None,
+                str(response),
+            )
+
+        values = [
+            int(value)
+            for value in getattr(
+                response,
+                "registers",
+                [],
+            )
+        ]
+
+        if len(values) != count:
+            return (
+                "invalid_register_count",
+                values,
+                (
+                    "Ocekavano "
+                    + str(count)
+                    + ", prijato "
+                    + str(len(values))
+                ),
+            )
+
+        return (
+            "register_response",
+            values,
+            None,
+        )
+
+    bus_lock.acquire()
+
+    try:
+        if not client.connect():
+            raise RuntimeError(
+                "Seriovy port stridace nelze otevrit."
+            )
+
+        for device_id in device_ids:
+
+            #
+            # Profil s explicitni identifikaci modelu.
+            # FoxESS H3 pouziva tuto cestu.
+            #
+            if isinstance(
+                model_identification,
+                dict,
+            ):
+                address = model_identification.get(
+                    "address"
+                )
+
+                count = model_identification.get(
+                    "count"
+                )
+
+                decoder = _normalize_text(
+                    model_identification.get(
+                        "decoder"
+                    )
+                )
+
+                expected_values = (
+                    model_identification.get(
+                        "expected_values"
+                    )
+                )
+
+                if (
+                    type(address) is not int
+                    or type(count) is not int
+                    or count < 1
+                    or count > 125
+                ):
+                    raise ValueError(
+                        "Profil ma neplatny "
+                        "identifikacni blok."
+                    )
+
+                if decoder != "ascii_low_byte":
+                    raise ValueError(
+                        "Nepodporovany "
+                        "identifikacni decoder."
+                    )
+
+                if (
+                    not isinstance(
+                        expected_values,
+                        list,
+                    )
+                    or not expected_values
+                ):
+                    raise ValueError(
+                        "Profil nema expected_values."
+                    )
+
+                state, values, error = read_block(
+                    device_id=device_id,
+                    address=address,
+                    count=count,
+                )
+
+                attempt = {
+                    "device_id": device_id,
+                    "block": (
+                        "identification_model"
+                    ),
+                    "address": address,
+                    "count": count,
+                    "phase": state,
+                }
+
+                if error:
+                    attempt["error"] = error
+
+                if state in {
+                    "register_response",
+                    "modbus_exception_response",
+                }:
+                    communication_detected = True
+
+                if (
+                    state
+                    == "register_response"
+                    and values is not None
+                ):
+                    register_readable = True
+
+                    decoded = decode_ascii_low_byte(
+                        values
+                    )
+
+                    attempt[
+                        "identified_model"
+                    ] = decoded
+
+                    normalized_expected = {
+                        _normalize_text(value)
+                        for value
+                        in expected_values
+                    }
+
+                    if (
+                        _normalize_text(decoded)
+                        in normalized_expected
+                    ):
+                        matched_device_id = (
+                            device_id
+                        )
+
+                        matched_block = (
+                            "identification_model"
+                        )
+
+                        identified_model = (
+                            decoded
+                        )
+
+                        profile_verified = True
+                        phase = (
+                            "profile_identified"
+                        )
+
+                    else:
+                        attempt[
+                            "phase"
+                        ] = (
+                            "identification_mismatch"
+                        )
+
+                attempts.append(
+                    attempt
+                )
+
+                if profile_verified:
+                    break
+
+                continue
+
+            #
+            # Profil se probe_blocks.
+            # GoodWe pouziva tuto cestu.
+            #
+            if not isinstance(
+                probe_blocks,
+                list,
+            ):
+                raise ValueError(
+                    "Profil nema probe_blocks "
+                    "ani identifikaci modelu."
+                )
+
+            for block in probe_blocks:
+                if not isinstance(
+                    block,
+                    dict,
+                ):
+                    raise ValueError(
+                        "Probe block nema platny format."
+                    )
+
+                name = str(
+                    block.get(
+                        "name"
+                    )
+                    or ""
+                ).strip()
+
+                address = block.get(
+                    "address"
+                )
+
+                count = block.get(
+                    "count"
+                )
+
+                if (
+                    not name
+                    or type(address) is not int
+                    or type(count) is not int
+                    or count < 1
+                    or count > 125
+                ):
+                    raise ValueError(
+                        "Profil ma neplatny probe block."
+                    )
+
+                state, values, error = read_block(
+                    device_id=device_id,
+                    address=address,
+                    count=count,
+                )
+
+                attempt = {
+                    "device_id": device_id,
+                    "block": name,
+                    "address": address,
+                    "count": count,
+                    "phase": state,
+                }
+
+                if error:
+                    attempt["error"] = error
+
+                attempts.append(
+                    attempt
+                )
+
+                if state in {
+                    "register_response",
+                    "modbus_exception_response",
+                }:
+                    communication_detected = True
+
+                    register_readable = (
+                        state
+                        == "register_response"
+                    )
+
+                    matched_device_id = (
+                        device_id
+                    )
+
+                    matched_block = name
+
+                    profile_verified = True
+                    phase = state
+                    break
+
+            if profile_verified:
+                break
+
+    finally:
+        try:
+            client.close()
+        finally:
+            bus_lock.release()
+
+    return {
+        "executor": "inverter_adapter",
+        "phase": phase,
+        "read_only": True,
+        "profile_id": profile[
+            "profile_id"
+        ],
+        "manufacturer": profile[
+            "manufacturer"
+        ],
+        "inverter_model": model,
+        "communication_type": "rs485",
+        "communicator_id": communicator_id,
+        "serial_path": serial_path,
+        "device_ids_tested": device_ids,
+        "communication_detected": (
+            communication_detected
+        ),
+        "register_readable": (
+            register_readable
+        ),
+        "profile_verified": (
+            profile_verified
+        ),
+        "matched_device_id": (
+            matched_device_id
+        ),
+        "matched_block": (
+            matched_block
+        ),
+        "identified_model": (
+            identified_model
+        ),
+        "attempts": attempts,
+    }
+
+
+# PHASE 21 GENERIC INVERTER PROBE END

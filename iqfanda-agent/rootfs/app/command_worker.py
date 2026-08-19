@@ -10,7 +10,9 @@ from typing import Any
 from communication.goodwe_ems_controller import (
     execute_goodwe_ems_from_cloud_config,
 )
-from communication.goodwe_probe import probe_goodwe_modbus
+from communication.inverter_adapter import (
+    probe_inverter_modbus,
+)
 from device_config import load_cached_cloud_config
 from host.cloud_client import cloud_client
 from spot_battery_intent import save_spot_battery_intent
@@ -938,16 +940,20 @@ def execute_photovoltaic_modbus_probe(
     command_id: str,
     command_payload: dict[str, Any],
 ) -> None:
-    """Provede bezpecny pouze cteci test GoodWe Modbus RTU."""
+    """Provede profilovy read-only Modbus RTU test stridace."""
 
     try:
-        probe_result = probe_goodwe_modbus(
+        probe_result = probe_inverter_modbus(
             command_payload
         )
 
-        if not isinstance(probe_result, dict):
+        if not isinstance(
+            probe_result,
+            dict,
+        ):
             raise RuntimeError(
-                "GoodWe probe vratila neplatny format."
+                "Inverter adapter vratil "
+                "neplatny probe vysledek."
             )
 
     except Exception as exc:
@@ -957,61 +963,83 @@ def execute_photovoltaic_modbus_probe(
             status="failed",
             result={
                 "worker": "command_worker",
-                "executor": "goodwe_probe",
+                "executor": "inverter_adapter",
                 "phase": "probe_failed",
                 "read_only": True,
-                "error_type": type(exc).__name__,
+                "error_type": (
+                    type(exc).__name__
+                ),
             },
             error_message=str(exc),
         )
 
         logging.exception(
-            "GoodWe Modbus probe pro prikaz %s selhala.",
+            "Inverter Modbus probe "
+            "pro prikaz %s selhal.",
             command_id,
         )
+
         return
 
-    communication_detected = bool(
+    verified = (
         probe_result.get(
-            "communication_detected"
+            "profile_verified"
         )
+        is True
     )
 
-    probe_result["worker"] = "command_worker"
+    probe_result[
+        "worker"
+    ] = "command_worker"
 
     submit_command_result(
         identity=identity,
         command_id=command_id,
         status=(
             "succeeded"
-            if communication_detected
+            if verified
             else "failed"
         ),
         result=probe_result,
         error_message=(
             None
-            if communication_detected
+            if verified
             else (
-                "Menic GoodWe neodpovedel na povolene "
-                "cteci Modbus RTU dotazy."
+                "Vybrany stridac nebyl "
+                "profilove overen."
             )
         ),
     )
 
-    if communication_detected:
+    if verified:
         logging.info(
-            "GoodWe Modbus komunikace byla potvrzena. "
-            "Prikaz: %s, adresa menice: %s, faze: %s.",
+            "Inverter Modbus komunikace "
+            "byla potvrzena. "
+            "Prikaz=%s profil=%s "
+            "slave=%s phase=%s.",
             command_id,
-            probe_result.get("matched_device_id"),
-            probe_result.get("phase"),
+            probe_result.get(
+                "profile_id"
+            ),
+            probe_result.get(
+                "matched_device_id"
+            ),
+            probe_result.get(
+                "phase"
+            ),
         )
+
     else:
         logging.warning(
-            "GoodWe Modbus komunikace nebyla potvrzena. "
-            "Prikaz: %s.",
+            "Inverter Modbus komunikace "
+            "nebyla profilove potvrzena. "
+            "Prikaz=%s profil=%s.",
             command_id,
+            probe_result.get(
+                "profile_id"
+            ),
         )
+
 
 def execute_spot_boiler_intent(
     *,
