@@ -20,6 +20,20 @@
       ],
       "file": "goodwe_et.json",
       "status": "physically_verified"
+    },
+    {
+      "profile_id": "goodwe_et_15_30kw",
+      "manufacturer": "goodwe",
+      "manufacturer_name": "GoodWe",
+      "models": [
+        "GW15K-ET",
+        "GW20K-ET",
+        "GW25K-ET",
+        "GW29.9K-ET",
+        "GW30K-ET"
+      ],
+      "file": "goodwe_et_15_30kw.json",
+      "status": "physically_verified_partial_00008"
     }
   ]
 }
