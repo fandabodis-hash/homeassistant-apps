@@ -45,7 +45,7 @@ export IQF_DEVICE_HOSTNAME
 IQF_DEVICE_HOSTNAME="$(bashio::config 'device_hostname')"
 
 export IQF_SOFTWARE_VERSION
-IQF_SOFTWARE_VERSION="$(bashio::config 'software_version')"
+IQF_SOFTWARE_VERSION="$(cat /app/VERSION)"
 
 export IQF_LOG_LEVEL
 IQF_LOG_LEVEL="$(bashio::config 'log_level')"

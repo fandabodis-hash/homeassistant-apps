@@ -8,6 +8,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import urlsplit
 
+from factory.factory_bootstrap import (
+    bootstrap_manufacturing_identity,
+)
 from installer.installer_service import (
     pripojit_wifi,
     provest_tovarni_reset,
@@ -397,6 +400,68 @@ class InstallerApiHandler(BaseHTTPRequestHandler):
                             "installer": vysledek,
                         },
                     )
+                return
+
+            if cesta == "/api/factory/bootstrap":
+                authorization = str(
+                    self.headers.get("Authorization")
+                    or ""
+                ).strip()
+
+                prefix = "Bearer "
+
+                if not authorization.startswith(prefix):
+                    self._odeslat_json(
+                        HTTPStatus.UNAUTHORIZED,
+                        {
+                            "ok": False,
+                            "error": (
+                                "Chybi vyrobni "
+                                "administratorska autorizace."
+                            ),
+                        },
+                    )
+                    return
+
+                try:
+                    vysledek = (
+                        bootstrap_manufacturing_identity(
+                            admin_token=authorization[
+                                len(prefix):
+                            ].strip(),
+                        )
+                    )
+
+                except PermissionError as chyba:
+                    self._odeslat_json(
+                        HTTPStatus.FORBIDDEN,
+                        {
+                            "ok": False,
+                            "error": str(chyba),
+                        },
+                    )
+                    return
+
+                except (
+                    ValueError,
+                    RuntimeError,
+                ) as chyba:
+                    self._odeslat_json(
+                        HTTPStatus.BAD_GATEWAY,
+                        {
+                            "ok": False,
+                            "error": str(chyba),
+                        },
+                    )
+                    return
+
+                self._odeslat_json(
+                    HTTPStatus.OK,
+                    {
+                        "ok": True,
+                        "factory": vysledek,
+                    },
+                )
                 return
 
             if cesta == "/api/factory/reset":
