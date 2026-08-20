@@ -126,6 +126,7 @@ def write_access_point_request(
 def request_access_point(
     reason: str,
     *,
+    ssid: str | None = None,
     request_path: Path | None = None,
 ) -> dict[str, Any]:
     """Pozada Host Agent o spusteni instalacniho AP."""
@@ -133,6 +134,11 @@ def request_access_point(
     return write_access_point_request(
         requested=True,
         reason=reason,
+        ssid=(
+            DEFAULT_SSID
+            if ssid is None
+            else ssid
+        ),
         request_path=request_path,
     )
 
