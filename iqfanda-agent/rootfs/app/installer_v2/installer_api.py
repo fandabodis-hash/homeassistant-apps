@@ -32,6 +32,10 @@ from installer_v2.ap_workflow import (
     pole_prvni_instalace,
     validuj_prvni_instalaci,
 )
+from installer_v2.cloud_registration import (
+    cloud_identity_exists,
+    ensure_cloud_registration,
+)
 from installer_v2.models import InstallerMode
 
 
@@ -81,6 +85,8 @@ def _wait_ap_stopped(
 def _wifi_switch_worker(
     ssid: str,
     password: str,
+    customer_name: str,
+    email: str,
 ) -> None:
     with NETWORK_CHANGE_LOCK:
         time.sleep(1.5)
@@ -119,11 +125,35 @@ def _wifi_switch_worker(
 
             status = connection.get("status") or {}
 
+            registration = ensure_cloud_registration(
+                customer_name=customer_name,
+                email=email,
+            )
+
             result.update({
                 "ok": True,
                 "interface": "wlan0",
                 "ip_address": status.get("ip_address"),
                 "ap_active": False,
+                "cloud_called": registration.get(
+                    "cloud_called"
+                ),
+                "cloud_registration_created":
+                    registration.get(
+                        "registration_created"
+                    ),
+                "cloud_identity_created":
+                    registration.get(
+                        "identity_created"
+                    ),
+                "serial_number":
+                    registration.get(
+                        "serial_number"
+                    ),
+                "device_uuid":
+                    registration.get(
+                        "device_uuid"
+                    ),
             })
 
             _write_network_result(result)
@@ -955,6 +985,14 @@ class InstallerV2Handler(
             return
 
         if path == "/health":
+            installed = cloud_identity_exists()
+
+            mode = (
+                InstallerMode.INSTALLED_RUN
+                if installed
+                else InstallerMode.FIRST_INSTALL
+            )
+
             self._json(
                 HTTPStatus.OK,
                 {
@@ -962,13 +1000,13 @@ class InstallerV2Handler(
                     "service":
                         "installer-v2",
                     "mode":
-                        InstallerMode
-                        .FIRST_INSTALL
-                        .value,
+                        mode.value,
+                    "installed":
+                        installed,
                     "writes_enabled":
                         True,
                     "cloud_enabled":
-                        False,
+                        True,
                     "serial_allocation_enabled":
                         False,
                 },
@@ -979,14 +1017,21 @@ class InstallerV2Handler(
             path
             == "/api/installer/status"
         ):
+            installed = cloud_identity_exists()
+
+            mode = (
+                InstallerMode.INSTALLED_RUN
+                if installed
+                else InstallerMode.FIRST_INSTALL
+            )
+
             self._json(
                 HTTPStatus.OK,
                 {
                     "ok": True,
                     "installer":
                         konfigurace_ap_pro_rezim(
-                            InstallerMode
-                            .FIRST_INSTALL
+                            mode
                         ),
                 },
             )
@@ -1044,6 +1089,17 @@ class InstallerV2Handler(
                 )
                 return
 
+            if cloud_identity_exists():
+                self._json(
+                    HTTPStatus.CONFLICT,
+                    {
+                        "ok": False,
+                        "error":
+                            "device_already_installed",
+                    },
+                )
+                return
+
             validation = validuj_prvni_instalaci(
                 payload
             )
@@ -1093,13 +1149,81 @@ class InstallerV2Handler(
                     )
                     return
 
+                try:
+                    registration = ensure_cloud_registration(
+                        customer_name=validation[
+                            "customer_name"
+                        ],
+                        email=validation[
+                            "email"
+                        ],
+                    )
+
+                    release_access_point(
+                        reason=(
+                            "installer_v2_"
+                            "first_install_completed"
+                        )
+                    )
+
+                except Exception as exc:
+                    result = {
+                        "ok": False,
+                        "action":
+                            "cloud_registration_failed",
+                        "connection_type":
+                            "ethernet",
+                        "interface":
+                            wired[0].get("name"),
+                        "ip_address":
+                            wired[0].get(
+                                "ip_address"
+                            ),
+                        "cloud_called": True,
+                        "serial_allocated": False,
+                        "error": str(exc),
+                    }
+
+                    _write_network_result(result)
+
+                    self._json(
+                        HTTPStatus.BAD_GATEWAY,
+                        result,
+                    )
+                    return
+
                 result = {
                     "ok": True,
-                    "action": "ethernet_ready",
-                    "connection_type": "ethernet",
-                    "interface": wired[0].get("name"),
-                    "ip_address": wired[0].get("ip_address"),
-                    "cloud_called": False,
+                    "action":
+                        "installation_completed",
+                    "connection_type":
+                        "ethernet",
+                    "interface":
+                        wired[0].get("name"),
+                    "ip_address":
+                        wired[0].get(
+                            "ip_address"
+                        ),
+                    "cloud_called":
+                        registration.get(
+                            "cloud_called"
+                        ),
+                    "cloud_registration_created":
+                        registration.get(
+                            "registration_created"
+                        ),
+                    "cloud_identity_created":
+                        registration.get(
+                            "identity_created"
+                        ),
+                    "serial_number":
+                        registration.get(
+                            "serial_number"
+                        ),
+                    "device_uuid":
+                        registration.get(
+                            "device_uuid"
+                        ),
                     "serial_allocated": False,
                 }
 
@@ -1138,6 +1262,12 @@ class InstallerV2Handler(
                 args=(
                     ssid,
                     password,
+                    validation[
+                        "customer_name"
+                    ],
+                    validation[
+                        "email"
+                    ],
                 ),
                 name="installer-v2-wifi-switch",
                 daemon=True,
