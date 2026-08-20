@@ -1068,7 +1068,7 @@ class InstallerV2Handler(
             )
             return
 
-                if (
+        if (
             path
             == "/api/installer/apply"
         ):
@@ -1274,7 +1274,8 @@ class InstallerV2Handler(
             ).start()
 
             return
-if (
+
+        if (
             path
             == "/api/installer/validate"
         ):
