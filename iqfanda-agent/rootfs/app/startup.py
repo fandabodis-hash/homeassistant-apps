@@ -10,8 +10,13 @@ from device_config import main as device_config_main
 from heartbeat import main as heartbeat_main
 from host.access_point_manager import access_point_manager
 from host.iqf_host_api import main as host_api_main
-from installer.access_point_service import request_access_point
-from installer.network_manager import check_internet_access
+from installer.access_point_service import (
+    release_access_point,
+    request_access_point,
+)
+from installer_v2.ap_workflow import (
+    SERVICE_WINDOW_SECONDS,
+)
 from installer_v2.installer_api import (
     service_access_point_ssid,
     spustit_api,
@@ -70,54 +75,118 @@ def spustit_access_point_manager() -> None:
     access_point_manager.run_forever()
 
 
-def spustit_servisni_ap_pri_offline() -> None:
+def spustit_servisni_okno_po_startu() -> None:
     """
-    Po startu instalovaneho zarizeni kratce pocka
-    na automaticke pripojeni k internetu.
+    Pri startu jiz instalovaneho IQ FANDA
+    spusti servisni AP na 60 sekund.
 
-    Pokud internet neni dostupny,
-    spusti servisni AP pro zmenu Wi-Fi.
+    Pokud instalater behem okna zahaji zmenu Wi-Fi,
+    casovac servisni AP jiz nevypina.
     """
-
-    time.sleep(15)
 
     if not DEVICE_CONFIG_PATH.exists():
         return
 
     try:
-        internet = check_internet_access()
-
-        if internet.get("ok"):
-            logging.info(
-                "Internet je dostupny. "
-                "Servisni Wi-Fi AP se nespousti."
-            )
-            return
-
         ssid = (
             service_access_point_ssid()
         )
 
         result = request_access_point(
-            reason=(
-                "installed_device_"
-                "internet_unavailable"
-            ),
+            reason="installed_boot_window",
             ssid=ssid,
         )
 
         logging.warning(
-            "Internet instalovaneho IQ FANDA "
-            "neni dostupny. "
-            "Spoustim servisni AP %s: %s",
+            "Spoustim servisni AP %s "
+            "na %s sekund: %s",
             ssid,
+            SERVICE_WINDOW_SECONDS,
             result.get("path"),
+        )
+
+        deadline = (
+            time.monotonic()
+            + 15.0
+        )
+
+        while (
+            time.monotonic()
+            < deadline
+        ):
+            try:
+                if (
+                    access_point_manager
+                    .is_access_point_active()
+                ):
+                    break
+
+            except Exception:
+                pass
+
+            time.sleep(0.2)
+
+        else:
+            raise RuntimeError(
+                "Servisni AP se po startu "
+                "neaktivovalo."
+            )
+
+        logging.info(
+            "Servisni AP %s je aktivni. "
+            "Servisni okno: %s sekund.",
+            ssid,
+            SERVICE_WINDOW_SECONDS,
+        )
+
+        time.sleep(
+            SERVICE_WINDOW_SECONDS
+        )
+
+        current_request = (
+            access_point_manager
+            .load_request()
+        )
+
+        if (
+            not isinstance(
+                current_request,
+                dict,
+            )
+            or not current_request.get(
+                "requested"
+            )
+            or str(
+                current_request.get(
+                    "reason"
+                )
+                or ""
+            )
+            != "installed_boot_window"
+        ):
+            logging.info(
+                "Servisni AP bylo behem "
+                "60s okna prevzato jinym "
+                "workflow. Casovac jej nevypina."
+            )
+            return
+
+        release_access_point(
+            reason=(
+                "installed_boot_window_expired"
+            )
+        )
+
+        logging.info(
+            "Servisni okno IQ FANDA "
+            "po %s sekundach skoncilo.",
+            SERVICE_WINDOW_SECONDS,
         )
 
     except Exception:
         logging.exception(
-            "Automaticke spusteni servisniho "
-            "Wi-Fi AP selhalo."
+            "Servisni AP po startu "
+            "se nepodarilo obslouzit."
         )
 
 
@@ -245,6 +314,10 @@ def main() -> None:
 
     logging.info("IQ FANDA Agent Core spusten.")
 
+    zarizeni_bylo_nainstalovane_pri_startu = (
+        DEVICE_CONFIG_PATH.exists()
+    )
+
     installer_api_thread = vytvorit_vlakno(
         cil=spustit_installer_api,
         nazev="installer-api",
@@ -279,12 +352,21 @@ def main() -> None:
         "Spoustim cloudove sluzby."
     )
 
-    service_wifi_thread = vytvorit_vlakno(
-        cil=spustit_servisni_ap_pri_offline,
-        nazev="service-wifi-fallback",
-    )
+    if zarizeni_bylo_nainstalovane_pri_startu:
+        service_wifi_thread = vytvorit_vlakno(
+            cil=spustit_servisni_okno_po_startu,
+            nazev="service-wifi-boot-window",
+        )
 
-    service_wifi_thread.start()
+        service_wifi_thread.start()
+
+    else:
+        logging.info(
+            "Prvni instalace byla dokoncena "
+            "v tomto behu Agentu. "
+            "Servisni 60s boot okno se nyn? "
+            "znovu nespousti."
+        )
 
     device_config_thread = vytvorit_vlakno(
         cil=spustit_synchronizaci_konfigurace,
