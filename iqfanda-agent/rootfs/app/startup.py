@@ -11,7 +11,7 @@ from heartbeat import main as heartbeat_main
 from host.access_point_manager import access_point_manager
 from host.iqf_host_api import main as host_api_main
 from installer.access_point_service import request_access_point
-from installer.installer_api import spustit_api
+from installer_v2.installer_api import spustit_api
 from provisioning import DEVICE_CONFIG_PATH
 from telemetrie_modulu import (
     main as telemetrie_modulu_main,
