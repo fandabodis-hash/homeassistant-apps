@@ -116,7 +116,7 @@ def finalize_manufacturing_identity(
     identity_path: Path = DEFAULT_IDENTITY_PATH,
     model: str = "IQ FANDA PI5",
     hardware_revision: str = "Raspberry Pi 5",
-    software_version: str = "0.1.75",
+    software_version: str = "0.1.76",
 ) -> dict[str, Any]:
     """
     Dokonci trvalou vyrobni identitu.

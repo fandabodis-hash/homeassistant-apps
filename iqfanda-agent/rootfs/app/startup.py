@@ -11,11 +11,10 @@ from heartbeat import main as heartbeat_main
 from host.access_point_manager import access_point_manager
 from host.iqf_host_api import main as host_api_main
 from installer.access_point_service import (
-    release_access_point,
     request_access_point,
 )
-from installer_v2.ap_workflow import (
-    SERVICE_WINDOW_SECONDS,
+from installer.network_manager import (
+    get_wifi_status,
 )
 from installer_v2.installer_api import (
     service_access_point_ssid,
@@ -75,17 +74,79 @@ def spustit_access_point_manager() -> None:
     access_point_manager.run_forever()
 
 
-def spustit_servisni_okno_po_startu() -> None:
+def spustit_servisni_ap_pri_chybejici_wifi() -> None:
     """
-    Pri startu jiz instalovaneho IQ FANDA
-    spusti servisni AP na 60 sekund.
+    Po startu jiz instalovaneho IQ FANDA
+    poskytne wlan0 cas na obnoveni ulozene
+    klientske Wi-Fi.
 
-    Pokud instalater behem okna zahaji zmenu Wi-Fi,
-    casovac servisni AP jiz nevypina.
+    Pokud wlan0 do 20 sekund nema aktivni
+    klientskou Wi-Fi, SSID a IPv4 adresu,
+    spusti servisni AP.
+
+    Servisni AP zustava aktivni az do provedeni
+    zmeny Wi-Fi.
     """
 
     if not DEVICE_CONFIG_PATH.exists():
         return
+
+    wifi_wait_seconds = 20.0
+    wifi_check_interval_seconds = 2.0
+
+    deadline = (
+        time.monotonic()
+        + wifi_wait_seconds
+    )
+
+    last_status = None
+
+    while time.monotonic() < deadline:
+        try:
+            status = get_wifi_status()
+
+            last_status = status
+
+            wifi_ready = (
+                bool(
+                    status.get("ok")
+                )
+                and bool(
+                    status.get("connected")
+                )
+                and bool(
+                    str(
+                        status.get("ssid")
+                        or ""
+                    ).strip()
+                )
+                and bool(
+                    str(
+                        status.get("ip_address")
+                        or ""
+                    ).strip()
+                )
+            )
+
+            if wifi_ready:
+                logging.info(
+                    "Klientska Wi-Fi je dostupna: "
+                    "SSID=%s IP=%s. "
+                    "Servisni AP se nespousti.",
+                    status.get("ssid"),
+                    status.get("ip_address"),
+                )
+                return
+
+        except Exception:
+            logging.exception(
+                "Kontrola klientske Wi-Fi "
+                "behem startu selhala."
+            )
+
+        time.sleep(
+            wifi_check_interval_seconds
+        )
 
     try:
         ssid = (
@@ -93,100 +154,28 @@ def spustit_servisni_okno_po_startu() -> None:
         )
 
         result = request_access_point(
-            reason="installed_boot_window",
+            reason=(
+                "installed_device_"
+                "wifi_unavailable"
+            ),
             ssid=ssid,
         )
 
         logging.warning(
-            "Spoustim servisni AP %s "
-            "na %s sekund: %s",
+            "Klientska Wi-Fi po %.0f sekundach "
+            "neni dostupna. "
+            "Spoustim servisni AP %s: %s. "
+            "Posledni stav Wi-Fi: %s",
+            wifi_wait_seconds,
             ssid,
-            SERVICE_WINDOW_SECONDS,
             result.get("path"),
-        )
-
-        deadline = (
-            time.monotonic()
-            + 15.0
-        )
-
-        while (
-            time.monotonic()
-            < deadline
-        ):
-            try:
-                if (
-                    access_point_manager
-                    .is_access_point_active()
-                ):
-                    break
-
-            except Exception:
-                pass
-
-            time.sleep(0.2)
-
-        else:
-            raise RuntimeError(
-                "Servisni AP se po startu "
-                "neaktivovalo."
-            )
-
-        logging.info(
-            "Servisni AP %s je aktivni. "
-            "Servisni okno: %s sekund.",
-            ssid,
-            SERVICE_WINDOW_SECONDS,
-        )
-
-        time.sleep(
-            SERVICE_WINDOW_SECONDS
-        )
-
-        current_request = (
-            access_point_manager
-            .load_request()
-        )
-
-        if (
-            not isinstance(
-                current_request,
-                dict,
-            )
-            or not current_request.get(
-                "requested"
-            )
-            or str(
-                current_request.get(
-                    "reason"
-                )
-                or ""
-            )
-            != "installed_boot_window"
-        ):
-            logging.info(
-                "Servisni AP bylo behem "
-                "60s okna prevzato jinym "
-                "workflow. Casovac jej nevypina."
-            )
-            return
-
-        release_access_point(
-            reason=(
-                "installed_boot_window_expired"
-            )
-        )
-
-        logging.info(
-            "Servisni okno IQ FANDA "
-            "po %s sekundach skoncilo.",
-            SERVICE_WINDOW_SECONDS,
+            last_status,
         )
 
     except Exception:
         logging.exception(
-            "Servisni AP po startu "
-            "se nepodarilo obslouzit."
+            "Spusteni servisniho AP "
+            "pri nedostupne Wi-Fi selhalo."
         )
 
 
@@ -354,8 +343,10 @@ def main() -> None:
 
     if zarizeni_bylo_nainstalovane_pri_startu:
         service_wifi_thread = vytvorit_vlakno(
-            cil=spustit_servisni_okno_po_startu,
-            nazev="service-wifi-boot-window",
+            cil=(
+                spustit_servisni_ap_pri_chybejici_wifi
+            ),
+            nazev="service-wifi-fallback",
         )
 
         service_wifi_thread.start()
@@ -364,7 +355,7 @@ def main() -> None:
         logging.info(
             "Prvni instalace byla dokoncena "
             "v tomto behu Agentu. "
-            "Servisni 60s boot okno se nyn? "
+            "Servisni Wi-Fi fallback se nyn? "
             "znovu nespousti."
         )
 
