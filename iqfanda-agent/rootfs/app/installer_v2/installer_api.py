@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
+from pathlib import Path
 from http import HTTPStatus
 from http.server import (
     BaseHTTPRequestHandler,
@@ -11,7 +14,16 @@ from http.server import (
 from typing import Any
 from urllib.parse import urlsplit
 
+from host.access_point_manager import (
+    access_point_manager,
+)
+from installer.access_point_service import (
+    release_access_point,
+    request_access_point,
+)
 from installer.network_manager import (
+    connect_wifi,
+    get_network_info,
     scan_wifi_networks,
 )
 from installer_v2.ap_workflow import (
@@ -25,6 +37,126 @@ from installer_v2.models import InstallerMode
 
 VYCHOZI_HOST = "0.0.0.0"
 VYCHOZI_PORT = 8099
+
+NETWORK_RESULT_PATH = Path(
+    "/tmp/installer_v2_network_result.json"
+)
+
+NETWORK_CHANGE_LOCK = threading.Lock()
+
+
+def _write_network_result(
+    payload: dict[str, object],
+) -> None:
+    try:
+        NETWORK_RESULT_PATH.write_text(
+            json.dumps(
+                payload,
+                ensure_ascii=False,
+                indent=2,
+            ) + "\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
+def _wait_ap_stopped(
+    timeout_seconds: float = 10.0,
+) -> bool:
+    deadline = time.monotonic() + timeout_seconds
+
+    while time.monotonic() < deadline:
+        try:
+            if not access_point_manager.is_access_point_active():
+                return True
+        except Exception:
+            pass
+
+        time.sleep(0.2)
+
+    return False
+
+
+def _wifi_switch_worker(
+    ssid: str,
+    password: str,
+) -> None:
+    with NETWORK_CHANGE_LOCK:
+        time.sleep(1.5)
+
+        result = {
+            "ok": False,
+            "connection_type": "wifi",
+            "ssid": ssid,
+            "cloud_called": False,
+            "serial_allocated": False,
+        }
+
+        try:
+            release_access_point(
+                reason="installer_v2_first_install_wifi"
+            )
+
+            if not _wait_ap_stopped():
+                raise RuntimeError(
+                    "Instalacni AP se nepodarilo vypnout."
+                )
+
+            connection = connect_wifi(
+                ssid=ssid,
+                password=password,
+                interface="wlan0",
+            )
+
+            if not connection.get("ok"):
+                raise RuntimeError(
+                    str(
+                        connection.get("error")
+                        or "Pripojeni k Wi-Fi selhalo."
+                    )
+                )
+
+            status = connection.get("status") or {}
+
+            result.update({
+                "ok": True,
+                "interface": "wlan0",
+                "ip_address": status.get("ip_address"),
+                "ap_active": False,
+            })
+
+            _write_network_result(result)
+
+            print(
+                "Installer V2 Wi-Fi switch OK:",
+                ssid,
+                result.get("ip_address"),
+                flush=True,
+            )
+
+        except Exception as exc:
+            result["error"] = str(exc)
+
+            try:
+                request_access_point(
+                    reason="installer_v2_wifi_failed"
+                )
+
+                result["ap_restore_requested"] = True
+
+            except Exception as restore_exc:
+                result["ap_restore_error"] = str(
+                    restore_exc
+                )
+
+            _write_network_result(result)
+
+            print(
+                "Installer V2 Wi-Fi switch FAILED:",
+                exc,
+                flush=True,
+            )
 
 
 HTML = """<!doctype html>
@@ -625,7 +757,7 @@ continueButton.addEventListener(
         try {
             const response =
                 await fetch(
-                    "/api/installer/validate",
+                    "/api/installer/apply",
                     {
                         method: "POST",
                         headers: {
@@ -655,10 +787,22 @@ continueButton.addEventListener(
             message.className =
                 "message ok";
 
-            message.textContent =
-                "Údaje jsou v pořádku. " +
-                "Installer V2 je připraven " +
-                "na další krok.";
+            if (
+                data.action
+                === "switching_to_wifi"
+            ) {
+                continueButton.disabled = true;
+
+                message.textContent =
+                    "Připojuji TNG IQ FANDA k Wi-Fi " +
+                    data.ssid +
+                    ". Instalační síť se nyní odpojí.";
+            }
+            else {
+                message.textContent =
+                    "Ethernet je připojen. " +
+                    "TNG IQ FANDA je připraven.";
+            }
         }
         catch (error) {
             message.className =
@@ -822,6 +966,10 @@ class InstallerV2Handler(
                         .FIRST_INSTALL
                         .value,
                     "writes_enabled":
+                        True,
+                    "cloud_enabled":
+                        False,
+                    "serial_allocation_enabled":
                         False,
                 },
             )
@@ -875,7 +1023,128 @@ class InstallerV2Handler(
             )
             return
 
-        if (
+                if (
+            path
+            == "/api/installer/apply"
+        ):
+            try:
+                payload = self._read_json()
+
+            except (
+                ValueError,
+                UnicodeError,
+                json.JSONDecodeError,
+            ):
+                self._json(
+                    HTTPStatus.BAD_REQUEST,
+                    {
+                        "ok": False,
+                        "error": "Neplatná data formuláře.",
+                    },
+                )
+                return
+
+            validation = validuj_prvni_instalaci(
+                payload
+            )
+
+            if not validation.get("ok"):
+                self._json(
+                    HTTPStatus.BAD_REQUEST,
+                    validation,
+                )
+                return
+
+            connection_type = str(
+                validation.get(
+                    "connection_type"
+                )
+                or ""
+            )
+
+            if (
+                connection_type
+                == TypPripojeni.ETHERNET.value
+            ):
+                network = get_network_info()
+
+                wired = [
+                    item
+                    for item
+                    in network.get(
+                        "interfaces",
+                        [],
+                    )
+                    if (
+                        isinstance(item, dict)
+                        and item.get("type") == "ethernet"
+                        and item.get("connected")
+                    )
+                ]
+
+                if not wired:
+                    self._json(
+                        HTTPStatus.CONFLICT,
+                        {
+                            "ok": False,
+                            "error":
+                                "Ethernet není připojen.",
+                        },
+                    )
+                    return
+
+                result = {
+                    "ok": True,
+                    "action": "ethernet_ready",
+                    "connection_type": "ethernet",
+                    "interface": wired[0].get("name"),
+                    "ip_address": wired[0].get("ip_address"),
+                    "cloud_called": False,
+                    "serial_allocated": False,
+                }
+
+                _write_network_result(result)
+
+                self._json(
+                    HTTPStatus.OK,
+                    result,
+                )
+                return
+
+            ssid = str(
+                payload.get("ssid")
+                or ""
+            ).strip()
+
+            password = str(
+                payload.get("wifi_password")
+                or ""
+            )
+
+            self._json(
+                HTTPStatus.ACCEPTED,
+                {
+                    "ok": True,
+                    "action": "switching_to_wifi",
+                    "connection_type": "wifi",
+                    "ssid": ssid,
+                    "cloud_called": False,
+                    "serial_allocated": False,
+                },
+            )
+
+            threading.Thread(
+                target=_wifi_switch_worker,
+                args=(
+                    ssid,
+                    password,
+                ),
+                name="installer-v2-wifi-switch",
+                daemon=True,
+            ).start()
+
+            return
+if (
             path
             == "/api/installer/validate"
         ):
