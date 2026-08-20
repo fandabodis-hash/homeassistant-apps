@@ -61,13 +61,25 @@ class AccessPointManager:
         """Vrati aktualni stav spravce Access Pointu."""
 
         with self._lock:
+            last_request = (
+                dict(self._last_request)
+                if self._last_request is not None
+                else None
+            )
+
+            if (
+                last_request is not None
+                and "psk" in last_request
+            ):
+                last_request["psk"] = "***"
+
             return {
                 "ok": self._last_error is None,
                 "active": self._active,
                 "interface": self.interface,
                 "profile_name": self.profile_name,
                 "request_path": str(self.request_path),
-                "last_request": self._last_request,
+                "last_request": last_request,
                 "error": self._last_error,
             }
 
@@ -94,6 +106,7 @@ class AccessPointManager:
             "ssid",
             "address",
             "portal_url",
+            "psk",
         )
 
         missing_fields = [
@@ -115,6 +128,9 @@ class AccessPointManager:
             "address": str(payload["address"] or "").strip(),
             "portal_url": str(
                 payload["portal_url"] or ""
+            ).strip(),
+            "psk": str(
+                payload["psk"] or ""
             ).strip(),
         }
 
@@ -177,6 +193,10 @@ class AccessPointManager:
             request_payload.get("address") or ""
         ).strip()
 
+        psk = str(
+            request_payload.get("psk") or ""
+        ).strip()
+
         if not ssid:
             raise ValueError(
                 "SSID instalacniho Access Pointu nesmi byt prazdne."
@@ -185,6 +205,11 @@ class AccessPointManager:
         if not address:
             raise ValueError(
                 "IP adresa instalacniho Access Pointu nesmi byt prazdna."
+            )
+
+        if len(psk) < 8 or len(psk) > 63:
+            raise ValueError(
+                "Heslo instalacniho Access Pointu musi mit 8 az 63 znaku."
             )
 
         self.command_runner(
@@ -228,6 +253,12 @@ class AccessPointManager:
             "ap",
             "802-11-wireless.band",
             "bg",
+            "802-11-wireless-security.key-mgmt",
+            "wpa-psk",
+            "802-11-wireless-security.proto",
+            "rsn",
+            "802-11-wireless-security.psk",
+            psk,
             "ipv4.method",
             "manual",
             "ipv4.addresses",
@@ -277,6 +308,7 @@ class AccessPointManager:
             "address": address,
             "interface": self.interface,
             "profile_name": self.profile_name,
+            "security": "wpa2-psk",
         }
 
     def stop_access_point(self) -> dict[str, Any]:

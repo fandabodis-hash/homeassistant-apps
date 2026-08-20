@@ -11,7 +11,11 @@ from heartbeat import main as heartbeat_main
 from host.access_point_manager import access_point_manager
 from host.iqf_host_api import main as host_api_main
 from installer.access_point_service import request_access_point
-from installer_v2.installer_api import spustit_api
+from installer.network_manager import get_network_info
+from installer_v2.installer_api import (
+    service_access_point_ssid,
+    spustit_api,
+)
 from provisioning import DEVICE_CONFIG_PATH
 from telemetrie_modulu import (
     main as telemetrie_modulu_main,
@@ -64,6 +68,70 @@ def spustit_access_point_manager() -> None:
     """Spusti spravce instalacniho Access Pointu."""
 
     access_point_manager.run_forever()
+
+
+def spustit_servisni_ap_pri_offline() -> None:
+    """
+    Po startu instalovaneho zarizeni kratce pocka
+    na automaticke pripojeni k ulozene siti.
+
+    Pokud neni dostupne zadne pripojeni,
+    spusti servisni AP pro zmenu Wi-Fi.
+    """
+
+    time.sleep(15)
+
+    if not DEVICE_CONFIG_PATH.exists():
+        return
+
+    try:
+        network = get_network_info()
+
+        interfaces = network.get(
+            "interfaces",
+            [],
+        )
+
+        connected = any(
+            isinstance(item, dict)
+            and bool(
+                item.get("connected")
+            )
+            for item in interfaces
+        )
+
+        if connected:
+            logging.info(
+                "Sit je dostupna. "
+                "Servisni Wi-Fi AP se nespousti."
+            )
+            return
+
+        ssid = (
+            service_access_point_ssid()
+        )
+
+        result = request_access_point(
+            reason=(
+                "installed_device_"
+                "network_unavailable"
+            ),
+            ssid=ssid,
+        )
+
+        logging.warning(
+            "Sit instalovaneho IQ FANDA "
+            "neni dostupna. "
+            "Spoustim servisni AP %s: %s",
+            ssid,
+            result.get("path"),
+        )
+
+    except Exception:
+        logging.exception(
+            "Automaticke spusteni servisniho "
+            "Wi-Fi AP selhalo."
+        )
 
 
 def spustit_usb_inventory() -> None:
@@ -223,6 +291,13 @@ def main() -> None:
         "Identita zarizeni je pripravena. "
         "Spoustim cloudove sluzby."
     )
+
+    service_wifi_thread = vytvorit_vlakno(
+        cil=spustit_servisni_ap_pri_offline,
+        nazev="service-wifi-fallback",
+    )
+
+    service_wifi_thread.start()
 
     device_config_thread = vytvorit_vlakno(
         cil=spustit_synchronizaci_konfigurace,

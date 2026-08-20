@@ -23,6 +23,7 @@ from manufacturing import read_raspberry_pi_serial
 
 DEFAULT_API_BASE_URL = "https://api.tngiqfanda.cz"
 FACTORY_CLAIM_ENDPOINT = "/api/v1/factory/claim-serial"
+AUTH_LOGIN_ENDPOINT = "/api/v1/auth/login"
 
 BOOTSTRAP_CREDENTIAL_PATH = Path(
     "/data/installer_v2_bootstrap_credential.json"
@@ -145,6 +146,138 @@ def ensure_bootstrap_credential(
         "created": created,
         "credential": verified,
     }
+
+
+def _factory_admin_login(
+    *,
+    email: str,
+    password: str,
+) -> str:
+    """
+    Ziska kratkodoby cloudovy bearer token.
+
+    E-mail, heslo ani vysledny token se nikam
+    neukladaji.
+    """
+
+    normalized_email = str(
+        email or ""
+    ).strip().lower()
+
+    raw_password = str(
+        password or ""
+    )
+
+    if (
+        not normalized_email
+        or "@" not in normalized_email
+    ):
+        raise ValueError(
+            "Admin e-mail je neplatny."
+        )
+
+    if not raw_password:
+        raise ValueError(
+            "Admin heslo je prazdne."
+        )
+
+    body = json.dumps(
+        {
+            "email": normalized_email,
+            "password": raw_password,
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+    http_request = request.Request(
+        (
+            _api_base_url()
+            + AUTH_LOGIN_ENDPOINT
+        ),
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type":
+                "application/json",
+            "Accept":
+                "application/json",
+            "User-Agent":
+                "TNG-IQ-FANDA-Installer-V2",
+        },
+    )
+
+    try:
+        with request.urlopen(
+            http_request,
+            timeout=30,
+        ) as response:
+            response_body = (
+                response
+                .read()
+                .decode(
+                    "utf-8",
+                    errors="strict",
+                )
+            )
+
+    except error.HTTPError as exc:
+        response_body = (
+            exc.read().decode(
+                "utf-8",
+                errors="replace",
+            )
+        )
+
+        raise RuntimeError(
+            "Factory admin prihlaseni "
+            f"odmitnuto, HTTP {exc.code}: "
+            f"{response_body}"
+        ) from exc
+
+    except error.URLError as exc:
+        raise RuntimeError(
+            "Cloud neni dostupny: "
+            f"{exc.reason}"
+        ) from exc
+
+    result = json.loads(
+        response_body
+    )
+
+    if not isinstance(
+        result,
+        dict,
+    ):
+        raise RuntimeError(
+            "Cloud vratil neplatnou "
+            "login odpoved."
+        )
+
+    role = str(
+        result.get("role")
+        or ""
+    ).strip().lower()
+
+    if role not in {
+        "admin",
+        "superadmin",
+    }:
+        raise RuntimeError(
+            "Prihlaseny ucet nema "
+            "opravneni Factory V2."
+        )
+
+    token = str(
+        result.get("access_token")
+        or ""
+    ).strip()
+
+    if not token:
+        raise RuntimeError(
+            "Cloud nevratil access token."
+        )
+
+    return token
 
 
 def _claim_factory_serial(
@@ -328,9 +461,9 @@ def provision_factory_v2(
     software_version = str(
         os.getenv(
             "IQF_SOFTWARE_VERSION",
-            "0.1.72",
+            "0.1.73",
         )
-        or "0.1.72"
+        or "0.1.73"
     ).strip()
 
     final = finalize_manufacturing_identity(
@@ -396,3 +529,30 @@ def provision_factory_v2(
                 "state"
             ],
     }
+
+
+def provision_factory_v2_from_portal(
+    *,
+    admin_email: str,
+    admin_password: str,
+) -> dict[str, Any]:
+    """
+    Factory V2 spoustene AP portalem.
+
+    Admin prihlasovaci udaje se pouziji pouze
+    pro ziskani kratkodobeho bearer tokenu.
+    Nic se neuklada do souboru.
+    """
+
+    token = _factory_admin_login(
+        email=admin_email,
+        password=admin_password,
+    )
+
+    try:
+        return provision_factory_v2(
+            admin_token=token
+        )
+
+    finally:
+        token = ""

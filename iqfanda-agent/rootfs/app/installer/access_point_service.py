@@ -1,4 +1,4 @@
-﻿"""Integracni rozhrani pro instalacni Access Point TNG IQ FANDA.
+"""Integracni rozhrani pro instalacni Access Point TNG IQ FANDA.
 
 Tento modul neprovadi zadne sitove operace.
 Pouze atomicky zapisuje pozadavek pro iqfanda-host-agent.
@@ -21,6 +21,14 @@ DEFAULT_REQUEST_PATH = Path(
 DEFAULT_SSID = "TNG_IQ_FANDA"
 DEFAULT_ADDRESS = "192.168.4.1/24"
 DEFAULT_PORTAL_URL = "http://192.168.4.1:8099"
+
+DEFAULT_PSK = (
+    os.environ.get(
+        "IQF_INSTALLER_AP_PSK",
+        "TNG-IQ-FANDA-SETUP",
+    )
+    .strip()
+)
 
 
 def _atomic_write_json(
@@ -80,6 +88,7 @@ def write_access_point_request(
     ssid: str = DEFAULT_SSID,
     address: str = DEFAULT_ADDRESS,
     portal_url: str = DEFAULT_PORTAL_URL,
+    psk: str = DEFAULT_PSK,
     request_path: Path | None = None,
 ) -> dict[str, Any]:
     """Zapise pozadovany stav instalacniho Access Pointu."""
@@ -90,6 +99,7 @@ def write_access_point_request(
     ssid = str(ssid or "").strip()
     address = str(address or "").strip()
     portal_url = str(portal_url or "").strip()
+    psk = str(psk or "").strip()
 
     if not reason:
         raise ValueError("Duvod pozadavku na Access Point nesmi byt prazdny.")
@@ -103,12 +113,18 @@ def write_access_point_request(
     if not portal_url:
         raise ValueError("URL instalacniho portalu nesmi byt prazdna.")
 
+    if len(psk) < 8 or len(psk) > 63:
+        raise ValueError(
+            "Heslo instalacniho Access Pointu musi mit 8 az 63 znaku."
+        )
+
     payload: dict[str, Any] = {
         "requested": bool(requested),
         "reason": reason,
         "ssid": ssid,
         "address": address,
         "portal_url": portal_url,
+        "psk": psk,
     }
 
     _atomic_write_json(
@@ -126,6 +142,8 @@ def write_access_point_request(
 def request_access_point(
     reason: str,
     *,
+    ssid: str = DEFAULT_SSID,
+    psk: str = DEFAULT_PSK,
     request_path: Path | None = None,
 ) -> dict[str, Any]:
     """Pozada Host Agent o spusteni instalacniho AP."""
@@ -133,6 +151,8 @@ def request_access_point(
     return write_access_point_request(
         requested=True,
         reason=reason,
+        ssid=ssid,
+        psk=psk,
         request_path=request_path,
     )
 

@@ -174,9 +174,9 @@ def bootstrap_manufacturing_identity(
             software_version=str(
                 os.getenv(
                     "IQF_SOFTWARE_VERSION",
-                    "0.1.72",
+                    "0.1.73",
                 )
-                or "0.1.72"
+                or "0.1.73"
             ).strip(),
             identity_path=path,
         )

@@ -58,7 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     create_parser.add_argument(
         "--software-version",
-        default="0.1.72",
+        default="0.1.73",
         help="Verze softwaru instalovana pri vyrobe.",
     )
 
