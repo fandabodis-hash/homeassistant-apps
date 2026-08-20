@@ -461,9 +461,9 @@ def provision_factory_v2(
     software_version = str(
         os.getenv(
             "IQF_SOFTWARE_VERSION",
-            "0.1.73",
+            "0.1.74",
         )
-        or "0.1.73"
+        or "0.1.74"
     ).strip()
 
     final = finalize_manufacturing_identity(

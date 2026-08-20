@@ -11,7 +11,7 @@ from heartbeat import main as heartbeat_main
 from host.access_point_manager import access_point_manager
 from host.iqf_host_api import main as host_api_main
 from installer.access_point_service import request_access_point
-from installer.network_manager import get_network_info
+from installer.network_manager import check_internet_access
 from installer_v2.installer_api import (
     service_access_point_ssid,
     spustit_api,
@@ -73,9 +73,9 @@ def spustit_access_point_manager() -> None:
 def spustit_servisni_ap_pri_offline() -> None:
     """
     Po startu instalovaneho zarizeni kratce pocka
-    na automaticke pripojeni k ulozene siti.
+    na automaticke pripojeni k internetu.
 
-    Pokud neni dostupne zadne pripojeni,
+    Pokud internet neni dostupny,
     spusti servisni AP pro zmenu Wi-Fi.
     """
 
@@ -85,24 +85,11 @@ def spustit_servisni_ap_pri_offline() -> None:
         return
 
     try:
-        network = get_network_info()
+        internet = check_internet_access()
 
-        interfaces = network.get(
-            "interfaces",
-            [],
-        )
-
-        connected = any(
-            isinstance(item, dict)
-            and bool(
-                item.get("connected")
-            )
-            for item in interfaces
-        )
-
-        if connected:
+        if internet.get("ok"):
             logging.info(
-                "Sit je dostupna. "
+                "Internet je dostupny. "
                 "Servisni Wi-Fi AP se nespousti."
             )
             return
@@ -114,14 +101,14 @@ def spustit_servisni_ap_pri_offline() -> None:
         result = request_access_point(
             reason=(
                 "installed_device_"
-                "network_unavailable"
+                "internet_unavailable"
             ),
             ssid=ssid,
         )
 
         logging.warning(
-            "Sit instalovaneho IQ FANDA "
-            "neni dostupna. "
+            "Internet instalovaneho IQ FANDA "
+            "neni dostupny. "
             "Spoustim servisni AP %s: %s",
             ssid,
             result.get("path"),
