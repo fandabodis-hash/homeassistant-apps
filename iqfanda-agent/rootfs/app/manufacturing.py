@@ -107,7 +107,7 @@ def build_manufacturing_identity(
     serial_number: str,
     model: str = "IQ FANDA PI5",
     hardware_revision: str = "Raspberry Pi 5",
-    software_version: str = "0.1.70",
+    software_version: str = "0.1.72",
 ) -> dict[str, Any]:
     """Sestavi novou trvalou vyrobni identitu."""
 
@@ -142,7 +142,7 @@ def create_manufacturing_identity(
     serial_number: str,
     model: str = "IQ FANDA PI5",
     hardware_revision: str = "Raspberry Pi 5",
-    software_version: str = "0.1.70",
+    software_version: str = "0.1.72",
     identity_path: Path = DEFAULT_IDENTITY_PATH,
 ) -> dict[str, Any]:
     """
