@@ -1,5 +1,6 @@
 """Koordinator startu sluzeb TNG IQ FANDA Agentu."""
 
+import json
 import logging
 import threading
 import time
@@ -13,6 +14,12 @@ from host.identity import DEFAULT_IDENTITY_PATH
 from host.iqf_host_api import main as host_api_main
 from installer.access_point_service import request_access_point
 from installer_v2.installer_api import spustit_api
+from installer_v2.wifi_maintenance import (
+    start_installed_boot_window,
+)
+from installer_v2.wifi_maintenance_api import (
+    spustit_api as spustit_wifi_maintenance_api,
+)
 from provisioning import DEVICE_CONFIG_PATH
 from telemetrie_modulu import (
     main as telemetrie_modulu_main,
@@ -55,6 +62,12 @@ def spustit_installer_api() -> None:
     spustit_api()
 
 
+def spustit_servisni_wifi_api() -> None:
+    """Spusti HTTP API zmeny Wi-Fi pro nainstalovane zarizeni."""
+
+    spustit_wifi_maintenance_api()
+
+
 def spustit_host_api() -> None:
     """Spusti lokalni Host API."""
 
@@ -89,6 +102,25 @@ def spustit_zha_bootstrap() -> None:
     """Spusti automatickou inicializaci ZHA."""
 
     zha_bootstrap_main()
+
+
+def _nacti_seriove_cislo() -> str:
+    payload = json.loads(
+        DEFAULT_IDENTITY_PATH.read_text(
+            encoding="utf-8-sig"
+        )
+    )
+
+    serial_number = str(
+        payload.get("serial_number") or ""
+    ).strip().upper()
+
+    if not serial_number:
+        raise RuntimeError(
+            "Vyrobni identita nema seriove cislo."
+        )
+
+    return serial_number
 
 
 def cekat_na_registraci_zarizeni(
@@ -202,8 +234,16 @@ def main() -> None:
 
     logging.info("IQ FANDA Agent Core spusten.")
 
+    installed_at_boot = DEVICE_CONFIG_PATH.exists()
+
+    installer_api_target = (
+        spustit_servisni_wifi_api
+        if installed_at_boot
+        else spustit_installer_api
+    )
+
     installer_api_thread = vytvorit_vlakno(
-        cil=spustit_installer_api,
+        cil=installer_api_target,
         nazev="installer-api",
     )
 
@@ -230,6 +270,23 @@ def main() -> None:
         host_api_thread=host_api_thread,
         access_point_thread=access_point_thread,
     )
+
+    if installed_at_boot:
+        try:
+            service_result = start_installed_boot_window(
+                serial_number=_nacti_seriove_cislo(),
+            )
+
+            logging.info(
+                "Servisni Wi-Fi okno dokonceno: %s",
+                service_result,
+            )
+
+        except Exception:
+            logging.exception(
+                "Servisni Wi-Fi okno selhalo. "
+                "Runtime bude presto spusten."
+            )
 
     logging.info(
         "Identita zarizeni je pripravena. "
