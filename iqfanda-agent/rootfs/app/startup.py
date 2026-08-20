@@ -9,6 +9,7 @@ from communication.communication_manager import main as communication_manager_ma
 from device_config import main as device_config_main
 from heartbeat import main as heartbeat_main
 from host.access_point_manager import access_point_manager
+from host.identity import DEFAULT_IDENTITY_PATH
 from host.iqf_host_api import main as host_api_main
 from installer.access_point_service import request_access_point
 from installer_v2.installer_api import spustit_api
@@ -126,6 +127,17 @@ def cekat_na_registraci_zarizeni(
                 DEVICE_CONFIG_PATH,
             )
             return
+
+        if not DEFAULT_IDENTITY_PATH.exists():
+            logging.info(
+                "Zarizeni ceka na dokonceni vyrobniho "
+                "Factory V2 provisioningu."
+            )
+
+            time.sleep(
+                PROVISIONING_RETRY_SECONDS
+            )
+            continue
 
         if not access_point_requested:
             try:
