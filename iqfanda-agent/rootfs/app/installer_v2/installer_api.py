@@ -468,7 +468,7 @@ SERVICE_HTML = """<!doctype html>
     name="viewport"
     content="width=device-width,initial-scale=1"
 >
-<title>TNG IQ FANDA - Zm?na Wi-Fi</title>
+<title>TNG IQ FANDA - Změna Wi-Fi</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -594,21 +594,21 @@ button {
 
 <div class="card">
 
-<h1>Zm?na Wi-Fi</h1>
+<h1>Změna Wi-Fi</h1>
 
 <p>
-    Vyberte Wi-Fi s?? v nov? lokalit?.
-    S?riov? ??slo a registrace za??zen?
-    z?stanou beze zm?ny.
+    Vyberte Wi-Fi síť v nové lokalitě.
+    Sériové číslo a registrace zařízení
+    zůstanou beze změny.
 </p>
 
 <label for="ssid">
-    Nov? Wi-Fi s??
+    Nová Wi-Fi síť
 </label>
 
 <select id="ssid">
 <option value="">
-    Vyhledejte Wi-Fi s?t?
+    Vyhledejte Wi-Fi sítě
 </option>
 </select>
 
@@ -617,11 +617,11 @@ button {
     class="secondary"
     type="button"
 >
-    Vyhledat s?t?
+    Vyhledat sítě
 </button>
 
 <label for="password">
-    Heslo nov? Wi-Fi
+    Heslo nové Wi-Fi
 </label>
 
 <input
@@ -635,7 +635,7 @@ button {
     class="primary"
     type="button"
 >
-    P?ipojit k nov? Wi-Fi
+    Připojit k nové Wi-Fi
 </button>
 
 <div
@@ -683,13 +683,13 @@ scan.addEventListener(
             ) {
                 throw new Error(
                     data.error ||
-                    "Vyhled?n? Wi-Fi selhalo."
+                    "Vyhledání Wi-Fi selhalo."
                 );
             }
 
             ssid.innerHTML =
                 '<option value="">' +
-                'Vyberte Wi-Fi s??' +
+                'Vyberte Wi-Fi síť' +
                 '</option>';
 
             (
@@ -773,14 +773,14 @@ save.addEventListener(
             ) {
                 throw new Error(
                     data.error ||
-                    "Zm?nu Wi-Fi nelze spustit."
+                    "Změnu Wi-Fi nelze spustit."
                 );
             }
 
             message.textContent =
-                "P?ipojuji TNG IQ FANDA " +
-                "k nov? Wi-Fi. " +
-                "Servisn? s?? se nyn? odpoj?.";
+                "Připojuji TNG IQ FANDA " +
+                "k nové Wi-Fi. " +
+                "Servisní síť se nyní odpojí.";
         }
         catch (error) {
             save.disabled = false;

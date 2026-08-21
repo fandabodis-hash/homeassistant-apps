@@ -60,7 +60,7 @@ class AccessPointManager:
         self._dhcp_process = None
 
     def _stop_dhcp_server(self) -> None:
-        """Ukonci DHCP server servisniho/instalacniho AP."""
+        """Ukonci DHCP server servisniho AP."""
 
         process = self._dhcp_process
         self._dhcp_process = None
@@ -439,25 +439,31 @@ class AccessPointManager:
                 )
             )
 
-        try:
-            self._start_dhcp_server(
-                address=address,
-            )
+        if security == "open":
+            try:
+                self._start_dhcp_server(
+                    address=address,
+                )
 
-        except Exception:
-            self.command_runner(
-                "connection",
-                "down",
-                self.profile_name,
-            )
+            except Exception:
+                self.command_runner(
+                    "connection",
+                    "down",
+                    self.profile_name,
+                )
 
-            self.command_runner(
-                "connection",
-                "delete",
-                self.profile_name,
-            )
+                self.command_runner(
+                    "connection",
+                    "delete",
+                    self.profile_name,
+                )
 
-            raise
+                raise
+
+        else:
+            # Prvotni instalacni AP zustava v puvodnim
+            # rezimu bez vlastniho DHCP procesu Agentu.
+            self._stop_dhcp_server()
 
         with self._lock:
             self._active = True
