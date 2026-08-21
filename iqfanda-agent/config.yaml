@@ -1,5 +1,5 @@
 name: "TNG IQ FANDA Agent"
-version: "0.1.79"
+version: "0.1.80"
 slug: "tng_iq_fanda_agent"
 description: "Lokální runtime a cloudová komunikace TNG IQ FANDA"
 url: "https://github.com/fandabodis-hash/homeassistant-apps"
@@ -30,6 +30,9 @@ hassio_role: manager
 host_dbus: true
 host_network: true
 
+privileged:
+  - NET_ADMIN
+
 usb: true
 uart: true
 udev: true
@@ -59,7 +62,7 @@ options:
   device_model: "IQ FANDA PI5"
   hardware_revision: "Raspberry Pi 5"
   device_hostname: "iqfanda"
-  software_version: "0.1.79"
+  software_version: "0.1.80"
   log_level: "INFO"
 
 schema:
