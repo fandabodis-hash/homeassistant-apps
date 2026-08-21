@@ -89,6 +89,7 @@ def write_access_point_request(
     address: str = DEFAULT_ADDRESS,
     portal_url: str = DEFAULT_PORTAL_URL,
     psk: str = DEFAULT_PSK,
+    security: str = "wpa2-psk",
     request_path: Path | None = None,
 ) -> dict[str, Any]:
     """Zapise pozadovany stav instalacniho Access Pointu."""
@@ -100,6 +101,18 @@ def write_access_point_request(
     address = str(address or "").strip()
     portal_url = str(portal_url or "").strip()
     psk = str(psk or "").strip()
+
+    security = str(
+        security or ""
+    ).strip().lower()
+
+    if security not in {
+        "open",
+        "wpa2-psk",
+    }:
+        raise ValueError(
+            "Nepodporovany rezim zabezpeceni Access Pointu."
+        )
 
     if not reason:
         raise ValueError("Duvod pozadavku na Access Point nesmi byt prazdny.")
@@ -113,7 +126,13 @@ def write_access_point_request(
     if not portal_url:
         raise ValueError("URL instalacniho portalu nesmi byt prazdna.")
 
-    if len(psk) < 8 or len(psk) > 63:
+    if (
+        security == "wpa2-psk"
+        and (
+            len(psk) < 8
+            or len(psk) > 63
+        )
+    ):
         raise ValueError(
             "Heslo instalacniho Access Pointu musi mit 8 az 63 znaku."
         )
@@ -125,6 +144,7 @@ def write_access_point_request(
         "address": address,
         "portal_url": portal_url,
         "psk": psk,
+        "security": security,
     }
 
     _atomic_write_json(
@@ -144,6 +164,7 @@ def request_access_point(
     *,
     ssid: str = DEFAULT_SSID,
     psk: str = DEFAULT_PSK,
+    security: str = "wpa2-psk",
     request_path: Path | None = None,
 ) -> dict[str, Any]:
     """Pozada Host Agent o spusteni instalacniho AP."""
@@ -153,6 +174,7 @@ def request_access_point(
         reason=reason,
         ssid=ssid,
         psk=psk,
+        security=security,
         request_path=request_path,
     )
 

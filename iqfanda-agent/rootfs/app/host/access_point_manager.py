@@ -132,6 +132,13 @@ class AccessPointManager:
             "psk": str(
                 payload["psk"] or ""
             ).strip(),
+            "security": str(
+                payload.get(
+                    "security",
+                    "wpa2-psk",
+                )
+                or "wpa2-psk"
+            ).strip().lower(),
         }
 
     @staticmethod
@@ -197,6 +204,22 @@ class AccessPointManager:
             request_payload.get("psk") or ""
         ).strip()
 
+        security = str(
+            request_payload.get(
+                "security",
+                "wpa2-psk",
+            )
+            or "wpa2-psk"
+        ).strip().lower()
+
+        if security not in {
+            "open",
+            "wpa2-psk",
+        }:
+            raise ValueError(
+                "Nepodporovany rezim zabezpeceni Access Pointu."
+            )
+
         if not ssid:
             raise ValueError(
                 "SSID instalacniho Access Pointu nesmi byt prazdne."
@@ -207,7 +230,13 @@ class AccessPointManager:
                 "IP adresa instalacniho Access Pointu nesmi byt prazdna."
             )
 
-        if len(psk) < 8 or len(psk) > 63:
+        if (
+            security == "wpa2-psk"
+            and (
+                len(psk) < 8
+                or len(psk) > 63
+            )
+        ):
             raise ValueError(
                 "Heslo instalacniho Access Pointu musi mit 8 az 63 znaku."
             )
@@ -245,7 +274,7 @@ class AccessPointManager:
                 )
             )
 
-        modify_result = self.command_runner(
+        modify_args = [
             "connection",
             "modify",
             self.profile_name,
@@ -253,20 +282,31 @@ class AccessPointManager:
             "ap",
             "802-11-wireless.band",
             "bg",
-            "802-11-wireless-security.key-mgmt",
-            "wpa-psk",
-            "802-11-wireless-security.proto",
-            "rsn",
-            "802-11-wireless-security.psk",
-            psk,
+        ]
+
+        if security == "wpa2-psk":
+            modify_args.extend([
+                "802-11-wireless-security.key-mgmt",
+                "wpa-psk",
+                "802-11-wireless-security.proto",
+                "rsn",
+                "802-11-wireless-security.psk",
+                psk,
+            ])
+
+        modify_args.extend([
             "ipv4.method",
-            "manual",
+            "shared",
             "ipv4.addresses",
             address,
             "ipv6.method",
             "disabled",
             "connection.autoconnect",
             "no",
+        ])
+
+        modify_result = self.command_runner(
+            *modify_args
         )
 
         if getattr(modify_result, "returncode", 1) != 0:
@@ -308,7 +348,7 @@ class AccessPointManager:
             "address": address,
             "interface": self.interface,
             "profile_name": self.profile_name,
-            "security": "wpa2-psk",
+            "security": security,
         }
 
     def stop_access_point(self) -> dict[str, Any]:

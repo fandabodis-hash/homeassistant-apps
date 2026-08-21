@@ -11,6 +11,7 @@ from heartbeat import main as heartbeat_main
 from host.access_point_manager import access_point_manager
 from host.iqf_host_api import main as host_api_main
 from installer.access_point_service import (
+    release_access_point,
     request_access_point,
 )
 from installer.network_manager import (
@@ -159,6 +160,8 @@ def spustit_servisni_ap_pri_chybejici_wifi() -> None:
                 "wifi_unavailable"
             ),
             ssid=ssid,
+            security="open",
+            psk="",
         )
 
         logging.warning(
@@ -306,6 +309,21 @@ def main() -> None:
     zarizeni_bylo_nainstalovane_pri_startu = (
         DEVICE_CONFIG_PATH.exists()
     )
+
+    if zarizeni_bylo_nainstalovane_pri_startu:
+        try:
+            release_access_point(
+                reason=(
+                    "installed_startup_"
+                    "reset_stale_ap"
+                )
+            )
+
+        except Exception:
+            logging.exception(
+                "Reset stareho servisniho "
+                "AP requestu selhal."
+            )
 
     installer_api_thread = vytvorit_vlakno(
         cil=spustit_installer_api,
