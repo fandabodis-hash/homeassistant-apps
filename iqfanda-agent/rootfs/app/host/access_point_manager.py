@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -56,6 +57,103 @@ class AccessPointManager:
         self._active = False
         self._last_request: dict[str, Any] | None = None
         self._last_error: str | None = None
+        self._dhcp_process = None
+
+    def _stop_dhcp_server(self) -> None:
+        """Ukonci DHCP server servisniho/instalacniho AP."""
+
+        process = self._dhcp_process
+        self._dhcp_process = None
+
+        if process is None:
+            return
+
+        if process.poll() is not None:
+            return
+
+        process.terminate()
+
+        try:
+            process.wait(
+                timeout=2.0
+            )
+
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(
+                timeout=2.0
+            )
+
+    def _start_dhcp_server(
+        self,
+        address: str,
+    ) -> None:
+        """Spusti vlastni DHCP pro wlan0."""
+
+        self._stop_dhcp_server()
+
+        gateway = str(
+            address
+        ).split(
+            "/",
+            1,
+        )[0].strip()
+
+        if gateway != "192.168.4.1":
+            raise RuntimeError(
+                "DHCP AP ocekava gateway "
+                "192.168.4.1."
+            )
+
+        command = [
+            "dnsmasq",
+            "--keep-in-foreground",
+            "--interface=" + self.interface,
+            "--bind-interfaces",
+            "--port=0",
+            "--dhcp-authoritative",
+            (
+                "--dhcp-range="
+                "192.168.4.20,"
+                "192.168.4.100,"
+                "255.255.255.0,"
+                "12h"
+            ),
+            (
+                "--dhcp-option="
+                "3,192.168.4.1"
+            ),
+            (
+                "--dhcp-option="
+                "6,192.168.4.1"
+            ),
+            (
+                "--dhcp-leasefile="
+                "/tmp/iqfanda-ap.leases"
+            ),
+        ]
+
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        time.sleep(0.25)
+
+        if process.poll() is not None:
+            raise RuntimeError(
+                "DHCP server dnsmasq "
+                "se nepodarilo spustit."
+            )
+
+        self._dhcp_process = process
+
+        logging.info(
+            "DHCP server AP bezi na %s: "
+            "192.168.4.20-192.168.4.100.",
+            self.interface,
+        )
 
     def get_status(self) -> dict[str, Any]:
         """Vrati aktualni stav spravce Access Pointu."""
@@ -81,6 +179,10 @@ class AccessPointManager:
                 "request_path": str(self.request_path),
                 "last_request": last_request,
                 "error": self._last_error,
+                "dhcp_active": (
+                    self._dhcp_process is not None
+                    and self._dhcp_process.poll() is None
+                ),
             }
 
     def load_request(self) -> dict[str, Any] | None:
@@ -296,7 +398,7 @@ class AccessPointManager:
 
         modify_args.extend([
             "ipv4.method",
-            "shared",
+            "manual",
             "ipv4.addresses",
             address,
             "ipv6.method",
@@ -337,6 +439,26 @@ class AccessPointManager:
                 )
             )
 
+        try:
+            self._start_dhcp_server(
+                address=address,
+            )
+
+        except Exception:
+            self.command_runner(
+                "connection",
+                "down",
+                self.profile_name,
+            )
+
+            self.command_runner(
+                "connection",
+                "delete",
+                self.profile_name,
+            )
+
+            raise
+
         with self._lock:
             self._active = True
             self._last_error = None
@@ -353,6 +475,8 @@ class AccessPointManager:
 
     def stop_access_point(self) -> dict[str, Any]:
         """Deaktivuje a odstrani instalacni Access Point."""
+
+        self._stop_dhcp_server()
 
         down_result = self.command_runner(
             "connection",

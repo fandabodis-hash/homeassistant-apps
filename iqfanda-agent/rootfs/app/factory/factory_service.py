@@ -12,7 +12,7 @@ def create_identity(
     serial_number: str,
     model: str = "IQ FANDA PI5",
     hardware_revision: str = "Raspberry Pi 5",
-    software_version: str = "0.1.77",
+    software_version: str = "0.1.78",
     identity_path: Path | None = None,
 ) -> dict[str, Any]:
     """Vytvoří výrobní identitu zařízení."""
