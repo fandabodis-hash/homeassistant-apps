@@ -7,8 +7,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from communication.goodwe_ems_controller import (
-    execute_goodwe_ems_from_cloud_config,
+from communication.inverter_control_adapter import (
+    execute_battery_control_from_cloud_config,
 )
 from communication.inverter_adapter import (
     probe_inverter_modbus,
@@ -1126,7 +1126,7 @@ def execute_spot_battery_intent(
 ) -> None:
     """
     Overi spot battery intent a provede
-    fyzicke GoodWe EMS rizeni.
+    fyzicke rizeni baterie pres univerzalni control adapter.
 
     Povolene akce:
     - auto
@@ -1154,7 +1154,7 @@ def execute_spot_battery_intent(
             )
 
         applied = (
-            execute_goodwe_ems_from_cloud_config(
+            execute_battery_control_from_cloud_config(
                 cloud_config=cloud_config,
                 action=stored["action"],
                 allowed_charge_power_w=stored[
@@ -1174,7 +1174,7 @@ def execute_spot_battery_intent(
             result={
                 "worker": "command_worker",
                 "executor": "spot_battery_intent",
-                "phase": "ems_apply_failed",
+                "phase": "battery_control_apply_failed",
                 "physical_control_active": True,
                 "payload_received": (
                     command_payload
@@ -1184,7 +1184,7 @@ def execute_spot_battery_intent(
         )
 
         logging.exception(
-            "Spot battery EMS prikaz %s selhal.",
+            "Spot battery control prikaz %s selhal.",
             command_id,
         )
         return
@@ -1196,7 +1196,7 @@ def execute_spot_battery_intent(
         result={
             "worker": "command_worker",
             "executor": "spot_battery_intent",
-            "phase": "ems_applied",
+            "phase": "battery_control_applied",
             "physical_control_active": True,
             "real_modbus_write": (
                 applied.write_performed
@@ -1217,13 +1217,8 @@ def execute_spot_battery_intent(
             "current_soc_percent": stored[
                 "current_soc_percent"
             ],
-            "ems_mode_register": 47511,
-            "ems_mode_value": (
-                applied.ems_mode
-            ),
-            "ems_power_register": 47512,
-            "ems_power_value": (
-                applied.ems_power_register
+            "control_capability": (
+                applied.capability
             ),
             "valid_until": stored[
                 "valid_until"
@@ -1233,19 +1228,18 @@ def execute_spot_battery_intent(
     )
 
     logging.info(
-        "Spot battery EMS | "
-        "prikaz=%s action=%s "
-        "allowed=%s W "
-        "EMS_MODE=%s EMS_POWER=%s "
-        "SOC=%s/%s "
-        "REAL_MODBUS_WRITE=%s",
+        "Spot battery control | "
+        "prikaz=%s capability=%s "
+        "action=%s applied=%s W "
+        "SOC=%s/%s verified=%s "
+        "REAL_WRITE=%s",
         command_id,
+        applied.capability,
         applied.action,
         applied.applied_power_w,
-        applied.ems_mode,
-        applied.ems_power_register,
         stored["current_soc_percent"],
         stored["target_soc_percent"],
+        applied.verified,
         applied.write_performed,
     )
 

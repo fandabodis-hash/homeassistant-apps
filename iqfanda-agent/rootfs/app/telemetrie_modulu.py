@@ -7,16 +7,9 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from communication.fve_entity_mapper import (
-    vytvorit_goodwe_fve_entity,
-)
 from communication.inverter_adapter import (
     read_inverter_snapshot,
     select_inverter_profile,
-)
-from communication.goodwe_probe import (
-    read_goodwe_control_snapshot,
-    read_goodwe_et_snapshot,
 )
 from device_config import (
     load_cached_cloud_config,
@@ -84,44 +77,6 @@ def ziskej_interval_telemetrie(
         MIN_TELEMETRY_INTERVAL_SECONDS,
         min(interval, MAX_TELEMETRY_INTERVAL_SECONDS),
     )
-
-
-def najdi_goodwe_fve_runtime(
-    cloud_config: dict[str, Any],
-) -> dict[str, Any] | None:
-    """Najde povolenou read-only GoodWe FVE konfiguraci."""
-    runtime_configurations = cloud_config.get(
-        "module_runtime_configurations"
-    )
-
-    if not isinstance(runtime_configurations, list):
-        return None
-
-    for runtime_configuration in runtime_configurations:
-        if not isinstance(runtime_configuration, dict):
-            continue
-
-        module_key = str(
-            runtime_configuration.get("module_key") or ""
-        ).strip().lower()
-
-        manufacturer = str(
-            runtime_configuration.get("manufacturer") or ""
-        ).strip().lower()
-
-        if (
-            module_key == "photovoltaic"
-            and manufacturer == "goodwe"
-            and runtime_configuration.get(
-                "telemetry_enabled"
-            )
-            is True
-            and runtime_configuration.get("read_only") is True
-        ):
-            return runtime_configuration
-
-    return None
-
 
 
 def najdi_fve_runtime(
@@ -219,101 +174,64 @@ def nacti_fve_telemetrii(
     str,
 ]:
     """
-    Nacte FVE data pres univerzalni adapter.
+    Nacte FVE data vyhradne pres univerzalni
+    profilovy adapter.
 
-    GoodWe ma docasny legacy fallback pro bezpecnou
-    migraci existujici produkcni instalace.
+    Tato runtime vrstva nezna konkretniho vyrobce.
+    Vsechny odlisnosti stridace patri pouze do
+    communication profilu a adapteru.
     """
+    snapshot = read_inverter_snapshot(
+        runtime_configuration
+    )
+
+    if not isinstance(
+        snapshot,
+        dict,
+    ):
+        raise RuntimeError(
+            "Univerzalni reader nevratil "
+            "platny snapshot."
+        )
+
+    entities = snapshot.get(
+        "entities"
+    )
+
+    if (
+        not isinstance(
+            entities,
+            list,
+        )
+        or not entities
+    ):
+        raise RuntimeError(
+            "Univerzalni reader nevratil "
+            "normalizovane FVE entity."
+        )
+
     manufacturer = str(
-        runtime_configuration.get(
+        snapshot.get(
+            "manufacturer"
+        )
+        or runtime_configuration.get(
             "manufacturer"
         )
         or ""
     ).strip().lower()
 
-    if not manufacturer:
-        raise ValueError(
-            "FVE runtime nema vyrobce."
-        )
+    telemetry_source = (
+        f"{manufacturer}_rs485"
+        if manufacturer
+        else "inverter_rs485"
+    )
 
-    try:
-        snapshot = read_inverter_snapshot(
-            runtime_configuration
-        )
-
-        if not isinstance(
-            snapshot,
-            dict,
-        ):
-            raise RuntimeError(
-                "Universalni reader nevratil platny snapshot."
-            )
-
-        entities = snapshot.get(
-            "entities"
-        )
-
-        if (
-            not isinstance(
-                entities,
-                list,
-            )
-            or not entities
-        ):
-            raise RuntimeError(
-                "Universalni reader nevratil FVE entity."
-            )
-
-        return (
-            snapshot,
-            entities,
-            manufacturer + "_rs485",
-            "universal",
-        )
-
-    except Exception as exc:
-        if manufacturer != "goodwe":
-            raise
-
-        logging.warning(
-            "Universalni reader GoodWe selhal; "
-            "pouzivam docasny legacy fallback: %s",
-            exc,
-        )
-
-        snapshot = read_goodwe_et_snapshot(
-            runtime_configuration
-        )
-
-        if not isinstance(
-            snapshot,
-            dict,
-        ):
-            raise RuntimeError(
-                "Legacy GoodWe reader nevratil platny snapshot."
-            )
-
-        entities = vytvorit_goodwe_fve_entity(
-            snapshot
-        )
-
-        if (
-            not isinstance(
-                entities,
-                list,
-            )
-            or not entities
-        ):
-            raise RuntimeError(
-                "Legacy GoodWe mapper nevratil FVE entity."
-            )
-
-        return (
-            snapshot,
-            entities,
-            "goodwe_rs485",
-            "goodwe_legacy_fallback",
-        )
+    return (
+        snapshot,
+        entities,
+        telemetry_source,
+        "universal",
+    )
 
 
 def najdi_pv_surplus_runtime(
@@ -949,7 +867,7 @@ def aplikovat_pv_surplus_telemetry_grace(
 def vyhodnotit_pv_surplus_dry_run(
     *,
     cloud_config: dict[str, Any],
-    goodwe_entities: list[dict[str, Any]],
+    fve_entities: list[dict[str, Any]],
     now: float,
 ) -> dict[str, Any] | None:
     """
@@ -1108,7 +1026,7 @@ def vyhodnotit_pv_surplus_dry_run(
 
     energy_result = vyhodnotit_stav_prebytku(
         konfigurace=source_configuration,
-        goodwe_entity=goodwe_entities,
+        fve_entity=fve_entities,
         predchozi_stav=previous_state,
         confirming_since=confirming_since,
         now=now,
@@ -1342,7 +1260,7 @@ def vyhodnotit_pv_surplus_control_jednou(
 
     result = vyhodnotit_pv_surplus_dry_run(
         cloud_config=cloud_config,
-        goodwe_entities=control_entities,
+        fve_entities=control_entities,
         now=evaluation_time,
     )
 
@@ -1514,29 +1432,14 @@ def odeslat_telemetrii_jednou() -> int:
     )
 
     try:
-        control_entities = entities
-
         #
-        # GoodWe control reader zustava zatim oddeleny
-        # od univerzalni read-only telemetry vrstvy.
+        # Rizeni prebytku vzdy dostava stejny
+        # normalizovany snapshot z univerzalniho
+        # inverter adapteru. Vyrobce ani model
+        # zde nesmi ovlivnit rozhodovaci logiku.
         #
-        if manufacturer == "goodwe":
-            try:
-                control_entities = read_goodwe_control_snapshot(
-                    runtime_configuration
-                )
-
-            except Exception as exc:
-                logging.warning(
-                    "PV surplus control reader selhal; "
-                    "pouzivam FVE snapshot: %s",
-                    exc,
-                )
-
-                control_entities = entities
-
         vyhodnotit_pv_surplus_control_jednou(
-            fve_entities=control_entities,
+            fve_entities=entities,
             now=time.monotonic(),
         )
 

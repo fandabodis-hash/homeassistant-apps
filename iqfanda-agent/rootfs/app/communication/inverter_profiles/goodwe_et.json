@@ -8,6 +8,19 @@
     "GW5K-ET"
   ],
   "verification_status": "physically_verified_00003",
+  "control_capabilities": {
+    "battery_charge_control": {
+      "schema_version": 1,
+      "driver_module": "communication.goodwe_ems_controller",
+      "driver_function": "execute_goodwe_ems_from_cloud_config",
+      "supported_actions": [
+        "auto",
+        "charge_grid"
+      ],
+      "discharge_allowed": false,
+      "verification_status": "physically_verified_00003"
+    }
+  },
   "protocol": {
     "type": "modbus_rtu",
     "function_code": 3,
