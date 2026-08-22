@@ -36,9 +36,10 @@ def _select_photovoltaic_runtime(
     cloud_config: dict[str, Any],
 ) -> dict[str, Any]:
     """
-    Najde obecnou FVE runtime konfiguraci.
+    Najde jedinou FVE runtime konfiguraci.
 
-    Funkce nerozhoduje podle vyrobce ani modelu.
+    Fyzicky transport je implementacni detail
+    konkretniho communication driveru.
     """
     if not isinstance(
         cloud_config,
@@ -78,17 +79,7 @@ def _select_photovoltaic_runtime(
             or ""
         ).strip().lower()
 
-        communication_type = str(
-            runtime.get(
-                "communication_type"
-            )
-            or ""
-        ).strip().lower()
-
-        if (
-            module_key == "photovoltaic"
-            and communication_type == "rs485"
-        ):
+        if module_key == "photovoltaic":
             matches.append(
                 runtime
             )
@@ -264,6 +255,169 @@ def _result_value(
         key,
         None,
     )
+
+
+def build_inverter_control_capability_state(
+    cloud_config: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Vrati verejny popis ridicich schopnosti
+    instalovaneho menice.
+
+    Verejny kontrakt neobsahuje implementacni
+    detaily fyzicke komunikace ani driveru.
+    """
+    result: dict[str, Any] = {
+        "schema_version": 1,
+        "complete": False,
+        "capabilities": {},
+    }
+
+    try:
+        runtime = (
+            _select_photovoltaic_runtime(
+                cloud_config
+            )
+        )
+
+        manufacturer = str(
+            runtime.get(
+                "manufacturer"
+            )
+            or ""
+        ).strip()
+
+        model = str(
+            runtime.get(
+                "model"
+            )
+            or ""
+        ).strip()
+
+        profile = select_inverter_profile(
+            manufacturer=manufacturer,
+            model=model,
+        )
+
+    except Exception:
+        result[
+            "reason"
+        ] = "inverter_profile_not_available"
+
+        return result
+
+    raw_capabilities = profile.get(
+        "control_capabilities"
+    )
+
+    if not isinstance(
+        raw_capabilities,
+        dict,
+    ):
+        raw_capabilities = {}
+
+    public_capabilities: dict[
+        str,
+        dict[str, Any],
+    ] = {}
+
+    for (
+        capability_name,
+        capability_definition,
+    ) in raw_capabilities.items():
+
+        name = str(
+            capability_name
+            or ""
+        ).strip()
+
+        if (
+            not name
+            or not isinstance(
+                capability_definition,
+                dict,
+            )
+        ):
+            continue
+
+        raw_actions = (
+            capability_definition.get(
+                "supported_actions"
+            )
+        )
+
+        if not isinstance(
+            raw_actions,
+            list,
+        ):
+            raw_actions = []
+
+        actions = sorted({
+            str(action).strip()
+            for action in raw_actions
+            if str(action).strip()
+        })
+
+        public_definition: dict[
+            str,
+            Any,
+        ] = {
+            "available": bool(
+                actions
+            ),
+            "supported_actions": actions,
+        }
+
+        if (
+            "discharge_allowed"
+            in capability_definition
+        ):
+            public_definition[
+                "discharge_allowed"
+            ] = bool(
+                capability_definition[
+                    "discharge_allowed"
+                ]
+            )
+
+        verification_status = str(
+            capability_definition.get(
+                "verification_status"
+            )
+            or ""
+        ).strip()
+
+        if verification_status:
+            public_definition[
+                "verification_status"
+            ] = verification_status
+
+        public_capabilities[
+            name
+        ] = public_definition
+
+    #
+    # Absence capability je explicitne
+    # "nepodporovano", nikoli runtime chyba.
+    #
+    if (
+        BATTERY_CHARGE_CONTROL
+        not in public_capabilities
+    ):
+        public_capabilities[
+            BATTERY_CHARGE_CONTROL
+        ] = {
+            "available": False,
+            "supported_actions": [],
+            "discharge_allowed": False,
+        }
+
+    result["complete"] = True
+    result["capabilities"] = (
+        public_capabilities
+    )
+
+    return result
 
 
 def execute_battery_control_from_cloud_config(

@@ -6,6 +6,9 @@ from pathlib import Path
 from urllib import error, request
 
 from communication.json_utils import nacti_json
+from communication.inverter_control_adapter import (
+    build_inverter_control_capability_state,
+)
 from device_config import load_cached_cloud_config
 from runtime_config import load_runtime_configuration
 from sync_signal import request_config_sync
@@ -175,6 +178,59 @@ def build_communication_state() -> dict:
                 "offline_device_count": None,
                 "error": str(exc),
             }
+
+    #
+    # Univerzalni ridici capabilities
+    # instalovaneho menice.
+    #
+    # Cloud dostava pouze verejny capability
+    # kontrakt, nikoli implementacni detaily.
+    #
+    try:
+        cloud_config = (
+            load_cached_cloud_config()
+        )
+
+        if isinstance(
+            cloud_config,
+            dict,
+        ):
+            communication_state[
+                "inverter_control"
+            ] = (
+                build_inverter_control_capability_state(
+                    cloud_config
+                )
+            )
+
+        else:
+            communication_state[
+                "inverter_control"
+            ] = {
+                "schema_version": 1,
+                "complete": False,
+                "capabilities": {},
+                "reason":
+                    "cloud_config_not_available",
+            }
+
+    except Exception as exc:
+        logging.warning(
+            "Control capability snapshot "
+            "se nepodarilo sestavit: %s",
+            exc,
+        )
+
+        communication_state[
+            "inverter_control"
+        ] = {
+            "schema_version": 1,
+            "complete": False,
+            "capabilities": {},
+            "reason":
+                "capability_snapshot_failed",
+        }
+
 
     return communication_state
 

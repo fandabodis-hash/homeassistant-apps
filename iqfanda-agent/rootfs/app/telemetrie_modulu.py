@@ -9,7 +9,6 @@ from typing import Any
 
 from communication.inverter_adapter import (
     read_inverter_snapshot,
-    select_inverter_profile,
 )
 from device_config import (
     load_cached_cloud_config,
@@ -83,8 +82,10 @@ def najdi_fve_runtime(
     cloud_config: dict[str, Any],
 ) -> dict[str, Any] | None:
     """
-    Najde aktivni read-only FVE runtime podporovany
-    univerzalnim profilem stridace.
+    Najde jedinou aktivni read-only FVE runtime.
+
+    Tato sdilena provozni vrstva nezna
+    vyrobce, model ani fyzicky transport.
     """
     runtime_configurations = cloud_config.get(
         "module_runtime_configurations"
@@ -96,7 +97,11 @@ def najdi_fve_runtime(
     ):
         return None
 
-    for runtime_configuration in runtime_configurations:
+    matches: list[dict[str, Any]] = []
+
+    for runtime_configuration in (
+        runtime_configurations
+    ):
         if not isinstance(
             runtime_configuration,
             dict,
@@ -110,59 +115,33 @@ def najdi_fve_runtime(
             or ""
         ).strip().lower()
 
-        communication_type = str(
-            runtime_configuration.get(
-                "communication_type"
-            )
-            or ""
-        ).strip().lower()
+        if module_key != "photovoltaic":
+            continue
 
         if (
-            module_key != "photovoltaic"
-            or runtime_configuration.get(
+            runtime_configuration.get(
                 "telemetry_enabled"
             )
             is not True
-            or runtime_configuration.get(
+        ):
+            continue
+
+        if (
+            runtime_configuration.get(
                 "read_only"
             )
             is not True
-            or communication_type != "rs485"
         ):
             continue
 
-        manufacturer = str(
-            runtime_configuration.get(
-                "manufacturer"
-            )
-            or ""
-        ).strip()
+        matches.append(
+            runtime_configuration
+        )
 
-        model = str(
-            runtime_configuration.get(
-                "model"
-            )
-            or ""
-        ).strip()
+    if len(matches) != 1:
+        return None
 
-        if (
-            not manufacturer
-            or not model
-        ):
-            continue
-
-        try:
-            select_inverter_profile(
-                manufacturer=manufacturer,
-                model=model,
-            )
-
-        except ValueError:
-            continue
-
-        return runtime_configuration
-
-    return None
+    return matches[0]
 
 
 def nacti_fve_telemetrii(
@@ -210,21 +189,17 @@ def nacti_fve_telemetrii(
             "normalizovane FVE entity."
         )
 
-    manufacturer = str(
+    telemetry_source = str(
         snapshot.get(
-            "manufacturer"
+            "telemetry_source"
         )
-        or runtime_configuration.get(
-            "manufacturer"
-        )
-        or ""
-    ).strip().lower()
+        or "inverter_profile"
+    ).strip()
 
-    telemetry_source = (
-        f"{manufacturer}_rs485"
-        if manufacturer
-        else "inverter_rs485"
-    )
+    if not telemetry_source:
+        telemetry_source = (
+            "inverter_profile"
+        )
 
     return (
         snapshot,
