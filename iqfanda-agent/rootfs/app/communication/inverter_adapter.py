@@ -989,6 +989,91 @@ def decode_profile_entities(
             "Adapter vytvoril duplicitni entity."
         )
 
+    # === PHASE 24.9 UNIVERSAL GRID CONNECTION START ===
+    #
+    # Univerzalni stav distribucni site.
+    #
+    # Fyzicke registry patri pouze do profilu konkretniho
+    # vyrobce/modelu. Tato vrstva pracuje vyhradne s
+    # kanonickymi IQ FANDA entitami sit.napeti_*.
+    #
+    # Pravidlo:
+    # - alespon jedno platne napeti > 0 V -> ON GRID
+    # - platna napeti existuji a vsechna jsou 0 V -> OFF GRID
+    # - zadne sitove napeti neni dostupne -> UNKNOWN
+    #
+    # Pracovni rezim stridace, frekvence ani vykon
+    # smartmeteru se zde zamerne nepouzivaji.
+    #
+    grid_voltage_keys = (
+        "sit.napeti_l1",
+        "sit.napeti_l2",
+        "sit.napeti_l3",
+    )
+
+    grid_voltage_sources: list[str] = []
+    grid_voltage_values: list[float] = []
+
+    for grid_voltage_key in grid_voltage_keys:
+        if grid_voltage_key not in values_by_key:
+            continue
+
+        grid_voltage_value = values_by_key[
+            grid_voltage_key
+        ]
+
+        if (
+            isinstance(grid_voltage_value, bool)
+            or not isinstance(
+                grid_voltage_value,
+                (int, float),
+            )
+        ):
+            continue
+
+        grid_voltage_sources.append(
+            grid_voltage_key
+        )
+
+        grid_voltage_values.append(
+            float(grid_voltage_value)
+        )
+
+    grid_connected: bool | None
+
+    if grid_voltage_values:
+        grid_connected = any(
+            abs(value) > 0.0
+            for value in grid_voltage_values
+        )
+        grid_quality = "good"
+    else:
+        grid_connected = None
+        grid_quality = "unknown"
+
+    if not any(
+        item.get("entity_key") == "sit.pripojeno"
+        for item in result
+    ):
+        result.append({
+            "entity_key": "sit.pripojeno",
+            "category": "sit",
+            "name": "Připojení k distribuční síti",
+            "value": grid_connected,
+            "unit": None,
+            "value_type": "boolean",
+            "quality": grid_quality,
+            "source_address": None,
+            "attributes": {
+                "derived_from": ",".join(
+                    grid_voltage_sources
+                ),
+                "rule":
+                    "any_abs_grid_voltage_gt_0",
+            },
+        })
+
+    # === PHASE 24.9 UNIVERSAL GRID CONNECTION END ===
     return result
 
 

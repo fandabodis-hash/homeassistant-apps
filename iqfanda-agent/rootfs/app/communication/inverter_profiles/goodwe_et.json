@@ -185,6 +185,51 @@
       "word_order": "big"
     },
     {
+      "entity_key": "sit.napeti_l1",
+      "category": "sit",
+      "name": "Napětí sítě L1",
+      "address": 35121,
+      "register_type": "uint16",
+      "unit": "V",
+      "value_type": "number",
+      "source_address": 35121,
+      "attributes": {
+        "device_class": "voltage",
+        "verification": "physically_verified_00003"
+      },
+      "divisor": 10.0
+    },
+    {
+      "entity_key": "sit.napeti_l2",
+      "category": "sit",
+      "name": "Napětí sítě L2",
+      "address": 35126,
+      "register_type": "uint16",
+      "unit": "V",
+      "value_type": "number",
+      "source_address": 35126,
+      "attributes": {
+        "device_class": "voltage",
+        "verification": "physically_verified_00003"
+      },
+      "divisor": 10.0
+    },
+    {
+      "entity_key": "sit.napeti_l3",
+      "category": "sit",
+      "name": "Napětí sítě L3",
+      "address": 35131,
+      "register_type": "uint16",
+      "unit": "V",
+      "value_type": "number",
+      "source_address": 35131,
+      "attributes": {
+        "device_class": "voltage",
+        "verification": "physically_verified_00003"
+      },
+      "divisor": 10.0
+    },
+    {
       "entity_key": "stridac.vykon_celkem",
       "category": "stridac",
       "name": "Celkový výkon střídače",
