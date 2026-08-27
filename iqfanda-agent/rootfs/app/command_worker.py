@@ -1257,6 +1257,7 @@ def execute_spot_battery_intent(
 
 
 
+
 AGENT_UPDATE_TIMEOUT_SECONDS = 15 * 60
 
 
@@ -1265,11 +1266,8 @@ def reconcile_pending_agent_update(
     identity: dict[str, Any],
 ) -> bool:
     """
-    Dokonci prikaz az po startu
-    noveho image a overeni VERSION.
-
-    Dokud marker existuje, worker
-    nevyzvedava dalsi cloudovy prikaz.
+    Dokonci update az po startu
+    noveho Agentu a overeni VERSION.
     """
 
     marker = load_pending_agent_update()
@@ -1305,7 +1303,8 @@ def reconcile_pending_agent_update(
             result={
                 "worker": "command_worker",
                 "executor": (
-                    "supervisor_agent_update"
+                    "home_assistant_core_"
+                    "agent_update"
                 ),
                 "phase": (
                     "version_confirmed_"
@@ -1322,10 +1321,13 @@ def reconcile_pending_agent_update(
                 "installed_version": (
                     installed_version
                 ),
-                "supervisor_job_id": (
+                "update_entity_id": (
                     marker.get(
-                        "supervisor_job_id"
+                        "update_entity_id"
                     )
+                ),
+                "backup": marker.get(
+                    "backup"
                 ),
             },
             error_message=None,
@@ -1360,7 +1362,8 @@ def reconcile_pending_agent_update(
             result={
                 "worker": "command_worker",
                 "executor": (
-                    "supervisor_agent_update"
+                    "home_assistant_core_"
+                    "agent_update"
                 ),
                 "phase": "update_timeout",
                 "target_version": (
@@ -1369,9 +1372,14 @@ def reconcile_pending_agent_update(
                 "installed_version": (
                     installed_version
                 ),
-                "supervisor_job_id": (
+                "update_entity_id": (
                     marker.get(
-                        "supervisor_job_id"
+                        "update_entity_id"
+                    )
+                ),
+                "trigger_error": (
+                    marker.get(
+                        "trigger_error"
                     )
                 ),
             },
@@ -1395,7 +1403,7 @@ def execute_agent_update(
     command_id: str,
     command_payload: dict[str, Any],
 ) -> None:
-    """Spusti bezpecny self-update Agentu."""
+    """Spusti update pres Home Assistant Core."""
 
     try:
         target_version = str(
@@ -1420,6 +1428,12 @@ def execute_agent_update(
                 "Pole backup musi byt boolean."
             )
 
+        if not backup:
+            raise ValueError(
+                "Vzdaleny Agent update "
+                "vyzaduje backup=true."
+            )
+
         if (
             load_pending_agent_update()
             is not None
@@ -1428,8 +1442,10 @@ def execute_agent_update(
                 "Jiny Agent update jiz probiha."
             )
 
-        validation = validate_update_target(
-            target_version
+        validation = (
+            validate_update_target(
+                target_version
+            )
         )
 
     except Exception as exc:
@@ -1440,7 +1456,8 @@ def execute_agent_update(
             result={
                 "worker": "command_worker",
                 "executor": (
-                    "supervisor_agent_update"
+                    "home_assistant_core_"
+                    "agent_update"
                 ),
                 "phase": (
                     "update_validation_failed"
@@ -1475,7 +1492,8 @@ def execute_agent_update(
             result={
                 "worker": "command_worker",
                 "executor": (
-                    "supervisor_agent_update"
+                    "home_assistant_core_"
+                    "agent_update"
                 ),
                 "phase": "already_current",
                 "target_version": (
@@ -1490,8 +1508,10 @@ def execute_agent_update(
 
         return
 
-    slug = str(
-        validation["slug"]
+    entity_id = str(
+        validation[
+            "update_entity_id"
+        ]
     )
 
     submit_command_result(
@@ -1501,7 +1521,8 @@ def execute_agent_update(
         result={
             "worker": "command_worker",
             "executor": (
-                "supervisor_agent_update"
+                "home_assistant_core_"
+                "agent_update"
             ),
             "phase": "update_validated",
             "source_version": (
@@ -1510,13 +1531,21 @@ def execute_agent_update(
             "target_version": (
                 target_version
             ),
-            "backup": backup,
+            "update_entity_id": (
+                entity_id
+            ),
+            "backup": True,
         },
+        error_message=None,
     )
 
+    #
+    # Marker MUSI existovat jeste pred
+    # volanim update.install.
+    #
     save_pending_agent_update(
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "command_id": command_id,
             "source_version": (
                 current_version
@@ -1524,63 +1553,113 @@ def execute_agent_update(
             "target_version": (
                 target_version
             ),
-            "backup": backup,
-            "addon_slug": slug,
+            "backup": True,
+            "update_entity_id": (
+                entity_id
+            ),
+            "executor": (
+                "home_assistant_core_"
+                "agent_update"
+            ),
             "requested_at": (
                 utc_now_iso()
             ),
-            "supervisor_job_id": None,
+            "core_update_request_started_at": (
+                utc_now_iso()
+            ),
         }
     )
 
-    #
-    # Po tomto volani muze Supervisor
-    # kdykoliv ukoncit stary container.
-    #
     try:
-        job_id = trigger_agent_update(
-            slug=slug,
-            backup=backup,
+        trigger_agent_update(
+            entity_id=entity_id,
+            backup=True,
         )
 
     except Exception as exc:
-        clear_pending_agent_update()
+        #
+        # Toto NENI automaticky failure.
+        #
+        # Update mohl byt prijat Corem
+        # a HTTP spojeni mohlo zmizet
+        # prave proto, ze Supervisor
+        # zastavil stary Agent.
+        #
+        try:
+            update_pending_agent_update(
+                {
+                    "trigger_error": str(
+                        exc
+                    ),
+                    "trigger_error_at": (
+                        utc_now_iso()
+                    ),
+                }
+            )
 
-        submit_command_result(
-            identity=identity,
-            command_id=command_id,
-            status="failed",
-            result={
-                "worker": "command_worker",
-                "executor": (
-                    "supervisor_agent_update"
-                ),
-                "phase": (
-                    "supervisor_update_"
-                    "request_failed"
-                ),
-                "source_version": (
-                    current_version
-                ),
-                "target_version": (
-                    target_version
-                ),
-            },
-            error_message=str(exc),
+        except Exception:
+            logging.exception(
+                "Nepodarilo se doplnit "
+                "trigger_error do markeru."
+            )
+
+        try:
+            submit_command_result(
+                identity=identity,
+                command_id=command_id,
+                status="running",
+                result={
+                    "worker": (
+                        "command_worker"
+                    ),
+                    "executor": (
+                        "home_assistant_core_"
+                        "agent_update"
+                    ),
+                    "phase": (
+                        "core_update_request_"
+                        "uncertain"
+                    ),
+                    "source_version": (
+                        current_version
+                    ),
+                    "target_version": (
+                        target_version
+                    ),
+                    "update_entity_id": (
+                        entity_id
+                    ),
+                    "detail": str(exc),
+                },
+                error_message=None,
+            )
+
+        except Exception:
+            logging.exception(
+                "Stav uncertain se "
+                "nepodarilo odeslat."
+            )
+
+        logging.warning(
+            "Core update request skoncil "
+            "bez potvrzeni. Marker zustava. "
+            "command=%s target=%s error=%s",
+            command_id,
+            target_version,
+            exc,
         )
 
         return
 
     #
-    # Update byl Supervisoru prijat.
-    # Od teto chvile marker NIKDY nemazeme
-    # jen kvuli chybe nasledneho zapisu.
+    # Pokud stary Agent jeste zije,
+    # Core request se dokazal vratit.
     #
     try:
         update_pending_agent_update(
             {
-                "supervisor_job_id": job_id,
-                "update_requested_at": (
+                "core_update_request_"
+                "returned_at": (
                     utc_now_iso()
                 ),
             }
@@ -1588,9 +1667,9 @@ def execute_agent_update(
 
     except Exception:
         logging.exception(
-            "Supervisor update byl prijat, "
-            "ale job_id se nepodarilo "
-            "dopsat do markeru."
+            "Core request se vratil, "
+            "ale marker se nepodarilo "
+            "aktualizovat."
         )
 
     try:
@@ -1601,10 +1680,12 @@ def execute_agent_update(
             result={
                 "worker": "command_worker",
                 "executor": (
-                    "supervisor_agent_update"
+                    "home_assistant_core_"
+                    "agent_update"
                 ),
                 "phase": (
-                    "supervisor_job_created"
+                    "core_update_service_"
+                    "requested"
                 ),
                 "source_version": (
                     current_version
@@ -1612,29 +1693,29 @@ def execute_agent_update(
                 "target_version": (
                     target_version
                 ),
-                "supervisor_job_id": (
-                    job_id
+                "update_entity_id": (
+                    entity_id
                 ),
-                "backup": backup,
+                "backup": True,
             },
             error_message=None,
         )
 
     except Exception:
         logging.exception(
-            "Posledni running stav se "
-            "nepodarilo odeslat. "
-            "Pending marker zustava."
+            "Posledni running stav "
+            "se nepodarilo odeslat. "
+            "Marker zustava."
         )
 
     logging.warning(
-        "Agent update spusten. "
-        "command=%s source=%s "
-        "target=%s job=%s",
+        "Home Assistant Core update "
+        "byl vyzvan. command=%s "
+        "source=%s target=%s entity=%s",
         command_id,
         current_version,
         target_version,
-        job_id,
+        entity_id,
     )
 
 

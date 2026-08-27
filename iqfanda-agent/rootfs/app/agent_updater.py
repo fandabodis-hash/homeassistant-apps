@@ -1,20 +1,31 @@
-"""Bezpecna aktualizace TNG IQ FANDA Agentu pres Supervisor API."""
+"""Bezpecna vzdálena aktualizace TNG IQ FANDA Agentu."""
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib import error, parse, request
+from urllib import error, request
 
 
 SUPERVISOR_BASE_URL = (
     os.getenv(
         "IQF_SUPERVISOR_BASE_URL",
         "http://supervisor",
+    )
+    .strip()
+    .rstrip("/")
+)
+
+HOME_ASSISTANT_API_BASE_URL = (
+    os.getenv(
+        "IQF_HOME_ASSISTANT_API_BASE_URL",
+        "http://supervisor/core/api",
     )
     .strip()
     .rstrip("/")
@@ -34,11 +45,18 @@ PENDING_UPDATE_PATH = Path(
     )
 )
 
+AGENT_NAME = "TNG IQ FANDA Agent"
+
 DEFAULT_TIMEOUT_SECONDS = 30
+UPDATE_ENTITY_WAIT_SECONDS = 30
+
+VERSION_PATTERN = re.compile(
+    r"^[0-9]+\.[0-9]+\.[0-9]+$"
+)
 
 
 class AgentUpdateError(RuntimeError):
-    pass
+    """Chyba kontrolovane aktualizace Agentu."""
 
 
 def utc_now_iso() -> str:
@@ -193,6 +211,97 @@ def supervisor_request(
     )
 
 
+def home_assistant_request(
+    *,
+    method: str,
+    path: str,
+    payload: dict[str, Any] | None = None,
+    timeout: int = DEFAULT_TIMEOUT_SECONDS,
+) -> Any:
+    data = None
+
+    headers = {
+        "Authorization": (
+            f"Bearer {_supervisor_token()}"
+        ),
+        "Accept": "application/json",
+        "User-Agent": (
+            "TNG-IQ-FANDA-"
+            "Home-Assistant-Updater"
+        ),
+    }
+
+    if payload is not None:
+        data = json.dumps(
+            payload
+        ).encode("utf-8")
+
+        headers[
+            "Content-Type"
+        ] = "application/json"
+
+    http_request = request.Request(
+        HOME_ASSISTANT_API_BASE_URL
+        + path,
+        data=data,
+        method=method,
+        headers=headers,
+    )
+
+    try:
+        with request.urlopen(
+            http_request,
+            timeout=timeout,
+        ) as response:
+            raw = response.read()
+
+    except error.HTTPError as exc:
+        body = exc.read().decode(
+            "utf-8",
+            errors="replace",
+        )
+
+        raise AgentUpdateError(
+            "Home Assistant Core API "
+            f"vratilo HTTP {exc.code}: "
+            f"{body}"
+        ) from exc
+
+    except (
+        error.URLError,
+        TimeoutError,
+        OSError,
+    ) as exc:
+        raise AgentUpdateError(
+            "Home Assistant Core API "
+            f"neni dostupne: {exc}"
+        ) from exc
+
+    if not raw:
+        return None
+
+    try:
+        return json.loads(
+            raw.decode("utf-8")
+        )
+
+    except (
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+    ) as exc:
+        raise AgentUpdateError(
+            "Home Assistant Core API "
+            "vratilo neplatny JSON."
+        ) from exc
+
+
+def refresh_supervisor_store() -> None:
+    supervisor_request(
+        method="POST",
+        path="/store/reload",
+    )
+
+
 def get_self_addon_info() -> dict[str, Any]:
     data = supervisor_request(
         method="GET",
@@ -208,6 +317,140 @@ def get_self_addon_info() -> dict[str, Any]:
     return data
 
 
+def _find_update_entity(
+    *,
+    current_version: str,
+    target_version: str,
+) -> dict[str, Any] | None:
+    states = home_assistant_request(
+        method="GET",
+        path="/states",
+    )
+
+    if not isinstance(states, list):
+        raise AgentUpdateError(
+            "Home Assistant /states "
+            "nevratil seznam."
+        )
+
+    candidates: list[
+        dict[str, Any]
+    ] = []
+
+    for state in states:
+        if not isinstance(
+            state,
+            dict,
+        ):
+            continue
+
+        entity_id = str(
+            state.get("entity_id")
+            or ""
+        ).strip()
+
+        if not entity_id.startswith(
+            "update."
+        ):
+            continue
+
+        attributes = state.get(
+            "attributes"
+        )
+
+        if not isinstance(
+            attributes,
+            dict,
+        ):
+            continue
+
+        title = str(
+            attributes.get("title")
+            or ""
+        ).strip()
+
+        installed = str(
+            attributes.get(
+                "installed_version"
+            )
+            or ""
+        ).strip()
+
+        latest = str(
+            attributes.get(
+                "latest_version"
+            )
+            or ""
+        ).strip()
+
+        if title != AGENT_NAME:
+            continue
+
+        if installed != current_version:
+            continue
+
+        if latest != target_version:
+            continue
+
+        candidates.append(
+            {
+                "entity_id": entity_id,
+                "state": state.get(
+                    "state"
+                ),
+                "supported_features": (
+                    attributes.get(
+                        "supported_features"
+                    )
+                ),
+                "installed_version": (
+                    installed
+                ),
+                "latest_version": latest,
+            }
+        )
+
+    if len(candidates) > 1:
+        raise AgentUpdateError(
+            "Home Assistant obsahuje "
+            "vice odpovidajicich update entit."
+        )
+
+    if not candidates:
+        return None
+
+    return candidates[0]
+
+
+def wait_for_update_entity(
+    *,
+    current_version: str,
+    target_version: str,
+) -> dict[str, Any]:
+    deadline = (
+        time.monotonic()
+        + UPDATE_ENTITY_WAIT_SECONDS
+    )
+
+    while True:
+        candidate = _find_update_entity(
+            current_version=current_version,
+            target_version=target_version,
+        )
+
+        if candidate is not None:
+            return candidate
+
+        if time.monotonic() >= deadline:
+            raise AgentUpdateError(
+                "Home Assistant update entita "
+                f"zatim nevidi verzi "
+                f"{target_version}."
+            )
+
+        time.sleep(1)
+
+
 def validate_update_target(
     target_version: str,
 ) -> dict[str, Any]:
@@ -215,15 +458,19 @@ def validate_update_target(
         target_version or ""
     ).strip()
 
-    if not target:
+    if not VERSION_PATTERN.fullmatch(
+        target
+    ):
         raise AgentUpdateError(
-            "Cilova verze chybi."
+            "Cilova verze nema "
+            "povoleny format X.Y.Z."
         )
 
-    if len(target) > 50:
-        raise AgentUpdateError(
-            "Cilova verze je prilis dlouha."
-        )
+    #
+    # Vynutime nacteni posledni verze
+    # lokalniho repository.
+    #
+    refresh_supervisor_store()
 
     info = get_self_addon_info()
 
@@ -236,8 +483,13 @@ def validate_update_target(
     ).strip()
 
     latest = str(
-        info.get("version_latest") or ""
+        info.get("version_latest")
+        or ""
     ).strip()
+
+    image_version = (
+        read_installed_agent_version()
+    )
 
     if not slug:
         raise AgentUpdateError(
@@ -250,6 +502,14 @@ def validate_update_target(
             "aktualni verzi Agentu."
         )
 
+    if image_version != current:
+        raise AgentUpdateError(
+            "Supervisor verze a /app/VERSION "
+            "se neshoduji. "
+            f"supervisor={current} "
+            f"image={image_version}"
+        )
+
     if current == target:
         return {
             "slug": slug,
@@ -257,12 +517,13 @@ def validate_update_target(
             "latest_version": latest,
             "target_version": target,
             "already_current": True,
+            "update_entity_id": None,
         }
 
     if latest != target:
         raise AgentUpdateError(
             "Cilova verze neodpovida "
-            "verzi dostupne v Supervisoru. "
+            "posledni verzi repository. "
             f"target={target} latest={latest}"
         )
 
@@ -274,19 +535,47 @@ def validate_update_target(
             "dostupnou aktualizaci."
         )
 
-    encoded_slug = parse.quote(
-        slug,
-        safe="",
+    update_entity = (
+        wait_for_update_entity(
+            current_version=current,
+            target_version=target,
+        )
     )
 
-    supervisor_request(
-        method="GET",
-        path=(
-            "/store/addons/"
-            f"{encoded_slug}"
-            "/availability"
-        ),
+    entity_id = str(
+        update_entity["entity_id"]
     )
+
+    supported_features = (
+        update_entity.get(
+            "supported_features"
+        )
+    )
+
+    try:
+        supported_features_int = int(
+            supported_features
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ) as exc:
+        raise AgentUpdateError(
+            "Update entita nema platne "
+            "supported_features."
+        ) from exc
+
+    #
+    # BACKUP feature = 8.
+    #
+    if (
+        supported_features_int & 8
+    ) != 8:
+        raise AgentUpdateError(
+            "Update entita nepodporuje "
+            "zalohu pred aktualizaci."
+        )
 
     return {
         "slug": slug,
@@ -294,49 +583,45 @@ def validate_update_target(
         "latest_version": latest,
         "target_version": target,
         "already_current": False,
+        "update_entity_id": entity_id,
+        "supported_features": (
+            supported_features_int
+        ),
     }
 
 
 def trigger_agent_update(
     *,
-    slug: str,
+    entity_id: str,
     backup: bool,
-) -> str:
-    encoded_slug = parse.quote(
-        str(slug),
-        safe="",
-    )
-
-    data = supervisor_request(
-        method="POST",
-        path=(
-            "/store/addons/"
-            f"{encoded_slug}"
-            "/update"
-        ),
-        payload={
-            "backup": bool(backup),
-            "background": True,
-        },
-    )
-
-    if not isinstance(data, dict):
-        raise AgentUpdateError(
-            "Supervisor update "
-            "nevratil job data."
-        )
-
-    job_id = str(
-        data.get("job_id") or ""
+) -> Any:
+    normalized_entity_id = str(
+        entity_id or ""
     ).strip()
 
-    if not job_id:
+    if not normalized_entity_id.startswith(
+        "update."
+    ):
         raise AgentUpdateError(
-            "Supervisor update "
-            "nevratil job_id."
+            "Neplatne update entity_id."
         )
 
-    return job_id
+    return home_assistant_request(
+        method="POST",
+        path="/services/update/install",
+        payload={
+            "entity_id": (
+                normalized_entity_id
+            ),
+            "backup": bool(backup),
+        },
+        #
+        # Core muze cekat na Supervisor,
+        # ale stary Agent muze byt mezitim
+        # sam zastaven.
+        #
+        timeout=120,
+    )
 
 
 def load_pending_agent_update(
@@ -383,13 +668,17 @@ def save_pending_agent_update(
 
     descriptor, temp_name = (
         tempfile.mkstemp(
-            prefix="pending-agent-update-",
+            prefix=(
+                "pending-agent-update-"
+            ),
             suffix=".tmp",
             dir=target_path.parent,
         )
     )
 
-    temp_path = Path(temp_name)
+    temp_path = Path(
+        temp_name
+    )
 
     try:
         with os.fdopen(
@@ -406,7 +695,9 @@ def save_pending_agent_update(
 
             file.write("\n")
             file.flush()
-            os.fsync(file.fileno())
+            os.fsync(
+                file.fileno()
+            )
 
         temp_path.replace(
             target_path
@@ -432,7 +723,9 @@ def update_pending_agent_update(
             "Pending update marker neexistuje."
         )
 
-    marker.update(changes)
+    marker.update(
+        changes
+    )
 
     save_pending_agent_update(
         marker,
@@ -467,7 +760,9 @@ def pending_update_age_seconds(
 
     try:
         requested_at = (
-            datetime.fromisoformat(raw)
+            datetime.fromisoformat(
+                raw
+            )
         )
 
     except ValueError:
@@ -483,7 +778,9 @@ def pending_update_age_seconds(
     return max(
         0.0,
         (
-            datetime.now(timezone.utc)
+            datetime.now(
+                timezone.utc
+            )
             - requested_at.astimezone(
                 timezone.utc
             )
