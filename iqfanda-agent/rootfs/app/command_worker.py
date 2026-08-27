@@ -13,6 +13,18 @@ from communication.inverter_control_adapter import (
 from communication.inverter_adapter import (
     probe_inverter_modbus,
 )
+from agent_updater import (
+    AgentUpdateError,
+    clear_pending_agent_update,
+    load_pending_agent_update,
+    pending_update_age_seconds,
+    read_installed_agent_version,
+    save_pending_agent_update,
+    trigger_agent_update,
+    update_pending_agent_update,
+    utc_now_iso,
+    validate_update_target,
+)
 from device_config import load_cached_cloud_config
 from host.cloud_client import cloud_client
 from spot_battery_intent import save_spot_battery_intent
@@ -1244,6 +1256,388 @@ def execute_spot_battery_intent(
     )
 
 
+
+AGENT_UPDATE_TIMEOUT_SECONDS = 15 * 60
+
+
+def reconcile_pending_agent_update(
+    *,
+    identity: dict[str, Any],
+) -> bool:
+    """
+    Dokonci prikaz az po startu
+    noveho image a overeni VERSION.
+
+    Dokud marker existuje, worker
+    nevyzvedava dalsi cloudovy prikaz.
+    """
+
+    marker = load_pending_agent_update()
+
+    if marker is None:
+        return False
+
+    command_id = str(
+        marker.get("command_id")
+        or ""
+    ).strip()
+
+    target_version = str(
+        marker.get("target_version")
+        or ""
+    ).strip()
+
+    if not command_id or not target_version:
+        raise RuntimeError(
+            "Pending update marker "
+            "nema command_id nebo target_version."
+        )
+
+    installed_version = (
+        read_installed_agent_version()
+    )
+
+    if installed_version == target_version:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="succeeded",
+            result={
+                "worker": "command_worker",
+                "executor": (
+                    "supervisor_agent_update"
+                ),
+                "phase": (
+                    "version_confirmed_"
+                    "after_restart"
+                ),
+                "source_version": (
+                    marker.get(
+                        "source_version"
+                    )
+                ),
+                "target_version": (
+                    target_version
+                ),
+                "installed_version": (
+                    installed_version
+                ),
+                "supervisor_job_id": (
+                    marker.get(
+                        "supervisor_job_id"
+                    )
+                ),
+            },
+            error_message=None,
+        )
+
+        clear_pending_agent_update()
+
+        logging.info(
+            "Agent update %s potvrzen "
+            "po restartu, verze=%s.",
+            command_id,
+            installed_version,
+        )
+
+        return True
+
+    age_seconds = (
+        pending_update_age_seconds(
+            marker
+        )
+    )
+
+    if (
+        age_seconds is not None
+        and age_seconds
+        >= AGENT_UPDATE_TIMEOUT_SECONDS
+    ):
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": (
+                    "supervisor_agent_update"
+                ),
+                "phase": "update_timeout",
+                "target_version": (
+                    target_version
+                ),
+                "installed_version": (
+                    installed_version
+                ),
+                "supervisor_job_id": (
+                    marker.get(
+                        "supervisor_job_id"
+                    )
+                ),
+            },
+            error_message=(
+                "Po aktualizaci nebyla "
+                "v casovem limitu potvrzena "
+                f"verze {target_version}."
+            ),
+        )
+
+        clear_pending_agent_update()
+
+        return True
+
+    return True
+
+
+def execute_agent_update(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Spusti bezpecny self-update Agentu."""
+
+    try:
+        target_version = str(
+            command_payload.get(
+                "target_version"
+            )
+            or ""
+        ).strip()
+
+        backup = command_payload.get(
+            "backup",
+            True,
+        )
+
+        if not target_version:
+            raise ValueError(
+                "Agent update nema target_version."
+            )
+
+        if type(backup) is not bool:
+            raise ValueError(
+                "Pole backup musi byt boolean."
+            )
+
+        if (
+            load_pending_agent_update()
+            is not None
+        ):
+            raise ValueError(
+                "Jiny Agent update jiz probiha."
+            )
+
+        validation = validate_update_target(
+            target_version
+        )
+
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": (
+                    "supervisor_agent_update"
+                ),
+                "phase": (
+                    "update_validation_failed"
+                ),
+                "target_version": (
+                    str(
+                        command_payload.get(
+                            "target_version"
+                        )
+                        or ""
+                    ).strip()
+                ),
+            },
+            error_message=str(exc),
+        )
+
+        return
+
+    current_version = str(
+        validation[
+            "current_version"
+        ]
+    )
+
+    if validation[
+        "already_current"
+    ]:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="succeeded",
+            result={
+                "worker": "command_worker",
+                "executor": (
+                    "supervisor_agent_update"
+                ),
+                "phase": "already_current",
+                "target_version": (
+                    target_version
+                ),
+                "installed_version": (
+                    current_version
+                ),
+            },
+            error_message=None,
+        )
+
+        return
+
+    slug = str(
+        validation["slug"]
+    )
+
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="running",
+        result={
+            "worker": "command_worker",
+            "executor": (
+                "supervisor_agent_update"
+            ),
+            "phase": "update_validated",
+            "source_version": (
+                current_version
+            ),
+            "target_version": (
+                target_version
+            ),
+            "backup": backup,
+        },
+    )
+
+    save_pending_agent_update(
+        {
+            "schema_version": 1,
+            "command_id": command_id,
+            "source_version": (
+                current_version
+            ),
+            "target_version": (
+                target_version
+            ),
+            "backup": backup,
+            "addon_slug": slug,
+            "requested_at": (
+                utc_now_iso()
+            ),
+            "supervisor_job_id": None,
+        }
+    )
+
+    #
+    # Po tomto volani muze Supervisor
+    # kdykoliv ukoncit stary container.
+    #
+    try:
+        job_id = trigger_agent_update(
+            slug=slug,
+            backup=backup,
+        )
+
+    except Exception as exc:
+        clear_pending_agent_update()
+
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": (
+                    "supervisor_agent_update"
+                ),
+                "phase": (
+                    "supervisor_update_"
+                    "request_failed"
+                ),
+                "source_version": (
+                    current_version
+                ),
+                "target_version": (
+                    target_version
+                ),
+            },
+            error_message=str(exc),
+        )
+
+        return
+
+    #
+    # Update byl Supervisoru prijat.
+    # Od teto chvile marker NIKDY nemazeme
+    # jen kvuli chybe nasledneho zapisu.
+    #
+    try:
+        update_pending_agent_update(
+            {
+                "supervisor_job_id": job_id,
+                "update_requested_at": (
+                    utc_now_iso()
+                ),
+            }
+        )
+
+    except Exception:
+        logging.exception(
+            "Supervisor update byl prijat, "
+            "ale job_id se nepodarilo "
+            "dopsat do markeru."
+        )
+
+    try:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="running",
+            result={
+                "worker": "command_worker",
+                "executor": (
+                    "supervisor_agent_update"
+                ),
+                "phase": (
+                    "supervisor_job_created"
+                ),
+                "source_version": (
+                    current_version
+                ),
+                "target_version": (
+                    target_version
+                ),
+                "supervisor_job_id": (
+                    job_id
+                ),
+                "backup": backup,
+            },
+            error_message=None,
+        )
+
+    except Exception:
+        logging.exception(
+            "Posledni running stav se "
+            "nepodarilo odeslat. "
+            "Pending marker zustava."
+        )
+
+    logging.warning(
+        "Agent update spusten. "
+        "command=%s source=%s "
+        "target=%s job=%s",
+        command_id,
+        current_version,
+        target_version,
+        job_id,
+    )
+
+
 def execute_command(
     *,
     identity: dict[str, Any],
@@ -1311,6 +1705,14 @@ def execute_command(
         )
         return
 
+    if command_type == "agent_update":
+        execute_agent_update(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
     submit_command_result(
         identity=identity,
         command_id=command_id,
@@ -1329,6 +1731,12 @@ def process_once() -> bool:
     """Provede jeden pokus o vyzvednuti prikazu."""
 
     identity = load_device_identity()
+
+    if reconcile_pending_agent_update(
+        identity=identity,
+    ):
+        return False
+
     command = claim_command(identity)
 
     if command is None:

@@ -9,6 +9,7 @@ from communication.json_utils import nacti_json
 from communication.inverter_control_adapter import (
     build_inverter_control_capability_state,
 )
+from agent_updater import read_installed_agent_version
 from device_config import load_cached_cloud_config
 from runtime_config import load_runtime_configuration
 from sync_signal import request_config_sync
@@ -277,6 +278,40 @@ def get_heartbeat_interval(config: dict) -> int:
     return max(interval, 10)
 
 
+
+def get_reported_software_version(
+    config: dict,
+) -> str:
+    """
+    Skutecna VERSION beziciho image
+    ma prednost pred persistentnimi options.
+    """
+
+    try:
+        return read_installed_agent_version()
+
+    except (
+        FileNotFoundError,
+        OSError,
+        ValueError,
+        RuntimeError,
+    ) as exc:
+        logging.warning(
+            "VERSION nelze nacist, "
+            "pouzivam fallback: %s",
+            exc,
+        )
+
+        return str(
+            config.get(
+                "software_version",
+                DEFAULT_SOFTWARE_VERSION,
+            )
+            or DEFAULT_SOFTWARE_VERSION
+        ).strip()
+
+
+
 def send_heartbeat(config: dict) -> dict:
     system_telemetry = collect_system_telemetry()
     network_telemetry = collect_network_telemetry()
@@ -295,9 +330,10 @@ def send_heartbeat(config: dict) -> dict:
     payload = {
         "device_uuid": config["device_uuid"],
         "status": "online",
-        "software_version": config.get(
-            "software_version",
-            DEFAULT_SOFTWARE_VERSION,
+        "software_version": (
+            get_reported_software_version(
+                config
+            )
         ),
         **system_telemetry,
         "ip_address": network_telemetry.get(
