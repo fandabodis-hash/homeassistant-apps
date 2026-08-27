@@ -56,6 +56,320 @@ def _read_json(
     return data
 
 
+def _condition_matches(
+    *,
+    registers: dict[int, int],
+    condition: object,
+) -> bool:
+    """
+    Obecna podminka varianty profilu.
+
+    Fyzicky vyznam registru zna pouze profil.
+    Adapter zna jen obecne pravidlo:
+    raw registr == ocekavana hodnota.
+    """
+    if condition is None:
+        return True
+
+    if not isinstance(
+        condition,
+        dict,
+    ):
+        raise ValueError(
+            "Podminka varianty nema platny format."
+        )
+
+    if set(condition) != {
+        "register",
+        "equals",
+    }:
+        raise ValueError(
+            "Podminka varianty musi obsahovat "
+            "pouze register a equals."
+        )
+
+    address = condition.get(
+        "register"
+    )
+
+    expected = condition.get(
+        "equals"
+    )
+
+    if (
+        type(address) is not int
+        or address < 0
+    ):
+        raise ValueError(
+            "Podminka varianty ma neplatny registr."
+        )
+
+    if type(expected) is not int:
+        raise ValueError(
+            "Podminka varianty ma neplatnou "
+            "ocekavanou hodnotu."
+        )
+
+    if address not in registers:
+        return False
+
+    return (
+        int(registers[address]) & 0xFFFF
+    ) == (
+        int(expected) & 0xFFFF
+    )
+
+
+def _select_profile_variant(
+    *,
+    profile: dict[str, Any],
+    registers: dict[int, int],
+) -> dict[str, Any] | None:
+    """Vybere nejvyse jednu obecnou variantu profilu."""
+    variants = profile.get(
+        "variants"
+    )
+
+    if variants is None:
+        return None
+
+    if not isinstance(
+        variants,
+        list,
+    ):
+        raise ValueError(
+            "Profil nema platny seznam variants."
+        )
+
+    matches: list[dict[str, Any]] = []
+
+    for variant in variants:
+        if not isinstance(
+            variant,
+            dict,
+        ):
+            raise ValueError(
+                "Varianta profilu nema platny format."
+            )
+
+        variant_id = str(
+            variant.get(
+                "variant_id"
+            )
+            or ""
+        ).strip()
+
+        if not variant_id:
+            raise ValueError(
+                "Varianta profilu nema variant_id."
+            )
+
+        if _condition_matches(
+            registers=registers,
+            condition=variant.get(
+                "when"
+            ),
+        ):
+            matches.append(
+                variant
+            )
+
+    if len(matches) > 1:
+        raise ValueError(
+            "Profil odpovida vice variantam soucasne."
+        )
+
+    if not matches:
+        return None
+
+    return matches[0]
+
+
+def _effective_entity_definitions(
+    *,
+    profile: dict[str, Any],
+    registers: dict[int, int],
+) -> list[dict[str, Any]]:
+    """
+    Sestavi obecne entity po aplikaci aktivni varianty.
+
+    Vendor registry zustavaji vyhradne v JSON profilu.
+    """
+    base = profile.get(
+        "entities"
+    )
+
+    if not isinstance(
+        base,
+        list,
+    ):
+        raise ValueError(
+            "Profil nema platne entities."
+        )
+
+    definitions: list[
+        dict[str, Any]
+    ] = []
+
+    for item in base:
+        if not isinstance(
+            item,
+            dict,
+        ):
+            raise ValueError(
+                "Definice entity nema platny format."
+            )
+
+        definitions.append(
+            dict(item)
+        )
+
+    active_variant = (
+        _select_profile_variant(
+            profile=profile,
+            registers=registers,
+        )
+    )
+
+    if active_variant is None:
+        return definitions
+
+    by_key = {
+        str(
+            item.get(
+                "entity_key"
+            )
+            or ""
+        ).strip():
+            item
+        for item in definitions
+    }
+
+    overrides = active_variant.get(
+        "entity_overrides",
+        [],
+    )
+
+    if not isinstance(
+        overrides,
+        list,
+    ):
+        raise ValueError(
+            "Varianta nema platne entity_overrides."
+        )
+
+    for override in overrides:
+        if not isinstance(
+            override,
+            dict,
+        ):
+            raise ValueError(
+                "Entity override nema platny format."
+            )
+
+        key = str(
+            override.get(
+                "entity_key"
+            )
+            or ""
+        ).strip()
+
+        if (
+            not key
+            or key not in by_key
+        ):
+            raise ValueError(
+                "Entity override odkazuje "
+                "na neznamy entity_key."
+            )
+
+        target = by_key[key]
+
+        remove_fields = override.get(
+            "remove_fields",
+            [],
+        )
+
+        if not isinstance(
+            remove_fields,
+            list,
+        ):
+            raise ValueError(
+                "remove_fields nema platny format."
+            )
+
+        for field in remove_fields:
+            field_name = str(
+                field or ""
+            ).strip()
+
+            if not field_name:
+                raise ValueError(
+                    "remove_fields obsahuje prazdne pole."
+                )
+
+            target.pop(
+                field_name,
+                None,
+            )
+
+        for field, value in override.items():
+            if field in {
+                "entity_key",
+                "remove_fields",
+            }:
+                continue
+
+            target[field] = value
+
+    additional = active_variant.get(
+        "additional_entities",
+        [],
+    )
+
+    if not isinstance(
+        additional,
+        list,
+    ):
+        raise ValueError(
+            "Varianta nema platne additional_entities."
+        )
+
+    for item in additional:
+        if not isinstance(
+            item,
+            dict,
+        ):
+            raise ValueError(
+                "Additional entity nema platny format."
+            )
+
+        key = str(
+            item.get(
+                "entity_key"
+            )
+            or ""
+        ).strip()
+
+        if (
+            not key
+            or key in by_key
+        ):
+            raise ValueError(
+                "Additional entity ma duplicitni "
+                "nebo prazdny entity_key."
+            )
+
+        copied = dict(item)
+
+        definitions.append(
+            copied
+        )
+
+        by_key[key] = copied
+
+    return definitions
+
 def load_inverter_catalog() -> dict[str, Any]:
     """Nacte katalog dostupnych profilu stridacu."""
     catalog = _read_json(
@@ -751,9 +1065,10 @@ def decode_profile_entities(
         profile
     )
 
-    definitions = profile[
-        "entities"
-    ]
+    definitions = _effective_entity_definitions(
+        profile=profile,
+        registers=registers,
+    )
 
     result: list[dict[str, Any]] = []
     values_by_key: dict[str, int | float] = {}
@@ -1332,9 +1647,19 @@ def read_inverter_snapshot(
             ]
         )
 
-        for block in profile[
-            "read_blocks"
-        ]:
+        def _read_runtime_block(
+            block: dict[str, Any],
+            *,
+            required: bool,
+        ) -> bool:
+            if not isinstance(
+                block,
+                dict,
+            ):
+                raise RuntimeError(
+                    "Read block nema platny format."
+                )
+
             address = int(
                 block["address"]
             )
@@ -1343,40 +1668,56 @@ def read_inverter_snapshot(
                 block["count"]
             )
 
-            if function_code == 3:
-                response = (
-                    client.read_holding_registers(
-                        address=address,
-                        count=count,
-                        device_id=device_id,
+            try:
+                if function_code == 3:
+                    response = (
+                        client.read_holding_registers(
+                            address=address,
+                            count=count,
+                            device_id=device_id,
+                        )
                     )
-                )
 
-            elif function_code == 4:
-                response = (
-                    client.read_input_registers(
-                        address=address,
-                        count=count,
-                        device_id=device_id,
+                elif function_code == 4:
+                    response = (
+                        client.read_input_registers(
+                            address=address,
+                            count=count,
+                            device_id=device_id,
+                        )
                     )
-                )
 
-            else:
-                raise RuntimeError(
-                    "Nepovoleny function code."
-                )
+                else:
+                    raise RuntimeError(
+                        "Nepovoleny function code."
+                    )
+
+            except Exception as exc:
+                if required:
+                    raise RuntimeError(
+                        f"Registr {address}/{count} "
+                        "nelze precist."
+                    ) from exc
+
+                return False
 
             if response is None:
-                raise RuntimeError(
-                    f"Registr {address}/{count} "
-                    "nevratil odpoved."
-                )
+                if required:
+                    raise RuntimeError(
+                        f"Registr {address}/{count} "
+                        "nevratil odpoved."
+                    )
+
+                return False
 
             if response.isError():
-                raise RuntimeError(
-                    f"Registr {address}/{count} "
-                    "vratil Modbus chybu."
-                )
+                if required:
+                    raise RuntimeError(
+                        f"Registr {address}/{count} "
+                        "vratil Modbus chybu."
+                    )
+
+                return False
 
             values = [
                 int(value)
@@ -1388,10 +1729,13 @@ def read_inverter_snapshot(
             ]
 
             if len(values) != count:
-                raise RuntimeError(
-                    f"Registr {address}/{count} "
-                    "vratil neplatny pocet hodnot."
-                )
+                if required:
+                    raise RuntimeError(
+                        f"Registr {address}/{count} "
+                        "vratil neplatny pocet hodnot."
+                    )
+
+                return False
 
             for offset, value in enumerate(
                 values
@@ -1400,6 +1744,91 @@ def read_inverter_snapshot(
                     address + offset
                 ] = value
 
+            return True
+
+        selector_blocks = profile.get(
+            "selector_read_blocks",
+            [],
+        )
+
+        if not isinstance(
+            selector_blocks,
+            list,
+        ):
+            raise RuntimeError(
+                "selector_read_blocks nema platny format."
+            )
+
+        for block in selector_blocks:
+            if not isinstance(
+                block,
+                dict,
+            ):
+                raise RuntimeError(
+                    "Selector read block nema platny format."
+                )
+
+            _read_runtime_block(
+                block,
+                required=(
+                    block.get(
+                        "required",
+                        True,
+                    )
+                    is not False
+                ),
+            )
+
+        for block in profile[
+            "read_blocks"
+        ]:
+            _read_runtime_block(
+                block,
+                required=True,
+            )
+
+        active_variant = (
+            _select_profile_variant(
+                profile=profile,
+                registers=registers,
+            )
+        )
+
+        if active_variant is not None:
+            variant_blocks = (
+                active_variant.get(
+                    "read_blocks",
+                    [],
+                )
+            )
+
+            if not isinstance(
+                variant_blocks,
+                list,
+            ):
+                raise RuntimeError(
+                    "Varianta nema platne read_blocks."
+                )
+
+            for block in variant_blocks:
+                if not isinstance(
+                    block,
+                    dict,
+                ):
+                    raise RuntimeError(
+                        "Variant read block nema platny format."
+                    )
+
+                _read_runtime_block(
+                    block,
+                    required=(
+                        block.get(
+                            "required",
+                            True,
+                        )
+                        is not False
+                    ),
+                )
     finally:
         try:
             client.close()

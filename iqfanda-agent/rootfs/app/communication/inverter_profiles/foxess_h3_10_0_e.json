@@ -536,5 +536,596 @@
       "scale": 1,
       "verification_status": "pending_grid_test"
     }
+  ],
+
+  "selector_read_blocks": [
+    {
+      "address": 30028,
+      "count": 1,
+      "required": false
+    }
+  ],
+  "variants": [
+    {
+      "variant_id": "modbus_protocol_115",
+      "when": {
+        "register": 30028,
+        "equals": 115
+      },
+      "verification_status": "physically_verified_00007_20260827",
+      "read_blocks": [
+        {
+          "address": 31042,
+          "count": 1
+        },
+        {
+          "address": 31055,
+          "count": 2
+        },
+        {
+          "address": 31067,
+          "count": 6
+        },
+        {
+          "address": 31090,
+          "count": 1
+        },
+        {
+          "address": 31102,
+          "count": 2
+        },
+        {
+          "address": 31123,
+          "count": 1
+        },
+        {
+          "address": 31126,
+          "count": 13
+        },
+        {
+          "address": 31141,
+          "count": 1
+        },
+        {
+          "address": 32000,
+          "count": 24
+        }
+      ],
+      "entity_overrides": [
+        {
+          "entity_key": "stridac.pracovni_rezim",
+          "value_map": {
+            "2": "on_grid",
+            "3": "eps_off_grid"
+          },
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "stridac.vykon_l1",
+          "enabled": true,
+          "category": "stridac",
+          "name": "Výkon střídače L1",
+          "unit": "W",
+          "value_type": "integer",
+          "device_class": "power",
+          "sign_convention": "positive_generation",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "stridac.vykon_l2",
+          "enabled": true,
+          "category": "stridac",
+          "name": "Výkon střídače L2",
+          "unit": "W",
+          "value_type": "integer",
+          "device_class": "power",
+          "sign_convention": "positive_generation",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "stridac.vykon_l3",
+          "enabled": true,
+          "category": "stridac",
+          "name": "Výkon střídače L3",
+          "unit": "W",
+          "value_type": "integer",
+          "device_class": "power",
+          "sign_convention": "positive_generation",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "smartmeter.vykon_l1",
+          "enabled": true,
+          "category": "smartmeter",
+          "name": "Výkon sítě L1",
+          "address": 31067,
+          "addresses": [
+            31067,
+            31068
+          ],
+          "register_type": "int32",
+          "scale": 1,
+          "unit": "W",
+          "value_type": "integer",
+          "device_class": "power",
+          "sign_convention": "negative_import_positive_export",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "smartmeter.vykon_l2",
+          "enabled": true,
+          "category": "smartmeter",
+          "name": "Výkon sítě L2",
+          "address": 31069,
+          "addresses": [
+            31069,
+            31070
+          ],
+          "register_type": "int32",
+          "scale": 1,
+          "unit": "W",
+          "value_type": "integer",
+          "device_class": "power",
+          "sign_convention": "negative_import_positive_export",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "smartmeter.vykon_l3",
+          "enabled": true,
+          "category": "smartmeter",
+          "name": "Výkon sítě L3",
+          "address": 31071,
+          "addresses": [
+            31071,
+            31072
+          ],
+          "register_type": "int32",
+          "scale": 1,
+          "unit": "W",
+          "value_type": "integer",
+          "device_class": "power",
+          "sign_convention": "negative_import_positive_export",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "spotreba.vykon_l1",
+          "address": 31128,
+          "addresses": [
+            31128,
+            31129
+          ],
+          "register_type": "int32",
+          "scale": 1,
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "spotreba.vykon_l2",
+          "address": 31130,
+          "addresses": [
+            31130,
+            31131
+          ],
+          "register_type": "int32",
+          "scale": 1,
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "spotreba.vykon_l3",
+          "address": 31132,
+          "addresses": [
+            31132,
+            31133
+          ],
+          "register_type": "int32",
+          "scale": 1,
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "spotreba.vykon_celkem",
+          "remove_fields": [
+            "derived"
+          ],
+          "address": 31126,
+          "addresses": [
+            31126,
+            31127
+          ],
+          "register_type": "int32",
+          "scale": 1,
+          "verification_status": "physically_verified_00007_protocol_115_dedicated_total"
+        },
+        {
+          "entity_key": "backup.vykon_celkem",
+          "remove_fields": [
+            "derived"
+          ],
+          "address": 31137,
+          "addresses": [
+            31137,
+            31138
+          ],
+          "register_type": "int32",
+          "scale": 1,
+          "verification_status": "physically_verified_00007_protocol_115_dedicated_total"
+        }
+      ],
+      "additional_entities": [
+        {
+          "entity_key": "stridac.proud_l1",
+          "category": "stridac",
+          "name": "Proud střídače L1",
+          "address": 31009,
+          "register_type": "int16",
+          "scale": 0.1,
+          "unit": "A",
+          "value_type": "number",
+          "device_class": "current",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "stridac.proud_l2",
+          "category": "stridac",
+          "name": "Proud střídače L2",
+          "address": 31010,
+          "register_type": "int16",
+          "scale": 0.1,
+          "unit": "A",
+          "value_type": "number",
+          "device_class": "current",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "stridac.proud_l3",
+          "category": "stridac",
+          "name": "Proud střídače L3",
+          "address": 31011,
+          "register_type": "int16",
+          "scale": 0.1,
+          "unit": "A",
+          "value_type": "number",
+          "device_class": "current",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "stridac.vykon_celkem",
+          "category": "stridac",
+          "name": "Výkon střídače celkem",
+          "derived": {
+            "operation": "sum",
+            "entity_keys": [
+              "stridac.vykon_l1",
+              "stridac.vykon_l2",
+              "stridac.vykon_l3"
+            ]
+          },
+          "unit": "W",
+          "value_type": "integer",
+          "device_class": "power",
+          "sign_convention": "positive_generation",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "stridac.zdanlivy_vykon_celkem",
+          "category": "stridac",
+          "name": "Zdánlivý výkon střídače",
+          "address": 31055,
+          "addresses": [
+            31055,
+            31056
+          ],
+          "register_type": "int32",
+          "scale": 1,
+          "unit": "VA",
+          "value_type": "integer",
+          "device_class": "apparent_power",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "smartmeter.vykon_celkem",
+          "category": "smartmeter",
+          "name": "Výkon sítě celkem",
+          "derived": {
+            "operation": "sum",
+            "entity_keys": [
+              "smartmeter.vykon_l1",
+              "smartmeter.vykon_l2",
+              "smartmeter.vykon_l3"
+            ]
+          },
+          "unit": "W",
+          "value_type": "integer",
+          "device_class": "power",
+          "sign_convention": "negative_import_positive_export",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "baterie.bms_stav",
+          "category": "baterie_souhrn",
+          "name": "Stav připojení BMS",
+          "address": 31042,
+          "register_type": "uint16",
+          "scale": 1,
+          "unit": null,
+          "value_type": "integer",
+          "value_map": {
+            "0": "disconnected",
+            "1": "connected"
+          },
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "baterie.soh",
+          "category": "baterie_souhrn",
+          "name": "Zdraví baterie",
+          "address": 31090,
+          "register_type": "uint16",
+          "scale": 1,
+          "unit": "%",
+          "value_type": "integer",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "baterie.teplota_clanku_max",
+          "category": "baterie_souhrn",
+          "name": "Maximální teplota článku",
+          "address": 31102,
+          "register_type": "int16",
+          "scale": 0.1,
+          "unit": "°C",
+          "value_type": "number",
+          "device_class": "temperature",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "baterie.teplota_clanku_min",
+          "category": "baterie_souhrn",
+          "name": "Minimální teplota článku",
+          "address": 31103,
+          "register_type": "int16",
+          "scale": 0.1,
+          "unit": "°C",
+          "value_type": "number",
+          "device_class": "temperature",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "baterie.zbyvajici_energie",
+          "category": "baterie_souhrn",
+          "name": "Zbývající energie baterie",
+          "address": 31123,
+          "register_type": "uint16",
+          "scale": 0.01,
+          "unit": "kWh",
+          "value_type": "number",
+          "device_class": "energy",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "baterie.napeti_clanku_max",
+          "category": "baterie_souhrn",
+          "name": "Maximální napětí článku",
+          "address": 31134,
+          "register_type": "uint16",
+          "scale": 0.001,
+          "unit": "V",
+          "value_type": "number",
+          "device_class": "voltage",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "baterie.napeti_clanku_min",
+          "category": "baterie_souhrn",
+          "name": "Minimální napětí článku",
+          "address": 31135,
+          "register_type": "uint16",
+          "scale": 0.001,
+          "unit": "V",
+          "value_type": "number",
+          "device_class": "voltage",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "baterie.soc_systemovy",
+          "category": "baterie_souhrn",
+          "name": "Systémový SOC baterie",
+          "address": 31141,
+          "register_type": "uint16",
+          "scale": 1,
+          "unit": "%",
+          "value_type": "integer",
+          "attributes": {
+            "diagnostic": true,
+            "do_not_use_as_primary_soc": true
+          },
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "baterie.energie_nabijeni_celkem",
+          "category": "baterie_souhrn",
+          "name": "Energie nabíjení baterie celkem",
+          "address": 32003,
+          "addresses": [
+            32003,
+            32004
+          ],
+          "register_type": "uint32",
+          "word_order": "big",
+          "divisor": 10.0,
+          "unit": "kWh",
+          "value_type": "number",
+          "device_class": "energy",
+          "state_class": "total_increasing",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "baterie.energie_nabijeni_dnes",
+          "category": "baterie_souhrn",
+          "name": "Energie nabíjení baterie dnes",
+          "address": 32005,
+          "register_type": "uint16",
+          "divisor": 10.0,
+          "unit": "kWh",
+          "value_type": "number",
+          "device_class": "energy",
+          "state_class": "total",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "baterie.energie_vybijeni_celkem",
+          "category": "baterie_souhrn",
+          "name": "Energie vybíjení baterie celkem",
+          "address": 32006,
+          "addresses": [
+            32006,
+            32007
+          ],
+          "register_type": "uint32",
+          "word_order": "big",
+          "divisor": 10.0,
+          "unit": "kWh",
+          "value_type": "number",
+          "device_class": "energy",
+          "state_class": "total_increasing",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "baterie.energie_vybijeni_dnes",
+          "category": "baterie_souhrn",
+          "name": "Energie vybíjení baterie dnes",
+          "address": 32008,
+          "register_type": "uint16",
+          "divisor": 10.0,
+          "unit": "kWh",
+          "value_type": "number",
+          "device_class": "energy",
+          "state_class": "total",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "smartmeter.dodavka_celkem",
+          "category": "smartmeter",
+          "name": "Dodávka do sítě celkem",
+          "address": 32009,
+          "addresses": [
+            32009,
+            32010
+          ],
+          "register_type": "uint32",
+          "word_order": "big",
+          "divisor": 10.0,
+          "unit": "kWh",
+          "value_type": "number",
+          "device_class": "energy",
+          "state_class": "total_increasing",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "smartmeter.dodavka_dnes",
+          "category": "smartmeter",
+          "name": "Dodávka do sítě dnes",
+          "address": 32011,
+          "register_type": "uint16",
+          "divisor": 10.0,
+          "unit": "kWh",
+          "value_type": "number",
+          "device_class": "energy",
+          "state_class": "total",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "smartmeter.odber_celkem",
+          "category": "smartmeter",
+          "name": "Odběr ze sítě celkem",
+          "address": 32012,
+          "addresses": [
+            32012,
+            32013
+          ],
+          "register_type": "uint32",
+          "word_order": "big",
+          "divisor": 10.0,
+          "unit": "kWh",
+          "value_type": "number",
+          "device_class": "energy",
+          "state_class": "total_increasing",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "smartmeter.odber_dnes",
+          "category": "smartmeter",
+          "name": "Odběr ze sítě dnes",
+          "address": 32014,
+          "register_type": "uint16",
+          "divisor": 10.0,
+          "unit": "kWh",
+          "value_type": "number",
+          "device_class": "energy",
+          "state_class": "total",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "vyroba.energie_celkem",
+          "category": "vyroba",
+          "name": "Výroba energie celkem",
+          "address": 32015,
+          "addresses": [
+            32015,
+            32016
+          ],
+          "register_type": "uint32",
+          "word_order": "big",
+          "divisor": 10.0,
+          "unit": "kWh",
+          "value_type": "number",
+          "device_class": "energy",
+          "state_class": "total_increasing",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "vyroba.energie_dnes",
+          "category": "vyroba",
+          "name": "Výroba energie dnes",
+          "address": 32017,
+          "register_type": "uint16",
+          "divisor": 10.0,
+          "unit": "kWh",
+          "value_type": "number",
+          "device_class": "energy",
+          "state_class": "total",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "spotreba.energie_celkem",
+          "category": "spotreba",
+          "name": "Spotřeba energie celkem",
+          "address": 32021,
+          "addresses": [
+            32021,
+            32022
+          ],
+          "register_type": "uint32",
+          "word_order": "big",
+          "divisor": 10.0,
+          "unit": "kWh",
+          "value_type": "number",
+          "device_class": "energy",
+          "state_class": "total_increasing",
+          "verification_status": "physically_verified_00007_protocol_115"
+        },
+        {
+          "entity_key": "spotreba.energie_dnes",
+          "category": "spotreba",
+          "name": "Spotřeba energie dnes",
+          "address": 32023,
+          "register_type": "uint16",
+          "divisor": 10.0,
+          "unit": "kWh",
+          "value_type": "number",
+          "device_class": "energy",
+          "state_class": "total",
+          "verification_status": "physically_verified_00007_protocol_115"
+        }
+      ]
+    }
   ]
 }
