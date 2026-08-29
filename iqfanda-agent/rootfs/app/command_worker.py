@@ -264,6 +264,15 @@ def execute_zigbee_permit_join(
         or ""
     ).strip()
 
+    # ======================================================
+    # PHASE 25 INFRASTRUCTURE PAIRING
+    # ======================================================
+    infrastructure_context = bool(
+        command_payload.get(
+            "infrastructure_mode",
+            False,
+        )
+    )
     building_context = bool(
         building_module_id
     )
@@ -284,64 +293,87 @@ def execute_zigbee_permit_join(
         == len(energy_context_values)
     )
 
-    if building_context and energy_context_count:
-        raise ValueError(
-            "Zigbee prikaz obsahuje vice instalacnich kontextu."
-        )
+    if infrastructure_context:
+        if building_context or energy_context_count:
+            raise ValueError(
+                "Zigbee prikaz obsahuje vice "
+                "instalacnich kontextu."
+            )
 
-    if not building_context and energy_context_count == 0:
-        raise ValueError(
-            "Zigbee prikaz neobsahuje instalacni kontext."
-        )
-
-    if (
-        not building_context
-        and not energy_target_context
-    ):
-        raise ValueError(
-            "Kontext energetickeho cile neni uplny."
-        )
-
-    if building_context:
         if (
             expected_device_type
-            != "indoor_temperature_humidity_sensor"
+            != "zigbee_router_repeater"
         ):
             raise ValueError(
-                "Modul Budova vyzaduje vnitrni teplotni cidlo."
+                "Infrastrukturni Zigbee parovani vyzaduje "
+                "typ zigbee_router_repeater."
             )
-    else:
-        expected_type_by_role = {
-            "water_temperature":
-                "energy_target_temperature_sensor",
-            "output_switch":
-                "energy_target_switch",
-        }
 
-        expected_type = expected_type_by_role.get(
-            entity_role
-        )
-
-        if expected_type is None:
+        if replacement_mode or current_device_id:
             raise ValueError(
-                "Nepodporovana role energetickeho cile."
+                "Infrastrukturni Zigbee parovani nepodporuje "
+                "rezim vymeny."
             )
 
-        if expected_device_type != expected_type:
+    if not infrastructure_context:
+        if building_context and energy_context_count:
             raise ValueError(
-                "Role energetickeho cile neodpovida "
-                "ocekavanemu typu Zigbee zarizeni."
+                "Zigbee prikaz obsahuje vice instalacnich kontextu."
             )
 
-        if replacement_mode:
+        if not building_context and energy_context_count == 0:
             raise ValueError(
-                "Vymena zatim neni pro energeticky cil podporovana."
+                "Zigbee prikaz neobsahuje instalacni kontext."
             )
 
-        if current_device_id:
+        if (
+            not building_context
+            and not energy_target_context
+        ):
             raise ValueError(
-                "current_device_id nelze pouzit pro energeticky cil."
+                "Kontext energetickeho cile neni uplny."
             )
+
+        if building_context:
+            if (
+                expected_device_type
+                != "indoor_temperature_humidity_sensor"
+            ):
+                raise ValueError(
+                    "Modul Budova vyzaduje vnitrni teplotni cidlo."
+                )
+        else:
+            expected_type_by_role = {
+                "water_temperature":
+                    "energy_target_temperature_sensor",
+                "output_switch":
+                    "energy_target_switch",
+            }
+
+            expected_type = expected_type_by_role.get(
+                entity_role
+            )
+
+            if expected_type is None:
+                raise ValueError(
+                    "Nepodporovana role energetickeho cile."
+                )
+
+            if expected_device_type != expected_type:
+                raise ValueError(
+                    "Role energetickeho cile neodpovida "
+                    "ocekavanemu typu Zigbee zarizeni."
+                )
+
+            if replacement_mode:
+                raise ValueError(
+                    "Vymena zatim neni pro energeticky cil podporovana."
+                )
+
+            if current_device_id:
+                raise ValueError(
+                    "current_device_id nelze pouzit pro energeticky cil."
+                )
 
     if replacement_mode and not current_device_id:
         raise ValueError(
@@ -549,7 +581,11 @@ def execute_zigbee_permit_join(
         current_entity = None
         voltage_entity = None
 
-        if (
+        if infrastructure_context:
+            # Infrastrukturni router/repeater se neoveruje
+            # podle teplotni ani technologicke entity.
+            pass
+        elif (
             energy_target_context
             and entity_role == "output_switch"
         ):
@@ -643,6 +679,7 @@ def execute_zigbee_permit_join(
             "executor": "zigbee_manager",
             "phase": "device_verified",
             "expected_device_type": expected_device_type,
+            "infrastructure_mode": infrastructure_context,
             "building_module_id": (
                 building_module_id
                 if building_context
@@ -703,6 +740,9 @@ def execute_zigbee_permit_join(
                 else None
             ),
             "system_roles": (
+                {}
+                if infrastructure_context
+                else (
                 {
                     "building_indoor_temperature": (
                         temperature_entity.get(
@@ -799,6 +839,7 @@ def execute_zigbee_permit_join(
                         ),
                     }
                 )
+            )
             ),
             "replacement_mode": replacement_mode,
             "replaced_device_id": (
@@ -819,7 +860,18 @@ def execute_zigbee_permit_join(
             error_message=None,
         )
 
-        if (
+        if infrastructure_context:
+            logging.info(
+                (
+                    "Nove Zigbee infrastrukturni zarizeni "
+                    "bylo naparovano. Device ID: %s, "
+                    "pocet entit: %s, prikaz: %s"
+                ),
+                device.get("device_id"),
+                len(entities),
+                command_id,
+            )
+        elif (
             energy_target_context
             and entity_role == "output_switch"
         ):
