@@ -1374,6 +1374,19 @@ def odeslat_telemetrii_jednou() -> int:
             "Aktivni podporovana FVE telemetrie neni "
             "v cloudove konfiguraci povolena."
         )
+
+        try:
+            odeslat_pv_surplus_telemetrii(
+                identity=identity,
+                cloud_config=cloud_config,
+            )
+        except Exception as exc:
+            logging.warning(
+                "PV surplus telemetrie selhala bez "
+                "aktivni FVE telemetrie: %s",
+                exc,
+            )
+
         return local_interval
 
     (
