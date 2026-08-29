@@ -805,7 +805,7 @@ HTML = """<!doctype html>
     name="viewport"
     content="width=device-width,initial-scale=1"
 >
-<title>TNG IQ FANDA - Instalace</title>
+<title>TNG IQ FANDA production installation V1.0</title>
 
 <style>
 * {
@@ -1053,6 +1053,60 @@ button {
     font-size: 11px;
 }
 
+.production-hidden,
+label[for="customerName"],
+#customerName,
+label[for="email"],
+#email,
+.mode-grid,
+#wifiSection {
+    display: none !important;
+}
+
+.production-serial {
+    letter-spacing: .06em;
+    font-weight: 750;
+    color: #9bd6ff;
+}
+
+.production-note {
+    margin-top: 18px;
+    padding: 15px;
+    border-radius: 13px;
+    border: 1px solid rgba(83,183,255,.20);
+    background: rgba(46,145,215,.08);
+    color: #a9bfd3;
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.production-flow {
+    display: grid;
+    gap: 9px;
+    margin-top: 20px;
+}
+
+.production-step {
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(255,255,255,.025);
+    border: 1px solid rgba(126,167,202,.12);
+    color: #91a8bd;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.production-step strong {
+    display: block;
+    margin-bottom: 3px;
+    color: #d9edff;
+}
+
+.primary:disabled {
+    cursor: not-allowed;
+    opacity: .55;
+}
+
 @media (max-width: 520px) {
     .mode-grid {
         grid-template-columns: 1fr;
@@ -1071,7 +1125,7 @@ button {
     </div>
 
     <div class="subtitle">
-        Instalace zařízení
+        production installation V1.0
     </div>
 </div>
 
@@ -1079,18 +1133,21 @@ button {
 
 <div class="state">
     <span class="dot"></span>
-    Installer V2 · první instalace
+    Výrobní režim · Production V1.0
 </div>
 
-<h1>Nastavení zařízení</h1>
+<h1>Výrobní registrace TNG IQ FANDA</h1>
 
 <div class="description">
-    Zadejte základní údaje zákazníka
-    a způsob připojení TNG IQ FANDA.
+    Nový TNG IQ FANDA je při výrobě
+    připojen k internetu přes Ethernet.
+    Výrobce se autorizuje administrátorským
+    účtem a zařízení následně získá své
+    trvalé výrobní sériové číslo.
 </div>
 
 <label for="factoryAdminEmail">
-    E-mail administr?tora TNG IQ FANDA
+    E-mail administrátora TNG IQ FANDA
 </label>
 
 <input
@@ -1101,7 +1158,7 @@ button {
 >
 
 <label for="factoryAdminPassword">
-    Heslo administr?tora
+    Heslo administrátora
 </label>
 
 <input
@@ -1111,9 +1168,64 @@ button {
 >
 
 <div class="description">
-    Toto p?ihl??en? se pou?ije pouze jednou
-    pro automatick? p?id?len? s?riov?ho ??sla.
-    Heslo ani token se do za??zen? neukl?daj?.
+    Přihlášení slouží pouze jako autorizace
+    výrobce. Administrátorské heslo se do
+    zařízení nebude trvale ukládat.
+</div>
+
+<label for="productionSerial">
+    Sériové číslo TNG IQ FANDA
+</label>
+
+<input
+    id="productionSerial"
+    class="production-serial"
+    type="text"
+    value="Automaticky přidělí cloud"
+    readonly
+>
+
+<div class="production-note">
+    <strong>Výrobní stanoviště</strong><br>
+    Připojení: Ethernet<br>
+    IP adresa je při výrobě dostupná
+    na monitoru připojeném přes HDMI.<br><br>
+
+    Po přidělení sériového čísla výrobce
+    vytiskne SN samolepku a nalepí ji
+    na bok zařízení.
+</div>
+
+<div class="production-flow">
+
+    <div class="production-step">
+        <strong>1 · Výroba</strong>
+        Autorizace výrobce → přidělení SN →
+        cloud → READY_FOR_INSTALL.
+    </div>
+
+    <div class="production-step">
+        <strong>2 · Instalace u zákazníka</strong>
+        Po zapnutí se podle potřeby aktivuje AP.
+        Instalatér nastaví Wi-Fi nebo použije
+        Ethernet. Fanda se objeví v admin portálu
+        online pod svým výrobním SN.
+    </div>
+
+    <div class="production-step">
+        <strong>3 · Technologická instalace</strong>
+        Instalatér v cloudu připojí střídač,
+        komunikační rozhraní, Zigbee zařízení,
+        čidla, zásuvky a ostatní moduly.
+    </div>
+
+    <div class="production-step">
+        <strong>4 · Předání zákazníkovi</strong>
+        Po dokončení instalace je Fanda předána
+        zákazníkovi. Zákazník aktivuje připravený
+        účet svým e-mailem a nastaví vlastní heslo.
+    </div>
+
 </div>
 
 <label for="customerName">
@@ -1137,7 +1249,7 @@ button {
     placeholder="jan@novak.cz"
 >
 
-<label>
+<label class="production-hidden">
     Způsob připojení
 </label>
 
@@ -1218,8 +1330,10 @@ button {
     id="continueButton"
     class="primary"
     type="button"
+    disabled
+    aria-disabled="true"
 >
-    Pokračovat
+    Odeslat na cloud · funkce bude aktivována po výrobním testu
 </button>
 
 <div
@@ -1230,7 +1344,7 @@ button {
 </div>
 
 <div class="footer">
-    TNG IQ FANDA · Installer V2
+    TNG IQ FANDA · production installation V1.0 · UI preview
 </div>
 
 </div>
