@@ -38,6 +38,7 @@ from zigbee_manager import (
     get_entity_state,
     get_home_assistant_entity_ids,
     get_zha_devices,
+    open_zigbee_infrastructure_native_permit,
     open_zigbee_permit,
     wait_for_new_device,
 )
@@ -518,9 +519,21 @@ def execute_zigbee_permit_join(
                 },
             )
 
-            permit_result = open_zigbee_permit(
-                duration_seconds=duration_seconds,
-            )
+            # ==================================================
+            # PHASE25 INFRASTRUCTURE NATIVE PERMIT 0.1.98
+            # ==================================================
+            if infrastructure_context:
+                permit_result = (
+                    open_zigbee_infrastructure_native_permit(
+                        duration_seconds=duration_seconds,
+                    )
+                )
+            else:
+                # TECHNOLOGICKE MODULY:
+                # puvodni a overena cesta zustava beze zmeny.
+                permit_result = open_zigbee_permit(
+                    duration_seconds=duration_seconds,
+                )
 
             submit_command_result(
                 identity=identity,
