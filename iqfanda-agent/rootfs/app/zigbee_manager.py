@@ -1109,20 +1109,37 @@ def find_existing_temperature_devices(
     return candidates
 
 
+
+# ==========================================================
+# PHASE25_ZHA_DEVICE_DISCOVERY_0197
+# ==========================================================
+
+
 def wait_for_new_device(
     *,
     entity_ids_before: set[str],
     timeout_seconds: int,
     excluded_device_ids: set[str] | None = None,
+    zha_devices_before: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """
-    Ceka na novou entitu a vrati kompletni inventar
-    noveho HA zarizeni.
+    Ceka na nove nebo znovu pripojene ZHA zarizeni.
+
+    Primarni detekce pouziva primo inventar ZHA zarizeni
+    (device registry ID / IEEE / dostupnost / NWK).
+
+    Puvodni detekce podle novych entity_id zustava jako
+    zpetne kompatibilni zaloha.
     """
 
     try:
-        timeout = int(timeout_seconds)
-    except (TypeError, ValueError) as exc:
+        timeout = int(
+            timeout_seconds
+        )
+    except (
+        TypeError,
+        ValueError,
+    ) as exc:
         raise ValueError(
             "Cas cekani musi byt cele cislo."
         ) from exc
@@ -1133,30 +1150,245 @@ def wait_for_new_device(
         )
 
     normalized_excluded_device_ids = {
-        str(device_id or "").strip()
+        str(
+            device_id or ""
+        ).strip()
         for device_id in (
-            excluded_device_ids or set()
+            excluded_device_ids
+            or set()
         )
-        if str(device_id or "").strip()
+        if str(
+            device_id or ""
+        ).strip()
     }
 
-    deadline = time.monotonic() + timeout
+    def device_keys(
+        device: dict[str, Any],
+    ) -> list[tuple[str, str]]:
+        keys: list[
+            tuple[str, str]
+        ] = []
 
-    detected_device_id: str | None = None
+        device_reg_id = str(
+            device.get(
+                "device_reg_id"
+            )
+            or ""
+        ).strip()
 
-    while time.monotonic() < deadline:
+        ieee = str(
+            device.get("ieee")
+            or ""
+        ).strip().lower()
+
+        if device_reg_id:
+            keys.append(
+                (
+                    "device_reg_id",
+                    device_reg_id,
+                )
+            )
+
+        if ieee:
+            keys.append(
+                (
+                    "ieee",
+                    ieee,
+                )
+            )
+
+        return keys
+
+    before_by_key: dict[
+        tuple[str, str],
+        dict[str, Any],
+    ] = {}
+
+    for device in (
+        zha_devices_before
+        or []
+    ):
+        if not isinstance(
+            device,
+            dict,
+        ):
+            continue
+
+        if device.get(
+            "active_coordinator"
+        ):
+            continue
+
+        for key in device_keys(
+            device
+        ):
+            before_by_key[
+                key
+            ] = device
+
+    deadline = (
+        time.monotonic()
+        + timeout
+    )
+
+    detected_device_id: (
+        str | None
+    ) = None
+
+    detection_reason: (
+        str | None
+    ) = None
+
+    while (
+        time.monotonic()
+        < deadline
+    ):
+        # ==================================================
+        # 1. PRIMARNI DETEKCE PRIMO PRES ZHA DEVICE INVENTAR
+        # ==================================================
+
+        current_zha_devices = (
+            get_zha_devices()
+        )
+
+        for device in (
+            current_zha_devices
+        ):
+            if not isinstance(
+                device,
+                dict,
+            ):
+                continue
+
+            if device.get(
+                "active_coordinator"
+            ):
+                continue
+
+            current_device_id = str(
+                device.get(
+                    "device_reg_id"
+                )
+                or ""
+            ).strip()
+
+            if not current_device_id:
+                continue
+
+            if (
+                current_device_id
+                in normalized_excluded_device_ids
+            ):
+                continue
+
+            keys = device_keys(
+                device
+            )
+
+            previous = None
+
+            for key in keys:
+                previous = (
+                    before_by_key.get(
+                        key
+                    )
+                )
+
+                if previous is not None:
+                    break
+
+            # Zcela nove ZHA zarizeni.
+            if previous is None:
+                detected_device_id = (
+                    current_device_id
+                )
+
+                detection_reason = (
+                    "new_zha_device"
+                )
+
+                break
+
+            previous_available = bool(
+                previous.get(
+                    "available"
+                )
+            )
+
+            current_available = bool(
+                device.get(
+                    "available"
+                )
+            )
+
+            previous_nwk = str(
+                previous.get("nwk")
+                or ""
+            ).strip()
+
+            current_nwk = str(
+                device.get("nwk")
+                or ""
+            ).strip()
+
+            # Drive zname zarizeni muze pri novem
+            # parovani pouzit stejny HA registry zaznam
+            # i stejne entity_id.
+            #
+            # Za navrat zarizeni povazujeme:
+            # - offline -> online,
+            # - nebo zmenu NWK adresy pri online zarizeni.
+            rejoined = (
+                current_available
+                and (
+                    not previous_available
+                    or (
+                        previous_nwk
+                        and current_nwk
+                        and (
+                            previous_nwk
+                            != current_nwk
+                        )
+                    )
+                )
+            )
+
+            if rejoined:
+                detected_device_id = (
+                    current_device_id
+                )
+
+                detection_reason = (
+                    "rejoined_zha_device"
+                )
+
+                break
+
+        if detected_device_id:
+            break
+
+        # ==================================================
+        # 2. ZALOHA — PUVODNI DETEKCE PRES NOVE ENTITY_ID
+        # ==================================================
+
         current_entity_ids = (
             get_home_assistant_entity_ids()
         )
 
         new_entity_ids = sorted(
             current_entity_ids
-            - set(entity_ids_before)
+            - set(
+                entity_ids_before
+            )
         )
 
-        for entity_id in new_entity_ids:
-            device_id = get_entity_device_id(
-                entity_id
+        for entity_id in (
+            new_entity_ids
+        ):
+            device_id = (
+                get_entity_device_id(
+                    entity_id
+                )
             )
 
             if not device_id:
@@ -1168,60 +1400,78 @@ def wait_for_new_device(
             ):
                 continue
 
-            detected_device_id = device_id
+            detected_device_id = (
+                device_id
+            )
+
+            detection_reason = (
+                "new_entity_id"
+            )
+
             break
 
         if detected_device_id:
-            # ZHA muze entity pridavat postupne.
-            time.sleep(3)
-
-            metadata = get_device_metadata(
-                detected_device_id
-            )
-
-            entities = build_entity_inventory(
-                detected_device_id
-            )
-
-            temperature_entity = (
-                find_entity_by_device_class(
-                    entities,
-                    "temperature",
-                )
-            )
-
-            humidity_entity = (
-                find_entity_by_device_class(
-                    entities,
-                    "humidity",
-                )
-            )
-
-            battery_entity = (
-                find_entity_by_device_class(
-                    entities,
-                    "battery",
-                )
-            )
-
-            return {
-                "device": metadata,
-                "entities": entities,
-                "temperature_entity": (
-                    temperature_entity
-                ),
-                "humidity_entity": humidity_entity,
-                "battery_entity": battery_entity,
-            }
+            break
 
         time.sleep(
             ZIGBEE_DISCOVERY_POLL_SECONDS
         )
 
-    raise HomeAssistantApiError(
-        "V povolenem casovem limitu nebylo "
-        "nalezeno nove Home Assistant zarizeni."
+    if not detected_device_id:
+        raise HomeAssistantApiError(
+            "V povolenem casovem limitu nebylo "
+            "nalezeno nove ani znovu pripojene "
+            "ZHA zarizeni."
+        )
+
+    # ZHA muze entity doplnovat postupne.
+    time.sleep(3)
+
+    metadata = get_device_metadata(
+        detected_device_id
     )
+
+    entities = build_entity_inventory(
+        detected_device_id
+    )
+
+    temperature_entity = (
+        find_entity_by_device_class(
+            entities,
+            "temperature",
+        )
+    )
+
+    humidity_entity = (
+        find_entity_by_device_class(
+            entities,
+            "humidity",
+        )
+    )
+
+    battery_entity = (
+        find_entity_by_device_class(
+            entities,
+            "battery",
+        )
+    )
+
+    return {
+        "device": metadata,
+        "entities": entities,
+        "temperature_entity": (
+            temperature_entity
+        ),
+        "humidity_entity": (
+            humidity_entity
+        ),
+        "battery_entity": (
+            battery_entity
+        ),
+        "detection_reason": (
+            detection_reason
+        ),
+    }
 
 
 def find_service_domain(

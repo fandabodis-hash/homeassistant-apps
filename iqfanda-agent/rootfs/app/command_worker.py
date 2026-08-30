@@ -37,6 +37,7 @@ from zigbee_manager import (
     get_entity_device_id,
     get_entity_state,
     get_home_assistant_entity_ids,
+    get_zha_devices,
     open_zigbee_permit,
     wait_for_new_device,
 )
@@ -467,6 +468,21 @@ def execute_zigbee_permit_join(
                 get_home_assistant_entity_ids()
             )
 
+            zha_devices_before = (
+                get_zha_devices()
+            )
+
+            zha_device_count_before = sum(
+                1
+                for item in zha_devices_before
+                if (
+                    isinstance(item, dict)
+                    and not item.get(
+                        "active_coordinator"
+                    )
+                )
+            )
+
             logging.info(
                 (
                     "Pred Zigbee parovanim bylo nalezeno "
@@ -486,6 +502,9 @@ def execute_zigbee_permit_join(
                     "phase": "snapshot_created",
                     "entity_count_before": len(
                         entity_ids_before
+                    ),
+                    "zha_device_count_before": (
+                        zha_device_count_before
                     ),
                     "duration_seconds": (
                         duration_seconds
@@ -520,6 +539,9 @@ def execute_zigbee_permit_join(
                     "entity_count_before": len(
                         entity_ids_before
                     ),
+                    "zha_device_count_before": (
+                        zha_device_count_before
+                    ),
                     "expected_device_type": (
                         expected_device_type
                     ),
@@ -546,6 +568,9 @@ def execute_zigbee_permit_join(
                     {current_device_id}
                     if current_device_id
                     else set()
+                ),
+                zha_devices_before=(
+                    zha_devices_before
                 ),
             )
 
