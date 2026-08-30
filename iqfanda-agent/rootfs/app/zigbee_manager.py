@@ -246,6 +246,113 @@ def home_assistant_websocket_request(
                 pass
 
 
+# ==========================================================
+# PHASE25_ZIGBEE_TOPOLOGY_REFRESH_0100
+# ==========================================================
+
+
+def trigger_zha_topology_update(
+) -> dict[str, Any]:
+    """
+    Spusti nativni ZHA topology scan.
+
+    Home Assistant prikaz zha/topology/update
+    je fire-and-forget: server spusti scan jako
+    background task a neposila standardni result.
+
+    Proto zde zamerne nepouzivame
+    home_assistant_websocket_request().
+    """
+
+    websocket_url = os.environ.get(
+        "SUPERVISOR_CORE_WEBSOCKET_URL",
+        "ws://supervisor/core/websocket",
+    ).strip()
+
+    connection = None
+
+    try:
+        connection = websocket.create_connection(
+            websocket_url,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            origin="http://supervisor",
+        )
+
+        hello = json.loads(
+            connection.recv()
+        )
+
+        if hello.get("type") != "auth_required":
+            raise HomeAssistantApiError(
+                "Home Assistant WebSocket "
+                "nevyzadal autentizaci."
+            )
+
+        connection.send(
+            json.dumps(
+                {
+                    "type": "auth",
+                    "access_token":
+                        get_supervisor_token(),
+                }
+            )
+        )
+
+        auth = json.loads(
+            connection.recv()
+        )
+
+        if auth.get("type") != "auth_ok":
+            raise HomeAssistantApiError(
+                "Autentizace Home Assistant "
+                "WebSocket selhala."
+            )
+
+        connection.send(
+            json.dumps(
+                {
+                    "id": 1,
+                    "type":
+                        "zha/topology/update",
+                }
+            )
+        )
+
+        # HA topology handler pouze zalozi
+        # background scan a neodesila result.
+        # Kratka prodleva umozni predat frame
+        # serveru pred uzavrenim spojeni.
+        time.sleep(0.25)
+
+        return {
+            "ok": True,
+            "command":
+                "zha/topology/update",
+            "scan_started": True,
+        }
+
+    except HomeAssistantApiError:
+        raise
+
+    except (
+        OSError,
+        ValueError,
+        json.JSONDecodeError,
+        websocket.WebSocketException,
+    ) as exc:
+        raise HomeAssistantApiError(
+            "Spusteni ZHA topology scanu "
+            f"selhalo: {exc}"
+        ) from exc
+
+    finally:
+        if connection is not None:
+            try:
+                connection.close()
+            except websocket.WebSocketException:
+                pass
+
+
 def get_zha_devices() -> list[dict[str, Any]]:
     """Nacte kompletni seznam zarizeni integrace ZHA."""
 

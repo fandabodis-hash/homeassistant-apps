@@ -39,6 +39,7 @@ from zigbee_manager import (
     get_home_assistant_entity_ids,
     get_zha_devices,
     open_zigbee_permit,
+    trigger_zha_topology_update,
     wait_for_new_device,
 )
 
@@ -1800,6 +1801,119 @@ def execute_agent_update(
     )
 
 
+
+# ==========================================================
+# PHASE25_ZIGBEE_TOPOLOGY_REFRESH_0100
+# ==========================================================
+
+
+def execute_zigbee_topology_refresh(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """
+    Spusti bezpečnou aktualizaci ZHA topologie.
+
+    Nic neparuje, nic nemaze, nemeni sitovy
+    klic a nerestartuje ZHA.
+    """
+
+    source = str(
+        command_payload.get(
+            "source",
+            "admin_zigbee_infrastructure",
+        )
+        or "admin_zigbee_infrastructure"
+    ).strip()
+
+    try:
+        devices_before = get_zha_devices()
+
+        end_devices_before = [
+            item
+            for item in devices_before
+            if (
+                isinstance(item, dict)
+                and not item.get(
+                    "active_coordinator"
+                )
+            )
+        ]
+
+        trigger = (
+            trigger_zha_topology_update()
+        )
+
+        if (
+            not isinstance(trigger, dict)
+            or trigger.get(
+                "scan_started"
+            )
+            is not True
+        ):
+            raise RuntimeError(
+                "ZHA topology scan nebyl potvrzen."
+            )
+
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker":
+                    "command_worker",
+                "executor":
+                    "zigbee_topology_refresh",
+                "phase":
+                    "topology_scan_failed",
+                "source":
+                    source,
+            },
+            error_message=str(exc),
+        )
+
+        logging.exception(
+            "Zigbee topology refresh %s selhal.",
+            command_id,
+        )
+
+        return
+
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result={
+            "worker":
+                "command_worker",
+            "executor":
+                "zigbee_topology_refresh",
+            "phase":
+                "topology_scan_started",
+            "source":
+                source,
+            "home_assistant_command":
+                "zha/topology/update",
+            "scan_started":
+                True,
+            "device_count_before":
+                len(end_devices_before),
+        },
+        error_message=None,
+    )
+
+    logging.info(
+        "Zigbee topology scan spusten. "
+        "Prikaz=%s zarizeni=%s source=%s",
+        command_id,
+        len(end_devices_before),
+        source,
+    )
+
+
 # ==========================================================
 # PHASE25_ZIGBEE_SWITCH_CONTROL
 # ==========================================================
@@ -2102,6 +2216,14 @@ def execute_command(
             "phase": "validation",
         },
     )
+
+    if command_type == "zigbee_topology_refresh":
+        execute_zigbee_topology_refresh(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
 
     if command_type == "zigbee_switch_set":
         execute_zigbee_switch_set(
