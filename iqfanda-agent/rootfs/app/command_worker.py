@@ -1,6 +1,7 @@
 """Cloudovy vykonavatel prikazu TNG IQ FANDA Agentu."""
 
 import json
+from datetime import datetime, timezone
 import logging
 import os
 import time
@@ -31,7 +32,10 @@ from spot_battery_intent import save_spot_battery_intent
 from spot_boiler_intent import save_spot_boiler_intent
 from zigbee_manager import (
     HomeAssistantApiError,
+    call_home_assistant_service,
     find_existing_temperature_devices,
+    get_entity_device_id,
+    get_entity_state,
     get_home_assistant_entity_ids,
     open_zigbee_permit,
     wait_for_new_device,
@@ -1771,6 +1775,274 @@ def execute_agent_update(
     )
 
 
+# ==========================================================
+# PHASE25_ZIGBEE_SWITCH_CONTROL
+# ==========================================================
+
+
+def execute_zigbee_switch_set(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """
+    Provede jeden Zigbee switch povel s read-back kontrolou.
+
+    Prikaz nikdy nevytvari manual override.
+    Automaticke rizeni TNG IQ FANDA zustava nadrizene.
+    """
+
+    entity_id = str(
+        command_payload.get(
+            "entity_id",
+            "",
+        )
+        or ""
+    ).strip()
+
+    target_state = str(
+        command_payload.get(
+            "target_state",
+            "",
+        )
+        or ""
+    ).strip().lower()
+
+    expected_device_id = str(
+        command_payload.get(
+            "device_reg_id",
+            "",
+        )
+        or ""
+    ).strip()
+
+    ieee = str(
+        command_payload.get(
+            "ieee",
+            "",
+        )
+        or ""
+    ).strip().lower()
+
+    source = str(
+        command_payload.get(
+            "source",
+            "unknown",
+        )
+        or "unknown"
+    ).strip()
+
+    deadline_raw = str(
+        command_payload.get(
+            "deadline_at",
+            "",
+        )
+        or ""
+    ).strip()
+
+    try:
+        if not entity_id.startswith(
+            "switch."
+        ):
+            raise ValueError(
+                "Zigbee switch control smi "
+                "ovladat pouze switch.* entitu."
+            )
+
+        if target_state not in {
+            "on",
+            "off",
+        }:
+            raise ValueError(
+                "target_state musi byt on nebo off."
+            )
+
+        if deadline_raw:
+            deadline = datetime.fromisoformat(
+                deadline_raw.replace(
+                    "Z",
+                    "+00:00",
+                )
+            )
+
+            if deadline.tzinfo is None:
+                deadline = deadline.replace(
+                    tzinfo=timezone.utc,
+                )
+
+            if (
+                datetime.now(timezone.utc)
+                > deadline
+            ):
+                raise RuntimeError(
+                    "Deadline Zigbee spinaciho "
+                    "prikazu 180 sekund byl prekrocen."
+                )
+
+        actual_device_id = (
+            get_entity_device_id(
+                entity_id
+            )
+        )
+
+        if (
+            expected_device_id
+            and actual_device_id
+            != expected_device_id
+        ):
+            raise RuntimeError(
+                "Switch entita nepatri "
+                "ocekavanemu Zigbee zarizeni."
+            )
+
+        before = get_entity_state(
+            entity_id
+        )
+
+        before_state = str(
+            before.get("state")
+            or ""
+        ).strip().lower()
+
+        service_called = False
+
+        if before_state != target_state:
+            call_home_assistant_service(
+                domain="switch",
+                service=(
+                    "turn_on"
+                    if target_state == "on"
+                    else "turn_off"
+                ),
+                payload={
+                    "entity_id":
+                        entity_id,
+                },
+            )
+
+            service_called = True
+
+        readback_state = None
+
+        # Maximalne 5 sekund na fyzicke potvrzeni stavu.
+        for _ in range(20):
+            state = get_entity_state(
+                entity_id
+            )
+
+            readback_state = str(
+                state.get("state")
+                or ""
+            ).strip().lower()
+
+            if (
+                readback_state
+                == target_state
+            ):
+                break
+
+            time.sleep(0.25)
+
+        if (
+            readback_state
+            != target_state
+        ):
+            raise RuntimeError(
+                "Zigbee switch nebyl potvrzen "
+                "read-back kontrolou."
+            )
+
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker":
+                    "command_worker",
+                "executor":
+                    "zigbee_switch_set",
+                "phase":
+                    "switch_control_failed",
+                "entity_id":
+                    entity_id,
+                "ieee":
+                    ieee,
+                "target_state":
+                    target_state,
+                "source":
+                    source,
+                "manual_override":
+                    False,
+                "fanda_has_priority":
+                    True,
+            },
+            error_message=str(exc),
+        )
+
+        logging.exception(
+            "Zigbee switch control %s selhal.",
+            command_id,
+        )
+
+        return
+
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result={
+            "worker":
+                "command_worker",
+            "executor":
+                "zigbee_switch_set",
+            "phase":
+                "switch_state_verified",
+            "entity_id":
+                entity_id,
+            "ieee":
+                ieee,
+            "device_reg_id":
+                expected_device_id
+                or actual_device_id,
+            "source":
+                source,
+            "requested_state":
+                target_state,
+            "previous_state":
+                before_state,
+            "readback_state":
+                readback_state,
+            "service_called":
+                service_called,
+            "readback_verified":
+                True,
+            "manual_override":
+                False,
+            "fanda_has_priority":
+                True,
+            "max_execution_delay_seconds":
+                180,
+            "deadline_at":
+                deadline_raw or None,
+        },
+        error_message=None,
+    )
+
+    logging.info(
+        "Zigbee switch | command=%s "
+        "entity=%s target=%s "
+        "source=%s readback=%s",
+        command_id,
+        entity_id,
+        target_state,
+        source,
+        readback_state,
+    )
+
+
+
 def execute_command(
     *,
     identity: dict[str, Any],
@@ -1805,6 +2077,14 @@ def execute_command(
             "phase": "validation",
         },
     )
+
+    if command_type == "zigbee_switch_set":
+        execute_zigbee_switch_set(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
 
     if command_type == "zigbee_permit_join":
         execute_zigbee_permit_join(
