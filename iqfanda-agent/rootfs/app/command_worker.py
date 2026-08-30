@@ -612,9 +612,91 @@ def execute_zigbee_permit_join(
         voltage_entity = None
 
         if infrastructure_context:
-            # Infrastrukturni router/repeater se neoveruje
-            # podle teplotni ani technologicke entity.
-            pass
+            # ==================================================
+            # PHASE25_INFRASTRUCTURE_DEVICE_TYPE_VERIFY_0101
+            # ==================================================
+            #
+            # Infrastructure pairing may succeed only when
+            # the device really reports ZHA device_type Router.
+            #
+            paired_device_id = str(
+                device.get("device_id")
+                or ""
+            ).strip()
+
+            if not paired_device_id:
+                raise HomeAssistantApiError(
+                    "Nalezen\u00e9 Zigbee za\u0159\u00edzen\u00ed "
+                    "nem\u00e1 platn\u00e9 HA device_id."
+                )
+
+            current_zha_devices = (
+                get_zha_devices()
+            )
+
+            matched_zha_devices = [
+                item
+                for item in current_zha_devices
+                if (
+                    isinstance(item, dict)
+                    and not item.get(
+                        "active_coordinator"
+                    )
+                    and str(
+                        item.get(
+                            "device_reg_id"
+                        )
+                        or ""
+                    ).strip()
+                    == paired_device_id
+                )
+            ]
+
+            if len(matched_zha_devices) != 1:
+                raise HomeAssistantApiError(
+                    "Nalezen\u00e9 Zigbee za\u0159\u00edzen\u00ed "
+                    "nelze jednozna\u010dn\u011b ov\u011b\u0159it "
+                    "v ZHA invent\u00e1\u0159i."
+                )
+
+            matched_zha_device = (
+                matched_zha_devices[0]
+            )
+
+            actual_zha_device_type = str(
+                matched_zha_device.get(
+                    "device_type"
+                )
+                or ""
+            ).strip()
+
+            if (
+                actual_zha_device_type.lower()
+                != "router"
+            ):
+                raise HomeAssistantApiError(
+                    "Nalezen\u00e9 Zigbee za\u0159\u00edzen\u00ed "
+                    "nen\u00ed ZHA Router/repeater. "
+                    "Skute\u010dn\u00fd ZHA device_type: "
+                    f"{actual_zha_device_type or 'neznamy'}. "
+                    "Za\u0159\u00edzen\u00ed z\u016fstalo "
+                    "v Zigbee s\u00edti jako nep\u0159i\u0159azen\u00e9; "
+                    "pou\u017eijte spr\u00e1vn\u00fd instala\u010dn\u00ed modul."
+                )
+
+            device = {
+                **device,
+                "zha_device_type": (
+                    actual_zha_device_type
+                ),
+                "ieee": matched_zha_device.get(
+                    "ieee"
+                ),
+                "nwk": matched_zha_device.get(
+                    "nwk"
+                ),
+            }
+
         elif (
             energy_target_context
             and entity_role == "output_switch"
