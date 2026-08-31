@@ -34,6 +34,16 @@
       ],
       "file": "goodwe_et_15_30kw.json",
       "status": "physically_verified_partial_00008"
+    },
+    {
+      "profile_id": "deye_3x_lv_off_grid",
+      "manufacturer": "deye",
+      "manufacturer_name": "Deye",
+      "models": [
+        "3xDEYE LV off grid"
+      ],
+      "file": "deye_3x_lv_off_grid.json",
+      "status": "physical_registers_verified_00011_adapter_pending"
     }
   ]
 }

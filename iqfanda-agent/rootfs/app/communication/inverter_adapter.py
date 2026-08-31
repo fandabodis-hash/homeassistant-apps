@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
+
 import json
 import math
 import os
@@ -1573,16 +1575,30 @@ def read_inverter_snapshot(
             "Runtime nema communicator_id."
         )
 
+    # PHASE27_DEYE_CUSTOM_SNAPSHOT_READER
+
+    snapshot_reader = profile.get(
+        "snapshot_reader"
+    )
+
+    custom_snapshot_reader = isinstance(
+        snapshot_reader,
+        dict,
+    )
+
     device_id = runtime_configuration.get(
         "modbus_device_id"
     )
 
     if (
-        type(device_id) is not int
-        or device_id
-        not in protocol[
-            "allowed_device_ids"
-        ]
+        not custom_snapshot_reader
+        and (
+            type(device_id) is not int
+            or device_id
+            not in protocol[
+                "allowed_device_ids"
+            ]
+        )
     ):
         raise ValueError(
             "Runtime obsahuje nepovolenou Modbus adresu."
@@ -1595,6 +1611,71 @@ def read_inverter_snapshot(
     bus_lock = ziskej_zamek_modbus_sbernice(
         serial_path
     )
+
+    if custom_snapshot_reader:
+
+        module_name = str(
+            snapshot_reader.get(
+                "module"
+            )
+            or ""
+        ).strip()
+
+        function_name = str(
+            snapshot_reader.get(
+                "function"
+            )
+            or ""
+        ).strip()
+
+        if (
+            not module_name.startswith(
+                "communication."
+            )
+            or ".." in module_name
+            or not all(
+                part.isidentifier()
+                for part
+                in module_name.split(".")
+            )
+        ):
+            raise RuntimeError(
+                "Profil obsahuje neplatny "
+                "snapshot reader module."
+            )
+
+        if (
+            not function_name
+            or not function_name.isidentifier()
+        ):
+            raise RuntimeError(
+                "Profil obsahuje neplatnou "
+                "snapshot reader function."
+            )
+
+        module = importlib.import_module(
+            module_name
+        )
+
+        reader = getattr(
+            module,
+            function_name,
+            None,
+        )
+
+        if not callable(reader):
+            raise RuntimeError(
+                "Custom snapshot reader "
+                "nebyl nalezen."
+            )
+
+        return reader(
+            runtime_configuration=
+                runtime_configuration,
+            profile=profile,
+            serial_path=serial_path,
+            bus_lock=bus_lock,
+        )
 
     #
     # Lazy import:
@@ -1951,6 +2032,226 @@ def probe_inverter_modbus(
             "allowed_device_ids"
         ]
     )
+
+    # PHASE27_DEYE_MULTI_DEVICE_PROBE
+    #
+    # Profil s custom snapshot readerem muze reprezentovat
+    # vice fyzickych Modbus jednotek na jedne sbernici.
+    # Probe proto nesmi skoncit po prvni odpovedi.
+    #
+    snapshot_reader = profile.get(
+        "snapshot_reader"
+    )
+
+    if isinstance(
+        snapshot_reader,
+        dict,
+    ):
+        runtime_configuration = {
+            "manufacturer":
+                manufacturer,
+            "model":
+                model,
+            "communication_type":
+                "rs485",
+            "communicator_id":
+                communicator_id,
+            "read_only":
+                True,
+            #
+            # Custom reader tuto historickou single-ID
+            # hodnotu nepouziva.
+            #
+            "modbus_device_id":
+                None,
+        }
+
+        try:
+            snapshot = read_inverter_snapshot(
+                runtime_configuration
+            )
+
+        except Exception as exc:
+            return {
+                "executor":
+                    "inverter_adapter",
+                "phase":
+                    "probe_failed",
+                "read_only":
+                    True,
+                "profile_id":
+                    profile["profile_id"],
+                "manufacturer":
+                    profile["manufacturer"],
+                "inverter_model":
+                    model,
+                "communication_type":
+                    "rs485",
+                "communicator_id":
+                    communicator_id,
+                "serial_path":
+                    "",
+                "device_ids_tested":
+                    device_ids,
+                "communication_detected":
+                    False,
+                "register_readable":
+                    False,
+                "profile_verified":
+                    False,
+                "matched_device_id":
+                    None,
+                "matched_block":
+                    "custom_snapshot_reader",
+                "identified_model":
+                    None,
+                "attempts": [],
+                "error":
+                    str(exc),
+            }
+
+        if not isinstance(
+            snapshot,
+            dict,
+        ):
+            raise RuntimeError(
+                "Custom snapshot probe nevratil dict."
+            )
+
+        snapshot_ids = (
+            snapshot.get(
+                "modbus_device_ids"
+            )
+        )
+
+        inverters = snapshot.get(
+            "inverters"
+        )
+
+        if not isinstance(
+            snapshot_ids,
+            list,
+        ):
+            snapshot_ids = []
+
+        if not isinstance(
+            inverters,
+            list,
+        ):
+            inverters = []
+
+        online_ids = sorted(
+            int(item["device_id"])
+            for item in inverters
+            if (
+                isinstance(item, dict)
+                and item.get(
+                    "online"
+                )
+                is True
+                and type(
+                    item.get(
+                        "device_id"
+                    )
+                )
+                is int
+            )
+        )
+
+        expected_ids = sorted(
+            device_ids
+        )
+
+        all_required_online = (
+            snapshot.get(
+                "complete"
+            )
+            is True
+            and sorted(
+                snapshot_ids
+            )
+            == expected_ids
+            and online_ids
+            == expected_ids
+        )
+
+        serial_path = str(
+            snapshot.get(
+                "serial_path"
+            )
+            or ""
+        ).strip()
+
+        attempts = [
+            {
+                "device_id":
+                    device_id,
+                "block":
+                    "custom_snapshot_reader",
+                "phase":
+                    (
+                        "register_response"
+                        if device_id
+                        in online_ids
+                        else "no_response"
+                    ),
+            }
+            for device_id
+            in device_ids
+        ]
+
+        return {
+            "executor":
+                "inverter_adapter",
+            "phase":
+                (
+                    "register_response"
+                    if all_required_online
+                    else "partial_response"
+                ),
+            "read_only":
+                True,
+            "profile_id":
+                profile["profile_id"],
+            "manufacturer":
+                profile["manufacturer"],
+            "inverter_model":
+                model,
+            "communication_type":
+                "rs485",
+            "communicator_id":
+                communicator_id,
+            "serial_path":
+                serial_path,
+            "device_ids_tested":
+                device_ids,
+            "communication_detected":
+                bool(
+                    online_ids
+                ),
+            "register_readable":
+                all_required_online,
+            "profile_verified":
+                all_required_online,
+            #
+            # Historicky cloud kontrakt uchovava
+            # jeden matched_device_id.
+            # U tohoto profilu je kompatibilni reprezentant
+            # MASTER ID 1.
+            #
+            "matched_device_id":
+                (
+                    device_ids[0]
+                    if all_required_online
+                    else None
+                ),
+            "matched_block":
+                "custom_snapshot_reader",
+            "identified_model":
+                None,
+            "attempts":
+                attempts,
+        }
 
     serial_path = _find_communicator_path(
         communicator_id

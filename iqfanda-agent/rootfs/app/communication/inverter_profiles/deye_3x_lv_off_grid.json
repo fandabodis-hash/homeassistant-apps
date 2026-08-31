@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "profile_id": "deye_3x_lv_off_grid",
+  "manufacturer": "deye",
+  "manufacturer_name": "Deye",
+  "family": "deye_lv_3ph_sg05lp3",
+  "models": [
+    "3xDEYE LV off grid"
+  ],
+  "verification_status": "physical_registers_verified_00011_adapter_pending",
+  "protocol": {
+    "type": "modbus_rtu",
+    "function_code": 3,
+    "baudrate": 9600,
+    "bytesize": 8,
+    "parity": "N",
+    "stopbits": 1,
+    "timeout_seconds": 1.2,
+    "retries": 0,
+    "allowed_device_ids": [
+      1,
+      2,
+      3
+    ]
+  },
+  "snapshot_reader": {
+    "module": "communication.deye_3x_lv_off_grid",
+    "function": "read_snapshot"
+  },
+  "topology": {
+    "installation_type": "off_grid",
+    "grid_connected": false,
+    "shared_dc_bus": true,
+    "battery_telemetry": "external_pylontech_module",
+    "generator_telemetry": "external_rotek_module",
+    "ac_buses": [
+      {
+        "id": "ac_bus_1",
+        "mode": "parallel",
+        "master": 1,
+        "slaves": [
+          2
+        ]
+      },
+      {
+        "id": "ac_bus_2",
+        "mode": "independent",
+        "master": 3,
+        "slaves": []
+      }
+    ]
+  },
+  "read_blocks": [],
+  "entities": []
+}
