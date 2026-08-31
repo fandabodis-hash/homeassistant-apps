@@ -30,6 +30,10 @@ from device_config import load_cached_cloud_config
 from host.cloud_client import cloud_client
 from spot_battery_intent import save_spot_battery_intent
 from spot_boiler_intent import save_spot_boiler_intent
+from pv_surplus_target_control import (
+    apply_pv_surplus_target_intent,
+    reconcile_expired_pv_surplus_target_intents,
+)
 from zigbee_manager import (
     HomeAssistantApiError,
     call_home_assistant_service,
@@ -306,13 +310,16 @@ def execute_zigbee_permit_join(
                 "instalacnich kontextu."
             )
 
-        if (
-            expected_device_type
-            != "zigbee_router_repeater"
-        ):
+        # ==================================================
+        # PHASE26_GENERIC_ZIGBEE_EXPECTED_TYPE_0102
+        # ==================================================
+        if expected_device_type not in {
+            "zigbee_device",
+            "zigbee_router_repeater",
+        }:
             raise ValueError(
-                "Infrastrukturni Zigbee parovani vyzaduje "
-                "typ zigbee_router_repeater."
+                "Obecne Zigbee parovani vyzaduje typ "
+                "zigbee_device."
             )
 
         if replacement_mode or current_device_id:
@@ -670,19 +677,12 @@ def execute_zigbee_permit_join(
                 or ""
             ).strip()
 
-            if (
-                actual_zha_device_type.lower()
-                != "router"
-            ):
-                raise HomeAssistantApiError(
-                    "Nalezen\u00e9 Zigbee za\u0159\u00edzen\u00ed "
-                    "nen\u00ed ZHA Router/repeater. "
-                    "Skute\u010dn\u00fd ZHA device_type: "
-                    f"{actual_zha_device_type or 'neznamy'}. "
-                    "Za\u0159\u00edzen\u00ed z\u016fstalo "
-                    "v Zigbee s\u00edti jako nep\u0159i\u0159azen\u00e9; "
-                    "pou\u017eijte spr\u00e1vn\u00fd instala\u010dn\u00ed modul."
-                )
+            # ==================================================
+            # PHASE26_GENERIC_ZIGBEE_PAIRING_0102
+            # ==================================================
+            # Konfigurace Zigbee prijima libovolne podporovane
+            # non-coordinator ZHA zarizeni. Skutecny ZHA typ se
+            # pouze zaznamena do vysledku; neni filtrem parovani.
 
             device = {
                 **device,
@@ -1291,6 +1291,68 @@ def execute_spot_boiler_intent(
         stored["action"],
         stored["output_reference"],
         stored["valid_until"],
+    )
+
+
+def execute_pv_surplus_target_intent(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    try:
+        applied = apply_pv_surplus_target_intent(command_payload)
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": "pv_surplus_target_intent",
+                "phase": "target_control_failed",
+                "physical_control_active": True,
+                "payload_received": command_payload,
+            },
+            error_message=str(exc),
+        )
+        logging.exception(
+            "PV surplus target intent %s selhal.",
+            command_id,
+        )
+        return
+
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result={
+            "worker": "command_worker",
+            "executor": "pv_surplus_target_intent",
+            "phase": "target_state_verified",
+            "physical_control_active": True,
+            "target_id": applied["target_id"],
+            "resource_key": applied["resource_key"],
+            "output_reference": applied["output_reference"],
+            "action": applied["action"],
+            "desired_on": applied["desired_on"],
+            "reason": applied["reason"],
+            "service_called": applied["service_called"],
+            "readback_verified": applied["readback_verified"],
+            "readback_state": applied["readback_state"],
+            "valid_until": applied["valid_until"],
+        },
+        error_message=None,
+    )
+
+    logging.info(
+        "PV target control | command=%s target=%s "
+        "action=%s output=%s readback=%s",
+        command_id,
+        applied["target_id"],
+        applied["action"],
+        applied["output_reference"],
+        applied["readback_state"],
     )
 
 
@@ -2331,6 +2393,14 @@ def execute_command(
         )
         return
 
+    if command_type == "pv_surplus_target_intent":
+        execute_pv_surplus_target_intent(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
     if command_type == "spot_battery_intent":
         execute_spot_battery_intent(
             identity=identity,
@@ -2373,6 +2443,16 @@ def process_once() -> bool:
     """Provede jeden pokus o vyzvednuti prikazu."""
 
     identity = load_device_identity()
+
+    expiry_results = reconcile_expired_pv_surplus_target_intents()
+
+    for item in expiry_results:
+        if item.get("action") == "fail_safe_off":
+            logging.warning(
+                "PV target fail-safe OFF | resource=%s output=%s",
+                item.get("resource_key"),
+                item.get("output_reference"),
+            )
 
     if reconcile_pending_agent_update(
         identity=identity,
