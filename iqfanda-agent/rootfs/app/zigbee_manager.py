@@ -246,6 +246,417 @@ def home_assistant_websocket_request(
                 pass
 
 
+
+# ==========================================================
+# PHASE28_GENERIC_BINARY_POWER_OUTPUT_0104
+# ==========================================================
+#
+# TNG IQ FANDA classifies Zigbee devices by capability.
+#
+# Manufacturer, model and user-visible entity/device names
+# MUST NOT participate in classification.
+#
+# Home Assistant domains are used only as adapters to the
+# actual Home Assistant control service.
+# ==========================================================
+
+
+BINARY_POWER_OUTPUT_CAPABILITY = (
+    "binary_power_output"
+)
+
+
+def get_entity_registry_entries(
+) -> list[dict[str, Any]]:
+    """Nacte Home Assistant Entity Registry."""
+
+    result = (
+        home_assistant_websocket_request(
+            command_type=(
+                "config/entity_registry/list"
+            ),
+        )
+    )
+
+    if not isinstance(
+        result,
+        list,
+    ):
+        raise HomeAssistantApiError(
+            "Home Assistant Entity Registry "
+            "vratilo neplatny seznam."
+        )
+
+    return [
+        item
+        for item in result
+        if (
+            isinstance(item, dict)
+            and str(
+                item.get("entity_id")
+                or ""
+            ).strip()
+        )
+    ]
+
+
+def get_entity_registry_index(
+) -> dict[str, dict[str, Any]]:
+    """Index Entity Registry podle entity_id."""
+
+    return {
+        str(
+            item.get("entity_id")
+            or ""
+        ).strip(): item
+        for item in (
+            get_entity_registry_entries()
+        )
+    }
+
+
+def get_entity_domain(
+    entity_id: str,
+) -> str:
+    """Vrati technickou HA domenu entity."""
+
+    normalized = str(
+        entity_id or ""
+    ).strip()
+
+    if "." not in normalized:
+        return ""
+
+    return normalized.split(
+        ".",
+        1,
+    )[0].strip().lower()
+
+
+def is_binary_power_output_entity(
+    entity: dict[str, Any],
+    registry_entry: (
+        dict[str, Any]
+        | None
+    ),
+) -> bool:
+    """
+    Rozpozna obecny binarni vykonovy vystup.
+
+    Rozhodovani je zalozeno na skutecnych
+    technickych vlastnostech HA/ZHA.
+
+    Nepouziva:
+    - vyrobce,
+    - model,
+    - friendly_name,
+    - uzivatelsky nazev,
+    - text za teckou v entity_id.
+    """
+
+    if not isinstance(
+        entity,
+        dict,
+    ):
+        return False
+
+    if not isinstance(
+        registry_entry,
+        dict,
+    ):
+        return False
+
+    platform = str(
+        registry_entry.get(
+            "platform"
+        )
+        or ""
+    ).strip().lower()
+
+    if (
+        platform
+        and platform != "zha"
+    ):
+        return False
+
+    entity_category = str(
+        registry_entry.get(
+            "entity_category"
+        )
+        or ""
+    ).strip().lower()
+
+    if entity_category in {
+        "config",
+        "diagnostic",
+    }:
+        return False
+
+    if registry_entry.get(
+        "disabled_by"
+    ) not in {
+        None,
+        "",
+    }:
+        return False
+
+    entity_id = str(
+        entity.get("entity_id")
+        or ""
+    ).strip()
+
+    domain = get_entity_domain(
+        entity_id
+    )
+
+    # HA switch je binarni ON/OFF adapter.
+    #
+    # Konfiguracni/diagnosticke switch entity
+    # byly vyrazeny vyse pres Entity Registry.
+    if domain == "switch":
+        return True
+
+    # Nektera rele jsou v HA reprezentovana
+    # jako light, prestoze umi pouze ON/OFF.
+    if domain != "light":
+        return False
+
+    attributes = entity.get(
+        "attributes"
+    )
+
+    if not isinstance(
+        attributes,
+        dict,
+    ):
+        return False
+
+    supported_modes = (
+        attributes.get(
+            "supported_color_modes"
+        )
+    )
+
+    if not isinstance(
+        supported_modes,
+        (list, tuple, set),
+    ):
+        return False
+
+    normalized_modes = {
+        str(mode or "")
+        .strip()
+        .lower()
+        for mode in supported_modes
+        if str(
+            mode or ""
+        ).strip()
+    }
+
+    # Pouze ciste ON/OFF light.
+    # Stmivani, jas ani barvy nejsou
+    # automaticky technologicky vystup.
+    return normalized_modes == {
+        "onoff"
+    }
+
+
+def enrich_entity_capabilities(
+    entity: dict[str, Any],
+    registry_entry: (
+        dict[str, Any]
+        | None
+    ),
+) -> dict[str, Any]:
+    """Doplni jednotne capability metadata."""
+
+    result = dict(
+        entity
+    )
+
+    entity_id = str(
+        result.get("entity_id")
+        or ""
+    ).strip()
+
+    registry = (
+        registry_entry
+        if isinstance(
+            registry_entry,
+            dict,
+        )
+        else {}
+    )
+
+    result["ha_domain"] = (
+        get_entity_domain(
+            entity_id
+        )
+    )
+
+    result["entity_category"] = (
+        registry.get(
+            "entity_category"
+        )
+    )
+
+    result["registry_platform"] = (
+        registry.get(
+            "platform"
+        )
+    )
+
+    result["translation_key"] = (
+        registry.get(
+            "translation_key"
+        )
+    )
+
+    result["original_name"] = (
+        registry.get(
+            "original_name"
+        )
+    )
+
+    capabilities: list[str] = []
+
+    if is_binary_power_output_entity(
+        result,
+        registry_entry,
+    ):
+        capabilities.append(
+            BINARY_POWER_OUTPUT_CAPABILITY
+        )
+
+    result["capabilities"] = (
+        capabilities
+    )
+
+    return result
+
+
+def find_entities_by_capability(
+    entities: list[dict[str, Any]],
+    capability: str,
+) -> list[dict[str, Any]]:
+    """Najde entity podle logicke capability."""
+
+    normalized_capability = str(
+        capability or ""
+    ).strip()
+
+    if not normalized_capability:
+        return []
+
+    found = []
+
+    for entity in entities:
+
+        if not isinstance(
+            entity,
+            dict,
+        ):
+            continue
+
+        capabilities = (
+            entity.get(
+                "capabilities"
+            )
+        )
+
+        if not isinstance(
+            capabilities,
+            list,
+        ):
+            continue
+
+        if normalized_capability in {
+            str(item or "").strip()
+            for item in capabilities
+        }:
+            found.append(
+                entity
+            )
+
+    return found
+
+
+def get_binary_power_output_service_domain(
+    entity_id: str,
+) -> str:
+    """
+    Vrati HA adapter jiz overeneho
+    binary_power_output.
+    """
+
+    domain = get_entity_domain(
+        entity_id
+    )
+
+    if domain not in {
+        "switch",
+        "light",
+    }:
+        raise ValueError(
+            "Binary power output nema "
+            "podporovanou HA domenu."
+        )
+
+    return domain
+
+
+def call_binary_power_output_service(
+    *,
+    entity_id: str,
+    desired_on: bool,
+) -> dict[str, Any]:
+    """
+    Ovladne jiz overeny binary_power_output
+    pres odpovidajici HA adapter.
+    """
+
+    normalized_entity_id = str(
+        entity_id or ""
+    ).strip()
+
+    domain = (
+        get_binary_power_output_service_domain(
+            normalized_entity_id
+        )
+    )
+
+    service = (
+        "turn_on"
+        if bool(desired_on)
+        else "turn_off"
+    )
+
+    response = (
+        call_home_assistant_service(
+            domain=domain,
+            service=service,
+            payload={
+                "entity_id":
+                    normalized_entity_id,
+            },
+        )
+    )
+
+    return {
+        "capability":
+            BINARY_POWER_OUTPUT_CAPABILITY,
+
+        "domain":
+            domain,
+
+        "service":
+            f"{domain}.{service}",
+
+        "home_assistant_response":
+            response,
+    }
+
+
 # ==========================================================
 # PHASE25_ZIGBEE_TOPOLOGY_REFRESH_0100
 # ==========================================================
@@ -375,6 +786,11 @@ def get_zha_devices() -> list[dict[str, Any]]:
 
 def normalize_zha_device(
     device: dict[str, Any],
+    *,
+    entity_registry_by_entity_id: (
+        dict[str, dict[str, Any]]
+        | None
+    ) = None,
 ) -> dict[str, Any]:
     """Normalizuje jedno ZHA zarizeni pro cloud."""
 
@@ -491,7 +907,10 @@ def normalize_zha_device(
         try:
             telemetry_entity_inventory = (
                 build_entity_inventory(
-                    device_reg_id
+                    device_reg_id,
+                    entity_registry_by_entity_id=(
+                        entity_registry_by_entity_id
+                    ),
                 )
             )
         except HomeAssistantApiError:
@@ -509,6 +928,25 @@ def normalize_zha_device(
             for entity in telemetry_entity_inventory
             if isinstance(entity, dict)
         ]
+
+    device_capabilities = sorted(
+        {
+            str(capability)
+            for entity in normalized_entities
+            if isinstance(entity, dict)
+            for capability in (
+                entity.get("capabilities")
+                if isinstance(
+                    entity.get("capabilities"),
+                    list,
+                )
+                else []
+            )
+            if str(
+                capability or ""
+            ).strip()
+        }
+    )
 
     return {
         "device_reg_id": device.get(
@@ -537,6 +975,7 @@ def normalize_zha_device(
         ),
         "area_id": device.get("area_id"),
         "entities": normalized_entities,
+        "capabilities": device_capabilities,
         "entity_count": len(
             normalized_entities
         ),
@@ -557,8 +996,27 @@ def normalize_zha_device(
 def get_zha_telemetry_snapshot() -> dict[str, Any]:
     """Sestavi aktualni snapshot cele Zigbee site."""
 
+    try:
+        entity_registry_by_entity_id = (
+            get_entity_registry_index()
+        )
+
+    except HomeAssistantApiError as exc:
+        logging.warning(
+            "HA Entity Registry neni dostupny "
+            "pro capability klasifikaci: %s",
+            exc,
+        )
+
+        entity_registry_by_entity_id = {}
+
     devices = [
-        normalize_zha_device(device)
+        normalize_zha_device(
+            device,
+            entity_registry_by_entity_id=(
+                entity_registry_by_entity_id
+            ),
+        )
         for device in get_zha_devices()
     ]
 
@@ -945,14 +1403,42 @@ def get_device_metadata(
 
 def build_entity_inventory(
     device_id: str,
+    *,
+    entity_registry_by_entity_id: (
+        dict[str, dict[str, Any]]
+        | None
+    ) = None,
 ) -> list[dict[str, Any]]:
-    """Sestavi inventar vsech entit jednoho HA zarizeni."""
+    """
+    Sestavi inventar vsech entit jednoho HA zarizeni.
 
-    inventory: list[dict[str, Any]] = []
+    Capability vrstva pouziva technicka metadata,
+    ne vyrobce, model ani nazvy.
+    """
+
+    inventory: list[
+        dict[str, Any]
+    ] = []
+
+    registry_index = (
+        entity_registry_by_entity_id
+        if isinstance(
+            entity_registry_by_entity_id,
+            dict,
+        )
+        else {}
+    )
 
     for entity_id in get_device_entity_ids(
         device_id
     ):
+
+        registry_entry = (
+            registry_index.get(
+                entity_id
+            )
+        )
+
         try:
             state = get_entity_state(
                 entity_id
@@ -963,46 +1449,79 @@ def build_entity_inventory(
                 {},
             )
 
-            if not isinstance(attributes, dict):
+            if not isinstance(
+                attributes,
+                dict,
+            ):
                 attributes = {}
 
-            inventory.append(
-                {
-                    "entity_id": entity_id,
-                    "state": state.get("state"),
-                    "friendly_name": attributes.get(
+            raw_entity = {
+                "entity_id":
+                    entity_id,
+
+                "state":
+                    state.get("state"),
+
+                "friendly_name":
+                    attributes.get(
                         "friendly_name"
                     ),
-                    "device_class": attributes.get(
+
+                "device_class":
+                    attributes.get(
                         "device_class"
                     ),
-                    "state_class": attributes.get(
+
+                "state_class":
+                    attributes.get(
                         "state_class"
                     ),
-                    "unit_of_measurement": attributes.get(
+
+                "unit_of_measurement":
+                    attributes.get(
                         "unit_of_measurement"
                     ),
-                    "attributes": attributes,
-                    "last_changed": state.get(
+
+                "attributes":
+                    attributes,
+
+                "last_changed":
+                    state.get(
                         "last_changed"
                     ),
-                    "last_updated": state.get(
+
+                "last_updated":
+                    state.get(
                         "last_updated"
                     ),
-                }
+            }
+
+            inventory.append(
+                enrich_entity_capabilities(
+                    raw_entity,
+                    registry_entry,
+                )
             )
 
         except HomeAssistantApiError as exc:
+
             inventory.append(
-                {
-                    "entity_id": entity_id,
-                    "state": None,
-                    "error": str(exc),
-                }
+                enrich_entity_capabilities(
+                    {
+                        "entity_id":
+                            entity_id,
+
+                        "state":
+                            None,
+
+                        "error":
+                            str(exc),
+                    },
+                    registry_entry,
+                )
             )
 
     return inventory
-
 
 def find_entity_by_device_class(
     entities: list[dict[str, Any]],
@@ -1538,8 +2057,19 @@ def wait_for_new_device(
         detected_device_id
     )
 
+    try:
+        entity_registry_by_entity_id = (
+            get_entity_registry_index()
+        )
+
+    except HomeAssistantApiError:
+        entity_registry_by_entity_id = {}
+
     entities = build_entity_inventory(
-        detected_device_id
+        detected_device_id,
+        entity_registry_by_entity_id=(
+            entity_registry_by_entity_id
+        ),
     )
 
     temperature_entity = (

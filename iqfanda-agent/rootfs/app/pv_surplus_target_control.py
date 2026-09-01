@@ -15,7 +15,11 @@ from pv_surplus_target_intent import (
     _read_store,
     save_pv_surplus_target_intent,
 )
-from zigbee_manager import call_home_assistant_service, get_entity_state
+from zigbee_manager import (
+    call_binary_power_output_service,
+    get_binary_power_output_service_domain,
+    get_entity_state,
+)
 
 
 def _target_id_from_resource_key(resource_key: str) -> str:
@@ -34,114 +38,292 @@ def _find_generic_target_binding(
     cloud_config: dict[str, Any],
     resource_key: str,
 ) -> dict[str, Any]:
-    target_id = _target_id_from_resource_key(resource_key)
-    runtimes = cloud_config.get("module_runtime_configurations")
-    if not isinstance(runtimes, list):
-        raise ValueError("Cloud config nema module_runtime_configurations.")
+
+    target_id = (
+        _target_id_from_resource_key(
+            resource_key
+        )
+    )
+
+    runtimes = cloud_config.get(
+        "module_runtime_configurations"
+    )
+
+    if not isinstance(
+        runtimes,
+        list,
+    ):
+        raise ValueError(
+            "Cloud config nema "
+            "module_runtime_configurations."
+        )
 
     runtime = next(
         (
             item
             for item in runtimes
-            if isinstance(item, dict)
-            and str(item.get("module_key") or "").strip()
-            == "pv_surplus_control"
+            if (
+                isinstance(item, dict)
+                and str(
+                    item.get("module_key")
+                    or ""
+                ).strip()
+                == "pv_surplus_control"
+            )
         ),
         None,
     )
+
     if runtime is None:
-        raise ValueError("pv_surplus_control runtime chybi.")
+        raise ValueError(
+            "pv_surplus_control runtime chybi."
+        )
 
-    configuration = runtime.get("configuration")
-    if not isinstance(configuration, dict):
-        raise ValueError("pv_surplus_control konfigurace chybi.")
+    configuration = runtime.get(
+        "configuration"
+    )
 
-    targets = configuration.get("targets")
-    if not isinstance(targets, list):
-        raise ValueError("Seznam energetickych cilu chybi.")
+    if not isinstance(
+        configuration,
+        dict,
+    ):
+        raise ValueError(
+            "pv_surplus_control konfigurace chybi."
+        )
+
+    targets = configuration.get(
+        "targets"
+    )
+
+    if not isinstance(
+        targets,
+        list,
+    ):
+        raise ValueError(
+            "Seznam energetickych cilu chybi."
+        )
 
     target = next(
         (
             item
             for item in targets
-            if isinstance(item, dict)
-            and str(item.get("id") or "").strip() == target_id
+            if (
+                isinstance(item, dict)
+                and str(
+                    item.get("id")
+                    or ""
+                ).strip()
+                == target_id
+            )
         ),
         None,
     )
+
     if target is None:
-        raise ValueError("Energeticky cil nebyl nalezen.")
-    if str(target.get("type") or "").strip() != "generic_load":
-        raise ValueError("Executor smi ovladat pouze generic_load.")
-    if target.get("enabled") is not True:
-        raise ValueError("Energeticky cil je zakazan.")
-    if target.get("configuration_status") != "verified":
-        raise ValueError("Energeticky cil neni overen.")
+        raise ValueError(
+            "Energeticky cil nebyl nalezen."
+        )
 
-    output = target.get("output")
-    if not isinstance(output, dict):
-        raise ValueError("Energeticky cil nema vystup.")
-    if output.get("status") != "verified":
-        raise ValueError("Vystup energetickeho cile neni overen.")
+    if (
+        str(
+            target.get("type")
+            or ""
+        ).strip()
+        != "generic_load"
+    ):
+        raise ValueError(
+            "Executor smi ovladat "
+            "pouze generic_load."
+        )
 
-    output_reference = str(output.get("reference") or "").strip()
-    if not output_reference.startswith("switch."):
-        raise ValueError("Vystup energetickeho cile musi byt switch.*.")
+    if target.get(
+        "enabled"
+    ) is not True:
+        raise ValueError(
+            "Energeticky cil je zakazan."
+        )
+
+    if (
+        target.get(
+            "configuration_status"
+        )
+        != "verified"
+    ):
+        raise ValueError(
+            "Energeticky cil neni overen."
+        )
+
+    output = target.get(
+        "output"
+    )
+
+    if not isinstance(
+        output,
+        dict,
+    ):
+        raise ValueError(
+            "Energeticky cil nema vystup."
+        )
+
+    if (
+        output.get("status")
+        != "verified"
+    ):
+        raise ValueError(
+            "Vystup energetickeho cile "
+            "neni overen."
+        )
+
+    output_reference = str(
+        output.get("reference")
+        or ""
+    ).strip()
+
+    service_domain = (
+        get_binary_power_output_service_domain(
+            output_reference
+        )
+    )
 
     return {
-        "target_id": target_id,
-        "target_name": str(target.get("name") or "Cil").strip(),
-        "output_reference": output_reference,
-        "actuation_enabled": configuration.get("actuation_enabled") is True,
-    }
+        "target_id":
+            target_id,
 
+        "target_name":
+            str(
+                target.get("name")
+                or "Cil"
+            ).strip(),
+
+        "output_reference":
+            output_reference,
+
+        "capability":
+            "binary_power_output",
+
+        "service_domain":
+            service_domain,
+
+        "actuation_enabled":
+            configuration.get(
+                "actuation_enabled"
+            )
+            is True,
+    }
 
 def _set_switch_state(
     *,
     output_reference: str,
     desired_on: bool,
 ) -> dict[str, Any]:
-    reference = str(output_reference or "").strip()
-    if not reference.startswith("switch."):
-        raise ValueError("PV target actuator smi ovladat pouze switch.* entitu.")
+    """
+    Zpetne kompatibilni helper pro overeny
+    binary_power_output.
+    """
 
-    target_state = "on" if desired_on else "off"
+    reference = str(
+        output_reference or ""
+    ).strip()
+
+    service_domain = (
+        get_binary_power_output_service_domain(
+            reference
+        )
+    )
+
+    target_state = (
+        "on"
+        if desired_on
+        else "off"
+    )
+
     before_state = str(
-        get_entity_state(reference).get("state") or ""
+        get_entity_state(
+            reference
+        ).get(
+            "state"
+        )
+        or ""
     ).strip().lower()
+
     service_called = False
+    service_name = None
 
     if before_state != target_state:
-        call_home_assistant_service(
-            domain="switch",
-            service="turn_on" if desired_on else "turn_off",
-            payload={"entity_id": reference},
+
+        service_result = (
+            call_binary_power_output_service(
+                entity_id=reference,
+                desired_on=desired_on,
+            )
         )
+
         service_called = True
 
+        service_name = (
+            service_result.get(
+                "service"
+            )
+        )
+
     readback_state = None
+
     for _ in range(20):
+
         readback_state = str(
-            get_entity_state(reference).get("state") or ""
+            get_entity_state(
+                reference
+            ).get(
+                "state"
+            )
+            or ""
         ).strip().lower()
-        if readback_state == target_state:
+
+        if (
+            readback_state
+            == target_state
+        ):
             break
+
         time.sleep(0.25)
 
-    if readback_state != target_state:
+    if (
+        readback_state
+        != target_state
+    ):
         raise RuntimeError(
-            "PV target vystup nebyl potvrzen read-back kontrolou."
+            "PV target binary_power_output "
+            "nebyl potvrzen read-back kontrolou."
         )
 
     return {
-        "output_reference": reference,
-        "requested_state": target_state,
-        "previous_state": before_state,
-        "readback_state": readback_state,
-        "service_called": service_called,
-        "readback_verified": True,
-    }
+        "output_reference":
+            reference,
 
+        "capability":
+            "binary_power_output",
+
+        "service_domain":
+            service_domain,
+
+        "service":
+            service_name,
+
+        "requested_state":
+            target_state,
+
+        "previous_state":
+            before_state,
+
+        "readback_state":
+            readback_state,
+
+        "service_called":
+            service_called,
+
+        "readback_verified":
+            True,
+    }
 
 def _write_store(
     *,

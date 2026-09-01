@@ -16,7 +16,8 @@ from device_config import (
 )
 from host.cloud_client import cloud_client
 from zigbee_manager import (
-    call_home_assistant_service,
+    call_binary_power_output_service,
+    get_binary_power_output_service_domain,
     get_entity_state,
 )
 
@@ -1110,47 +1111,57 @@ def provest_pv_surplus_action(
     actual_output_on: bool,
 ) -> dict[str, Any]:
     """
-    Provede jeden fyzicky povel PV surplus vystupu.
+    Provede jeden fyzicky povel nad overenym
+    binary_power_output.
 
-    Funkce smi ovladat pouze Home Assistant switch entity.
-    Pokud je vystup jiz v pozadovanem stavu, nic nevola.
+    Konkretni HA domena je pouze adapter.
     """
+
     normalized_reference = str(
         output_reference or ""
     ).strip()
 
-    if not normalized_reference.startswith("switch."):
-        raise ValueError(
-            "PV surplus actuator smi ovladat "
-            "pouze switch.* entitu."
+    service_domain = (
+        get_binary_power_output_service_domain(
+            normalized_reference
         )
+    )
 
-    requested_on = bool(should_be_on)
-    actual_on = bool(actual_output_on)
+    requested_on = bool(
+        should_be_on
+    )
+
+    actual_on = bool(
+        actual_output_on
+    )
 
     if requested_on == actual_on:
+
         return {
             "action": (
                 "NONE_ALREADY_ON"
                 if requested_on
                 else "NONE_ALREADY_OFF"
             ),
-            "service_called": False,
-            "output_reference": normalized_reference,
+
+            "service_called":
+                False,
+
+            "capability":
+                "binary_power_output",
+
+            "service_domain":
+                service_domain,
+
+            "output_reference":
+                normalized_reference,
         }
 
-    service = (
-        "turn_on"
-        if requested_on
-        else "turn_off"
-    )
-
-    call_home_assistant_service(
-        domain="switch",
-        service=service,
-        payload={
-            "entity_id": normalized_reference,
-        },
+    service_result = (
+        call_binary_power_output_service(
+            entity_id=normalized_reference,
+            desired_on=requested_on,
+        )
     )
 
     readback_state = get_entity_state(
@@ -1158,21 +1169,31 @@ def provest_pv_surplus_action(
     )
 
     readback_raw = str(
-        readback_state.get("state") or ""
+        readback_state.get(
+            "state"
+        )
+        or ""
     ).strip().lower()
 
-    if readback_raw not in {"on", "off"}:
+    if readback_raw not in {
+        "on",
+        "off",
+    }:
         raise RuntimeError(
-            "PV surplus actuator read-back vratil "
-            f"neplatny stav: {readback_raw!r}."
+            "PV surplus actuator read-back "
+            "vratil neplatny stav: "
+            f"{readback_raw!r}."
         )
 
-    readback_on = readback_raw == "on"
+    readback_on = (
+        readback_raw == "on"
+    )
 
     if readback_on != requested_on:
+
         raise RuntimeError(
-            "PV surplus actuator nebyl potvrzen "
-            "read-back kontrolou."
+            "PV surplus actuator nebyl "
+            "potvrzen read-back kontrolou."
         )
 
     return {
@@ -1181,13 +1202,28 @@ def provest_pv_surplus_action(
             if requested_on
             else "TURNED_OFF"
         ),
-        "service_called": True,
-        "service": f"switch.{service}",
-        "output_reference": normalized_reference,
-        "readback_verified": True,
-        "readback_state": readback_raw,
-    }
 
+        "service_called":
+            True,
+
+        "capability":
+            "binary_power_output",
+
+        "service":
+            service_result["service"],
+
+        "service_domain":
+            service_domain,
+
+        "output_reference":
+            normalized_reference,
+
+        "readback_verified":
+            True,
+
+        "readback_state":
+            readback_raw,
+    }
 
 def vyhodnotit_pv_surplus_control_jednou(
     *,

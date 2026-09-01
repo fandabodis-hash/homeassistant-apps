@@ -36,8 +36,11 @@ from pv_surplus_target_control import (
 )
 from zigbee_manager import (
     HomeAssistantApiError,
+    call_binary_power_output_service,
     call_home_assistant_service,
+    find_entities_by_capability,
     find_existing_temperature_devices,
+    get_binary_power_output_service_domain,
     get_entity_device_id,
     get_entity_state,
     get_home_assistant_entity_ids,
@@ -701,21 +704,18 @@ def execute_zigbee_permit_join(
             energy_target_context
             and entity_role == "output_switch"
         ):
-            switch_candidates = [
-                item
-                for item in entities
-                if (
-                    isinstance(item, dict)
-                    and str(
-                        item.get("entity_id") or ""
-                    ).strip().startswith("switch.")
+            switch_candidates = (
+                find_entities_by_capability(
+                    entities,
+                    "binary_power_output",
                 )
-            ]
+            )
 
             if len(switch_candidates) != 1:
                 raise HomeAssistantApiError(
                     "Nove zarizeni musi obsahovat "
-                    "prave jednu switch entitu."
+                    "prave jeden jednoznacny "
+                    "binary_power_output."
                 )
 
             switch_entity = (
@@ -831,6 +831,11 @@ def execute_zigbee_permit_join(
                 if isinstance(switch_entity, dict)
                 else None
             ),
+            "binary_power_output_entity": (
+                switch_entity
+                if isinstance(switch_entity, dict)
+                else None
+            ),
             "power_entity": (
                 power_entity
                 if isinstance(power_entity, dict)
@@ -905,6 +910,11 @@ def execute_zigbee_permit_join(
                     == "water_temperature"
                     else {
                         "output_switch": (
+                            switch_entity.get(
+                                "entity_id"
+                            )
+                        ),
+                        "binary_power_output": (
                             switch_entity.get(
                                 "entity_id"
                             )
@@ -2070,10 +2080,9 @@ def execute_zigbee_switch_set(
     command_payload: dict[str, Any],
 ) -> None:
     """
-    Provede jeden Zigbee switch povel s read-back kontrolou.
+    Provede povel nad overenym binary_power_output.
 
-    Prikaz nikdy nevytvari manual override.
-    Automaticke rizeni TNG IQ FANDA zustava nadrizene.
+    Nazev commandu zustava kvuli zpetne kompatibilite.
     """
 
     entity_id = str(
@@ -2125,13 +2134,11 @@ def execute_zigbee_switch_set(
     ).strip()
 
     try:
-        if not entity_id.startswith(
-            "switch."
-        ):
-            raise ValueError(
-                "Zigbee switch control smi "
-                "ovladat pouze switch.* entitu."
+        service_domain = (
+            get_binary_power_output_service_domain(
+                entity_id
             )
+        )
 
         if target_state not in {
             "on",
@@ -2175,7 +2182,7 @@ def execute_zigbee_switch_set(
             != expected_device_id
         ):
             raise RuntimeError(
-                "Switch entita nepatri "
+                "Binary power output nepatri "
                 "ocekavanemu Zigbee zarizeni."
             )
 
@@ -2189,27 +2196,31 @@ def execute_zigbee_switch_set(
         ).strip().lower()
 
         service_called = False
+        service_name = None
 
         if before_state != target_state:
-            call_home_assistant_service(
-                domain="switch",
-                service=(
-                    "turn_on"
-                    if target_state == "on"
-                    else "turn_off"
-                ),
-                payload={
-                    "entity_id":
-                        entity_id,
-                },
+
+            service_result = (
+                call_binary_power_output_service(
+                    entity_id=entity_id,
+                    desired_on=(
+                        target_state == "on"
+                    ),
+                )
             )
 
             service_called = True
 
+            service_name = (
+                service_result.get(
+                    "service"
+                )
+            )
+
         readback_state = None
 
-        # Maximalne 5 sekund na fyzicke potvrzeni stavu.
         for _ in range(20):
+
             state = get_entity_state(
                 entity_id
             )
@@ -2232,11 +2243,12 @@ def execute_zigbee_switch_set(
             != target_state
         ):
             raise RuntimeError(
-                "Zigbee switch nebyl potvrzen "
-                "read-back kontrolou."
+                "Binary power output nebyl "
+                "potvrzen read-back kontrolou."
             )
 
     except Exception as exc:
+
         submit_command_result(
             identity=identity,
             command_id=command_id,
@@ -2244,20 +2256,31 @@ def execute_zigbee_switch_set(
             result={
                 "worker":
                     "command_worker",
+
                 "executor":
                     "zigbee_switch_set",
+
                 "phase":
                     "switch_control_failed",
+
+                "capability":
+                    "binary_power_output",
+
                 "entity_id":
                     entity_id,
+
                 "ieee":
                     ieee,
+
                 "target_state":
                     target_state,
+
                 "source":
                     source,
+
                 "manual_override":
                     False,
+
                 "fanda_has_priority":
                     True,
             },
@@ -2265,7 +2288,7 @@ def execute_zigbee_switch_set(
         )
 
         logging.exception(
-            "Zigbee switch control %s selhal.",
+            "Binary power output control %s selhal.",
             command_id,
         )
 
@@ -2278,35 +2301,59 @@ def execute_zigbee_switch_set(
         result={
             "worker":
                 "command_worker",
+
             "executor":
                 "zigbee_switch_set",
+
             "phase":
                 "switch_state_verified",
+
+            "capability":
+                "binary_power_output",
+
             "entity_id":
                 entity_id,
+
             "ieee":
                 ieee,
+
             "device_reg_id":
                 expected_device_id
                 or actual_device_id,
+
             "source":
                 source,
+
             "requested_state":
                 target_state,
+
             "previous_state":
                 before_state,
+
             "readback_state":
                 readback_state,
+
             "service_called":
                 service_called,
+
+            "service":
+                service_name,
+
+            "service_domain":
+                service_domain,
+
             "readback_verified":
                 True,
+
             "manual_override":
                 False,
+
             "fanda_has_priority":
                 True,
+
             "max_execution_delay_seconds":
                 180,
+
             "deadline_at":
                 deadline_raw or None,
         },
@@ -2314,17 +2361,16 @@ def execute_zigbee_switch_set(
     )
 
     logging.info(
-        "Zigbee switch | command=%s "
+        "Binary power output | command=%s "
         "entity=%s target=%s "
-        "source=%s readback=%s",
+        "domain=%s source=%s readback=%s",
         command_id,
         entity_id,
         target_state,
+        service_domain,
         source,
         readback_state,
     )
-
-
 
 def execute_command(
     *,
