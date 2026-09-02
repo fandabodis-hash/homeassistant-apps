@@ -1,0 +1,476 @@
+{
+  "schema_version": 1,
+  "profile_id": "solax_x3_hybrid_g4",
+  "manufacturer": "solax",
+  "manufacturer_name": "SolaX",
+  "family": "x3_hybrid_g4",
+  "models": [
+    "X3-Hybrid G4"
+  ],
+  "verification_status": "physically_verified_00010",
+  "protocol": {
+    "type": "modbus_rtu",
+    "function_code": 4,
+    "baudrate": 19200,
+    "bytesize": 8,
+    "parity": "N",
+    "stopbits": 1,
+    "timeout_seconds": 1.0,
+    "retries": 0,
+    "allowed_device_ids": [
+      1
+    ]
+  },
+  "probe_blocks": [
+    {
+      "name": "live_ac_voltage",
+      "address": 0,
+      "count": 1
+    },
+    {
+      "name": "pv1_voltage",
+      "address": 3,
+      "count": 1
+    }
+  ],
+  "read_blocks": [
+    {
+      "name": "operating_data",
+      "address": 0,
+      "count": 30
+    },
+    {
+      "name": "battery_summary",
+      "address": 50,
+      "count": 12
+    },
+    {
+      "name": "meter_and_phase_data",
+      "address": 96,
+      "count": 22
+    }
+  ],
+  "entities": [
+    {
+      "entity_key": "pv1.napeti",
+      "category": "pv_vstup",
+      "name": "Napětí PV1",
+      "address": 3,
+      "register_type": "uint16",
+      "divisor": 10.0,
+      "unit": "V",
+      "value_type": "number",
+      "device_class": "voltage",
+      "verification_status": "display_verified_00010"
+    },
+    {
+      "entity_key": "pv1.proud",
+      "category": "pv_vstup",
+      "name": "Proud PV1",
+      "address": 5,
+      "register_type": "uint16",
+      "divisor": 10.0,
+      "unit": "A",
+      "value_type": "number",
+      "device_class": "current",
+      "verification_status": "display_verified_00010"
+    },
+    {
+      "entity_key": "pv1.vykon",
+      "category": "pv_vstup",
+      "name": "Výkon PV1",
+      "address": 10,
+      "register_type": "uint16",
+      "scale": 1.0,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "verification_status": "display_verified_00010"
+    },
+    {
+      "entity_key": "pv2.napeti",
+      "category": "pv_vstup",
+      "name": "Napětí PV2",
+      "address": 4,
+      "register_type": "uint16",
+      "divisor": 10.0,
+      "unit": "V",
+      "value_type": "number",
+      "device_class": "voltage",
+      "verification_status": "field_correlated_00010"
+    },
+    {
+      "entity_key": "pv2.proud",
+      "category": "pv_vstup",
+      "name": "Proud PV2",
+      "address": 6,
+      "register_type": "uint16",
+      "divisor": 10.0,
+      "unit": "A",
+      "value_type": "number",
+      "device_class": "current",
+      "verification_status": "field_correlated_00010"
+    },
+    {
+      "entity_key": "pv2.vykon",
+      "category": "pv_vstup",
+      "name": "Výkon PV2",
+      "address": 11,
+      "register_type": "uint16",
+      "scale": 1.0,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "verification_status": "field_correlated_00010"
+    },
+    {
+      "entity_key": "vyroba.vykon_celkem",
+      "category": "vyroba",
+      "name": "Výkon FVE celkem",
+      "address": 50,
+      "register_type": "uint16",
+      "scale": 1.0,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "verification_status": "field_correlated_00010"
+    },
+    {
+      "entity_key": "sit.napeti_l1",
+      "category": "sit",
+      "name": "Napětí sítě L1",
+      "address": 106,
+      "register_type": "uint16",
+      "divisor": 10.0,
+      "unit": "V",
+      "value_type": "number",
+      "device_class": "voltage",
+      "verification_status": "field_correlated_00010"
+    },
+    {
+      "entity_key": "sit.napeti_l2",
+      "category": "sit",
+      "name": "Napětí sítě L2",
+      "address": 110,
+      "register_type": "uint16",
+      "divisor": 10.0,
+      "unit": "V",
+      "value_type": "number",
+      "device_class": "voltage",
+      "verification_status": "field_correlated_00010"
+    },
+    {
+      "entity_key": "sit.napeti_l3",
+      "category": "sit",
+      "name": "Napětí sítě L3",
+      "address": 114,
+      "register_type": "uint16",
+      "divisor": 10.0,
+      "unit": "V",
+      "value_type": "number",
+      "device_class": "voltage",
+      "verification_status": "field_correlated_00010"
+    },
+    {
+      "entity_key": "sit.frekvence",
+      "category": "sit",
+      "name": "Frekvence sítě",
+      "address": 7,
+      "register_type": "uint16",
+      "divisor": 100.0,
+      "unit": "Hz",
+      "value_type": "number",
+      "device_class": "frequency",
+      "verification_status": "field_correlated_00010"
+    },
+    {
+      "entity_key": "stridac.vykon_l1",
+      "category": "stridac",
+      "name": "Výkon střídače L1",
+      "address": 108,
+      "register_type": "int16",
+      "scale": 1.0,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "verification_status": "energy_balance_verified_00010"
+    },
+    {
+      "entity_key": "stridac.vykon_l2",
+      "category": "stridac",
+      "name": "Výkon střídače L2",
+      "address": 112,
+      "register_type": "int16",
+      "scale": 1.0,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "verification_status": "energy_balance_verified_00010"
+    },
+    {
+      "entity_key": "stridac.vykon_l3",
+      "category": "stridac",
+      "name": "Výkon střídače L3",
+      "address": 116,
+      "register_type": "int16",
+      "scale": 1.0,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "verification_status": "energy_balance_verified_00010"
+    },
+    {
+      "entity_key": "stridac.vykon_celkem",
+      "category": "stridac",
+      "name": "Celkový výkon střídače",
+      "address": 2,
+      "register_type": "int16",
+      "scale": 1.0,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "verification_status": "energy_balance_verified_00010"
+    },
+    {
+      "entity_key": "stridac.teplota_chladice",
+      "category": "stridac",
+      "name": "Teplota střídače",
+      "address": 8,
+      "register_type": "int16",
+      "scale": 1.0,
+      "unit": "°C",
+      "value_type": "number",
+      "device_class": "temperature",
+      "verification_status": "field_correlated_00010"
+    },
+    {
+      "entity_key": "stridac.pracovni_rezim",
+      "category": "stridac",
+      "name": "Pracovní režim střídače",
+      "address": 9,
+      "register_type": "uint16",
+      "scale": 1.0,
+      "unit": null,
+      "value_type": "integer",
+      "verification_status": "raw_only_00010"
+    },
+    {
+      "entity_key": "smartmeter.vykon_l1",
+      "category": "smartmeter",
+      "name": "Výkon sítě L1",
+      "address": 100,
+      "register_type": "int16",
+      "scale": 1.0,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "negative_import_positive_export",
+      "verification_status": "energy_balance_verified_00010"
+    },
+    {
+      "entity_key": "smartmeter.vykon_l2",
+      "category": "smartmeter",
+      "name": "Výkon sítě L2",
+      "address": 101,
+      "register_type": "int16",
+      "scale": 1.0,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "negative_import_positive_export",
+      "verification_status": "energy_balance_verified_00010"
+    },
+    {
+      "entity_key": "smartmeter.vykon_l3",
+      "category": "smartmeter",
+      "name": "Výkon sítě L3",
+      "address": 102,
+      "register_type": "int16",
+      "scale": 1.0,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "negative_import_positive_export",
+      "verification_status": "energy_balance_verified_00010"
+    },
+    {
+      "entity_key": "smartmeter.vykon_celkem",
+      "category": "smartmeter",
+      "name": "Výkon sítě celkem",
+      "address": 96,
+      "register_type": "int16",
+      "scale": 1.0,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "negative_import_positive_export",
+      "verification_status": "energy_balance_verified_00010"
+    },
+    {
+      "entity_key": "spotreba.sitova_slozka_l1",
+      "category": "spotreba",
+      "name": "Síťová složka spotřeby L1",
+      "address": 100,
+      "register_type": "int16",
+      "scale": -1.0,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "verification_status": "calculation_helper_00010"
+    },
+    {
+      "entity_key": "spotreba.sitova_slozka_l2",
+      "category": "spotreba",
+      "name": "Síťová složka spotřeby L2",
+      "address": 101,
+      "register_type": "int16",
+      "scale": -1.0,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "verification_status": "calculation_helper_00010"
+    },
+    {
+      "entity_key": "spotreba.sitova_slozka_l3",
+      "category": "spotreba",
+      "name": "Síťová složka spotřeby L3",
+      "address": 102,
+      "register_type": "int16",
+      "scale": -1.0,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "verification_status": "calculation_helper_00010"
+    },
+    {
+      "entity_key": "spotreba.vykon_l1",
+      "category": "spotreba",
+      "name": "Spotřeba L1",
+      "derived": {
+        "operation": "sum",
+        "entity_keys": [
+          "stridac.vykon_l1",
+          "spotreba.sitova_slozka_l1"
+        ]
+      },
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "positive_consumption",
+      "verification_status": "energy_balance_verified_00010"
+    },
+    {
+      "entity_key": "spotreba.vykon_l2",
+      "category": "spotreba",
+      "name": "Spotřeba L2",
+      "derived": {
+        "operation": "sum",
+        "entity_keys": [
+          "stridac.vykon_l2",
+          "spotreba.sitova_slozka_l2"
+        ]
+      },
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "positive_consumption",
+      "verification_status": "energy_balance_verified_00010"
+    },
+    {
+      "entity_key": "spotreba.vykon_l3",
+      "category": "spotreba",
+      "name": "Spotřeba L3",
+      "derived": {
+        "operation": "sum",
+        "entity_keys": [
+          "stridac.vykon_l3",
+          "spotreba.sitova_slozka_l3"
+        ]
+      },
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "positive_consumption",
+      "verification_status": "energy_balance_verified_00010"
+    },
+    {
+      "entity_key": "spotreba.vykon_celkem",
+      "category": "spotreba",
+      "name": "Spotřeba celkem",
+      "derived": {
+        "operation": "sum",
+        "entity_keys": [
+          "spotreba.vykon_l1",
+          "spotreba.vykon_l2",
+          "spotreba.vykon_l3"
+        ]
+      },
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "positive_consumption",
+      "verification_status": "energy_balance_verified_00010"
+    },
+    {
+      "entity_key": "baterie.napeti",
+      "category": "baterie_souhrn",
+      "name": "Napětí baterie",
+      "address": 20,
+      "register_type": "uint16",
+      "divisor": 10.0,
+      "unit": "V",
+      "value_type": "number",
+      "device_class": "voltage",
+      "verification_status": "energy_balance_verified_00010"
+    },
+    {
+      "entity_key": "baterie.proud",
+      "category": "baterie_souhrn",
+      "name": "Proud baterie",
+      "address": 21,
+      "register_type": "int16",
+      "divisor": 10.0,
+      "unit": "A",
+      "value_type": "number",
+      "device_class": "current",
+      "sign_convention": "negative_discharging_positive_charging",
+      "verification_status": "energy_balance_verified_00010"
+    },
+    {
+      "entity_key": "baterie.vykon",
+      "category": "baterie_souhrn",
+      "name": "Výkon baterie",
+      "address": 22,
+      "register_type": "int16",
+      "scale": 1.0,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "negative_discharging_positive_charging",
+      "verification_status": "energy_balance_verified_00010"
+    },
+    {
+      "entity_key": "baterie.soc",
+      "category": "baterie_souhrn",
+      "name": "Stav nabití baterie",
+      "address": 60,
+      "register_type": "uint16",
+      "scale": 1.0,
+      "unit": "%",
+      "value_type": "integer",
+      "device_class": "battery",
+      "verification_status": "display_verified_00010"
+    },
+    {
+      "entity_key": "baterie.soh",
+      "category": "baterie_souhrn",
+      "name": "Zdraví baterie",
+      "address": 61,
+      "register_type": "uint16",
+      "scale": 1.0,
+      "unit": "%",
+      "value_type": "integer",
+      "verification_status": "field_correlated_00010"
+    }
+  ]
+}
