@@ -36,6 +36,16 @@
       "status": "physically_verified_partial_00008"
     },
     {
+      "profile_id": "solax_x3_hybrid_g4",
+      "manufacturer": "solax",
+      "manufacturer_name": "SolaX",
+      "models": [
+        "X3-Hybrid G4"
+      ],
+      "file": "solax_x3_hybrid_g4.json",
+      "status": "physically_verified_00010"
+    },
+    {
       "profile_id": "deye_3x_lv_off_grid",
       "manufacturer": "deye",
       "manufacturer_name": "Deye",
