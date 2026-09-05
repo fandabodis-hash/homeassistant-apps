@@ -1,7 +1,7 @@
 """Cloudovy vykonavatel prikazu TNG IQ FANDA Agentu."""
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
 import os
 import time
@@ -46,6 +46,7 @@ from zigbee_manager import (
     get_home_assistant_entity_ids,
     get_zha_devices,
     open_zigbee_permit,
+    reconfigure_zha_device,
     trigger_zha_topology_update,
     wait_for_new_device,
 )
@@ -60,6 +61,19 @@ DEVICE_CONFIG_PATH = Path(
 
 CLAIM_INTERVAL_SECONDS = 2
 ERROR_RETRY_SECONDS = 15
+
+ZIGBEE_RECONFIGURE_MARKER_PATH = Path(
+    os.getenv(
+        "IQF_ZIGBEE_RECONFIGURE_MARKER_PATH",
+        "/data/zigbee_device_reconfigure_pending.json",
+    )
+)
+
+ZIGBEE_RECONFIGURE_WAIT_SECONDS = 24 * 60 * 60
+ZIGBEE_RECONFIGURE_TIMEOUT_SECONDS = 180
+ZIGBEE_RECONFIGURE_POLL_SECONDS = 15
+
+_zigbee_reconfigure_next_check_monotonic = 0.0
 
 
 def load_device_identity() -> dict[str, Any]:
@@ -1957,6 +1971,441 @@ def execute_agent_update(
 
 
 # ==========================================================
+# ZIGBEE DEVICE RECOVERY
+# ==========================================================
+
+
+def _normalize_zigbee_ieee(value: Any) -> str:
+    """Overi IEEE adresu pred predanim do ZHA."""
+
+    normalized = str(value or "").strip().lower()
+
+    parts = normalized.split(":")
+
+    if (
+        len(parts) != 8
+        or any(
+            len(part) != 2
+            or any(
+                character not in "0123456789abcdef"
+                for character in part
+            )
+            for part in parts
+        )
+    ):
+        raise ValueError(
+            "IEEE adresa Zigbee zarizeni nema platny format."
+        )
+
+    return normalized
+
+
+def _find_zha_device_by_ieee(
+    devices: list[dict[str, Any]],
+    ieee: str,
+) -> dict[str, Any] | None:
+    """Najde presne jedno ZHA zarizeni podle IEEE."""
+
+    for item in devices:
+        if not isinstance(item, dict):
+            continue
+
+        item_ieee = str(
+            item.get("ieee") or ""
+        ).strip().lower()
+
+        if item_ieee == ieee:
+            return item
+
+    return None
+
+
+def _save_zigbee_reconfigure_marker(
+    marker: dict[str, Any],
+) -> None:
+    """Atomicky ulozi cekajici obnovu Zigbee zarizeni."""
+
+    ZIGBEE_RECONFIGURE_MARKER_PATH.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    temporary_path = (
+        ZIGBEE_RECONFIGURE_MARKER_PATH.with_suffix(".tmp")
+    )
+
+    with temporary_path.open(
+        "w",
+        encoding="utf-8",
+        newline="\n",
+    ) as file:
+        json.dump(
+            marker,
+            file,
+            ensure_ascii=False,
+            sort_keys=True,
+            indent=2,
+        )
+        file.write("\n")
+
+    os.replace(
+        temporary_path,
+        ZIGBEE_RECONFIGURE_MARKER_PATH,
+    )
+
+
+def _load_zigbee_reconfigure_marker(
+) -> dict[str, Any] | None:
+    """Nacte cekajici obnovu, pokud existuje."""
+
+    if not ZIGBEE_RECONFIGURE_MARKER_PATH.exists():
+        return None
+
+    with ZIGBEE_RECONFIGURE_MARKER_PATH.open(
+        "r",
+        encoding="utf-8-sig",
+    ) as file:
+        marker = json.load(file)
+
+    if not isinstance(marker, dict):
+        raise ValueError(
+            "Marker obnovy Zigbee ma neplatny format."
+        )
+
+    return marker
+
+
+def _clear_zigbee_reconfigure_marker() -> None:
+    """Odstrani dokonceny marker obnovy."""
+
+    try:
+        ZIGBEE_RECONFIGURE_MARKER_PATH.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _run_zigbee_device_reconfigure(
+    *,
+    identity: dict[str, Any],
+    marker: dict[str, Any],
+) -> None:
+    """Spusti ZHA reconfigure a odesila prubeh do cloudu."""
+
+    command_id = str(marker.get("command_id") or "").strip()
+    ieee = _normalize_zigbee_ieee(marker.get("ieee"))
+    device_reg_id = str(
+        marker.get("device_reg_id") or ""
+    ).strip()
+    source = str(
+        marker.get("source") or "admin_zigbee_network"
+    ).strip()
+    terminal_reported = False
+
+    if not command_id:
+        raise ValueError(
+            "Marker obnovy Zigbee neobsahuje command_id."
+        )
+
+    def report_progress(
+        progress: dict[str, Any],
+    ) -> None:
+        try:
+            submit_command_result(
+                identity=identity,
+                command_id=command_id,
+                status="running",
+                result={
+                    "worker": "command_worker",
+                    "executor": "zigbee_device_reconfigure",
+                    "phase": "reconfiguring",
+                    "recovery_status": "device_reconfiguring",
+                    "ieee": ieee,
+                    "device_reg_id": device_reg_id,
+                    "source": source,
+                    **progress,
+                },
+            )
+        except Exception:
+            logging.exception(
+                "Prubeh Zigbee reconfigure %s se nepodarilo "
+                "docasne odeslat do cloudu.",
+                command_id,
+            )
+
+    try:
+        report_progress(
+            {
+                "event_type": "reconfigure_started",
+                "event_counts": {},
+                "elapsed_seconds": 0,
+            }
+        )
+
+        result = reconfigure_zha_device(
+            ieee=ieee,
+            progress_callback=report_progress,
+            timeout_seconds=ZIGBEE_RECONFIGURE_TIMEOUT_SECONDS,
+        )
+
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="succeeded",
+            result={
+                "worker": "command_worker",
+                "executor": "zigbee_device_reconfigure",
+                "phase": "reconfigure_completed",
+                "recovery_status": "restored",
+                "ieee": ieee,
+                "device_reg_id": device_reg_id,
+                "source": source,
+                "home_assistant_command": (
+                    "zha/devices/reconfigure"
+                ),
+                "event_counts": result.get("event_counts", {}),
+                "elapsed_seconds": result.get("elapsed_seconds"),
+                "pairing_mode": False,
+                "device_removed": False,
+                "zha_restarted": False,
+            },
+            error_message=None,
+        )
+        terminal_reported = True
+
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": "zigbee_device_reconfigure",
+                "phase": "reconfigure_failed",
+                "recovery_status": "device_unresponsive",
+                "ieee": ieee,
+                "device_reg_id": device_reg_id,
+                "source": source,
+                "pairing_mode": False,
+                "device_removed": False,
+                "zha_restarted": False,
+            },
+            error_message=str(exc),
+        )
+        terminal_reported = True
+        logging.exception(
+            "Zigbee reconfigure %s selhalo.",
+            command_id,
+        )
+
+    finally:
+        if terminal_reported:
+            _clear_zigbee_reconfigure_marker()
+
+
+def execute_zigbee_device_reconfigure(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Overi cil a spusti obnovu nebo ceka na probuzeni."""
+
+    try:
+        ieee = _normalize_zigbee_ieee(
+            command_payload.get("ieee")
+        )
+        expected_device_reg_id = str(
+            command_payload.get("device_reg_id") or ""
+        ).strip()
+        source = str(
+            command_payload.get("source")
+            or "admin_zigbee_network"
+        ).strip()
+
+        devices = get_zha_devices()
+        target = _find_zha_device_by_ieee(devices, ieee)
+
+        if target is None:
+            raise RuntimeError(
+                "Zigbee zarizeni s pozadovanou IEEE adresou "
+                "neni v integraci ZHA."
+            )
+
+        actual_device_reg_id = str(
+            target.get("device_reg_id") or ""
+        ).strip()
+
+        if (
+            expected_device_reg_id
+            and actual_device_reg_id != expected_device_reg_id
+        ):
+            raise RuntimeError(
+                "IEEE adresa nepatri ocekavanemu Device ID."
+            )
+
+        now = datetime.now(timezone.utc)
+        marker = {
+            "schema_version": 1,
+            "command_id": command_id,
+            "ieee": ieee,
+            "device_reg_id": (
+                expected_device_reg_id or actual_device_reg_id
+            ),
+            "source": source,
+            "created_at": now.isoformat(),
+            "deadline_at": (
+                now.replace(microsecond=0)
+                + timedelta(
+                    seconds=ZIGBEE_RECONFIGURE_WAIT_SECONDS
+                )
+            ).isoformat(),
+            "initial_last_seen": target.get("last_seen"),
+        }
+
+        if target.get("available") is True:
+            _save_zigbee_reconfigure_marker(marker)
+            _run_zigbee_device_reconfigure(
+                identity=identity,
+                marker=marker,
+            )
+            return
+
+        _save_zigbee_reconfigure_marker(marker)
+
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="running",
+            result={
+                "worker": "command_worker",
+                "executor": "zigbee_device_reconfigure",
+                "phase": "waiting_for_wake",
+                "recovery_status": "waiting_for_wake",
+                "ieee": ieee,
+                "device_reg_id": marker["device_reg_id"],
+                "source": source,
+                "deadline_at": marker["deadline_at"],
+                "pairing_mode": False,
+                "device_removed": False,
+                "zha_restarted": False,
+            },
+        )
+
+    except Exception as exc:
+        _clear_zigbee_reconfigure_marker()
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": "zigbee_device_reconfigure",
+                "phase": "validation_failed",
+                "recovery_status": "physical_intervention_required",
+                "pairing_mode": False,
+                "device_removed": False,
+                "zha_restarted": False,
+            },
+            error_message=str(exc),
+        )
+        logging.exception(
+            "Validace Zigbee reconfigure %s selhala.",
+            command_id,
+        )
+
+
+def reconcile_pending_zigbee_reconfigure(
+    *,
+    identity: dict[str, Any],
+) -> bool:
+    """Pri prirozenem probuzeni dokonci cekajici obnovu."""
+
+    global _zigbee_reconfigure_next_check_monotonic
+
+    marker = _load_zigbee_reconfigure_marker()
+
+    if marker is None:
+        return False
+
+    now_monotonic = time.monotonic()
+
+    if now_monotonic < _zigbee_reconfigure_next_check_monotonic:
+        return False
+
+    _zigbee_reconfigure_next_check_monotonic = (
+        now_monotonic + ZIGBEE_RECONFIGURE_POLL_SECONDS
+    )
+
+    command_id = str(marker.get("command_id") or "").strip()
+    ieee = _normalize_zigbee_ieee(marker.get("ieee"))
+    deadline_raw = str(marker.get("deadline_at") or "").strip()
+
+    deadline = datetime.fromisoformat(
+        deadline_raw.replace("Z", "+00:00")
+    )
+
+    if deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=timezone.utc)
+
+    if datetime.now(timezone.utc) >= deadline:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": "zigbee_device_reconfigure",
+                "phase": "wake_timeout",
+                "recovery_status": "physical_intervention_required",
+                "ieee": ieee,
+                "device_reg_id": marker.get("device_reg_id"),
+                "deadline_at": deadline.isoformat(),
+                "pairing_mode": False,
+                "device_removed": False,
+                "zha_restarted": False,
+            },
+            error_message=(
+                "Zarizeni se do 24 hodin prirozene neprobudilo. "
+                "Je nutny fyzicky zasah u zarizeni."
+            ),
+        )
+        _clear_zigbee_reconfigure_marker()
+        return True
+
+    target = _find_zha_device_by_ieee(
+        get_zha_devices(),
+        ieee,
+    )
+
+    if target is None:
+        return False
+
+    initial_last_seen = str(
+        marker.get("initial_last_seen") or ""
+    ).strip()
+    current_last_seen = str(
+        target.get("last_seen") or ""
+    ).strip()
+
+    woke_up = (
+        target.get("available") is True
+        or (
+            bool(current_last_seen)
+            and current_last_seen != initial_last_seen
+        )
+    )
+
+    if not woke_up:
+        return False
+
+    _run_zigbee_device_reconfigure(
+        identity=identity,
+        marker=marker,
+    )
+    return True
+
+
+# ==========================================================
 # PHASE25_ZIGBEE_TOPOLOGY_REFRESH_0100
 # ==========================================================
 
@@ -2415,6 +2864,14 @@ def execute_command(
         )
         return
 
+    if command_type == "zigbee_device_reconfigure":
+        execute_zigbee_device_reconfigure(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
     if command_type == "zigbee_switch_set":
         execute_zigbee_switch_set(
             identity=identity,
@@ -2504,6 +2961,11 @@ def process_once() -> bool:
         identity=identity,
     ):
         return False
+
+    if reconcile_pending_zigbee_reconfigure(
+        identity=identity,
+    ):
+        return True
 
     command = claim_command(identity)
 
