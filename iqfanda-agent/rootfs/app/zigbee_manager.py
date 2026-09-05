@@ -3,7 +3,7 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 import websocket
 from urllib import error, request
@@ -754,6 +754,189 @@ def trigger_zha_topology_update(
         raise HomeAssistantApiError(
             "Spusteni ZHA topology scanu "
             f"selhalo: {exc}"
+        ) from exc
+
+    finally:
+        if connection is not None:
+            try:
+                connection.close()
+            except websocket.WebSocketException:
+                pass
+
+
+def reconfigure_zha_device(
+    *,
+    ieee: str,
+    progress_callback: (
+        Callable[[dict[str, Any]], None]
+        | None
+    ) = None,
+    timeout_seconds: int = 180,
+) -> dict[str, Any]:
+    """
+    Spusti nativni ZHA reconfigure a ceka na cfg_done.
+
+    Prikaz nemaze zarizeni, neotevira parovani,
+    nemeni Zigbee sit a nerestartuje ZHA.
+    """
+
+    normalized_ieee = str(ieee or "").strip().lower()
+
+    if not normalized_ieee:
+        raise ValueError(
+            "IEEE adresa Zigbee zarizeni nesmi byt prazdna."
+        )
+
+    try:
+        normalized_timeout = int(timeout_seconds)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "Timeout ZHA reconfigure musi byt cele cislo."
+        ) from exc
+
+    if normalized_timeout < 30 or normalized_timeout > 600:
+        raise ValueError(
+            "Timeout ZHA reconfigure musi byt 30 az 600 sekund."
+        )
+
+    websocket_url = os.environ.get(
+        "SUPERVISOR_CORE_WEBSOCKET_URL",
+        "ws://supervisor/core/websocket",
+    ).strip()
+
+    connection = None
+    started_monotonic = time.monotonic()
+    event_counts: dict[str, int] = {}
+    last_event: dict[str, Any] | None = None
+
+    try:
+        connection = websocket.create_connection(
+            websocket_url,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            origin="http://supervisor",
+        )
+
+        hello = json.loads(connection.recv())
+
+        if hello.get("type") != "auth_required":
+            raise HomeAssistantApiError(
+                "Home Assistant WebSocket nevyzadal autentizaci."
+            )
+
+        connection.send(
+            json.dumps(
+                {
+                    "type": "auth",
+                    "access_token": get_supervisor_token(),
+                }
+            )
+        )
+
+        auth = json.loads(connection.recv())
+
+        if auth.get("type") != "auth_ok":
+            raise HomeAssistantApiError(
+                "Autentizace Home Assistant WebSocket selhala."
+            )
+
+        connection.send(
+            json.dumps(
+                {
+                    "id": 1,
+                    "type": "zha/devices/reconfigure",
+                    "ieee": normalized_ieee,
+                }
+            )
+        )
+
+        while True:
+            elapsed = time.monotonic() - started_monotonic
+
+            if elapsed >= normalized_timeout:
+                raise HomeAssistantApiError(
+                    "ZHA reconfigure nebylo dokonceno v casovem limitu."
+                )
+
+            connection.settimeout(
+                min(
+                    REQUEST_TIMEOUT_SECONDS,
+                    max(1.0, normalized_timeout - elapsed),
+                )
+            )
+
+            try:
+                response = json.loads(connection.recv())
+            except websocket.WebSocketTimeoutException:
+                continue
+
+            if response.get("id") != 1:
+                continue
+
+            if response.get("type") == "result":
+                if response.get("success") is not True:
+                    raise HomeAssistantApiError(
+                        "Home Assistant ZHA reconfigure selhalo: "
+                        f"{response.get('error') or response}"
+                    )
+                continue
+
+            if response.get("type") == "error":
+                raise HomeAssistantApiError(
+                    "Home Assistant ZHA reconfigure selhalo: "
+                    f"{response.get('error') or response}"
+                )
+
+            if response.get("type") != "event":
+                continue
+
+            event_data = response.get("event")
+
+            if not isinstance(event_data, dict):
+                continue
+
+            event_type = str(
+                event_data.get("type") or "unknown"
+            ).strip()
+
+            event_counts[event_type] = (
+                event_counts.get(event_type, 0) + 1
+            )
+            last_event = event_data
+
+            if progress_callback is not None:
+                progress_callback(
+                    {
+                        "event_type": event_type,
+                        "event_counts": dict(event_counts),
+                        "elapsed_seconds": round(elapsed, 1),
+                    }
+                )
+
+            if event_type == "zha_channel_cfg_done":
+                return {
+                    "ok": True,
+                    "command": "zha/devices/reconfigure",
+                    "ieee": normalized_ieee,
+                    "event_counts": event_counts,
+                    "last_event": last_event,
+                    "elapsed_seconds": round(
+                        time.monotonic() - started_monotonic,
+                        1,
+                    ),
+                }
+
+    except HomeAssistantApiError:
+        raise
+
+    except (
+        OSError,
+        ValueError,
+        json.JSONDecodeError,
+        websocket.WebSocketException,
+    ) as exc:
+        raise HomeAssistantApiError(
+            "ZHA reconfigure neni dostupne nebo vratilo "
+            f"neplatnou odpoved: {exc}"
         ) from exc
 
     finally:
