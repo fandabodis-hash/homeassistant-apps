@@ -1,5 +1,5 @@
 name: "TNG IQ FANDA Agent"
-version: "0.1.113"
+version: "0.1.114"
 stage: "stable"
 slug: "tng_iq_fanda_agent"
 description: "Lokální runtime a cloudová komunikace TNG IQ FANDA"

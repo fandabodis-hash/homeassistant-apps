@@ -51,7 +51,10 @@ from zigbee_manager import (
     wait_for_new_device,
 )
 from wifi_manager import discover_home_assistant_wifi_devices
-from wifi_native_onboarding import discover_native_wifi_infrastructure
+from wifi_native_onboarding import (
+    discover_native_wifi_infrastructure,
+    onboard_shelly_access_point,
+)
 
 
 DEVICE_CONFIG_PATH = Path(
@@ -285,17 +288,27 @@ def execute_wifi_native_discovery(
         },
     )
 
-    # PHASE28_R153_FIX2_WIFI_NATIVE_DISCOVERY_PAYLOAD_PASS_START
-    result = discover_native_wifi_infrastructure(
-        getattr(
-            locals().get("command"),
-            "payload",
-            None,
+    # PHASE28_R157_DIRECT_SHELLY_ONBOARDING_DISPATCH_START
+    phase28_r157_requested_action = str(
+        command_payload.get(
+            "requested_action",
+            "",
         )
-        or locals().get("payload")
-        or {}
-    )
-    # PHASE28_R153_FIX2_WIFI_NATIVE_DISCOVERY_PAYLOAD_PASS_END
+    ).strip()
+
+    if phase28_r157_requested_action in {
+        "shelly_ap_onboard",
+        "onboard_shelly_access_point",
+        "shelly_access_point_onboard",
+    }:
+        result = onboard_shelly_access_point(
+            command_payload,
+        )
+    else:
+        result = discover_native_wifi_infrastructure(
+            command_payload,
+        )
+    # PHASE28_R157_DIRECT_SHELLY_ONBOARDING_DISPATCH_END
     if not isinstance(result, dict):
         raise HomeAssistantApiError(
             "Native Wi-Fi discovery returned invalid result format."
