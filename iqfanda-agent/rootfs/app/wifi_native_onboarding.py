@@ -636,6 +636,29 @@ def discover_native_wifi_infrastructure(payload=None) -> dict[str, Any]:
     # PHASE28_R153_FIX2_SHELLY_AP_ONBOARDING_ACTION_DISPATCH_START
     phase28_r153_payload = payload or {}
 
+    # PHASE28_R177G1_R3_WIFI_ACTION_DISPATCH_START
+    phase28_r177g1_requested_action = str(
+        phase28_r153_payload.get(
+            "requested_action",
+            "",
+        )
+    ).strip() if isinstance(
+        phase28_r153_payload,
+        dict,
+    ) else ""
+
+    if phase28_r177g1_requested_action == "register_wifi_device":
+        return _phase28_r177g1_register_wifi_device(
+            phase28_r153_payload,
+        )
+
+    if phase28_r177g1_requested_action == "set_wifi_switch_state":
+        return _phase28_r177g1_set_wifi_switch_state(
+            phase28_r153_payload,
+        )
+    # PHASE28_R177G1_R3_WIFI_ACTION_DISPATCH_END
+
+
     if isinstance(
         phase28_r153_payload,
         dict,
@@ -721,6 +744,13 @@ def discover_native_wifi_infrastructure(payload=None) -> dict[str, Any]:
             "next_step": "commissioning_profile_specific_implementation",
         },
     ]
+
+
+    # PHASE28_R177G1_R3_WIFI_DISCOVERY_ENRICH_START
+    lan_devices = _phase28_r177g1_enrich_wifi_devices(
+        lan_devices,
+    )
+    # PHASE28_R177G1_R3_WIFI_DISCOVERY_ENRICH_END
 
     return {
         "worker": "command_worker",
@@ -1500,3 +1530,488 @@ def onboard_shelly_access_point(payload=None):
         "next_step": "discover_shelly_on_lan_after_device_joins_target_wifi",
     }
 # PHASE28_R153_FIX2_SHELLY_AP_ONBOARDING_BASE_END
+
+# PHASE28_R177G1_R3_WIFI_REGISTRY_CONTROL_START
+def _phase28_r177g1_registry_path():
+    from pathlib import Path
+
+    return Path("/data/wifi_native_registry.json")
+
+
+def _phase28_r177g1_load_registry():
+    import json
+
+    path = _phase28_r177g1_registry_path()
+
+    try:
+        raw = path.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        return {}
+
+    return data if isinstance(data, dict) else {}
+
+
+def _phase28_r177g1_save_registry(registry):
+    import json
+    import os
+
+    path = _phase28_r177g1_registry_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    temp = path.with_suffix(".tmp")
+    temp.write_text(
+        json.dumps(
+            registry,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    try:
+        os.chmod(temp, 0o600)
+    except Exception:
+        pass
+
+    os.replace(temp, path)
+
+    try:
+        os.chmod(path, 0o600)
+    except Exception:
+        pass
+
+
+def _phase28_r177g1_registry_key(device):
+    import re
+
+    mac = str(
+        device.get("mac_address")
+        or device.get("mac")
+        or ""
+    ).strip()
+
+    normalized_mac = re.sub(
+        r"[^0-9A-Fa-f]",
+        "",
+        mac,
+    ).upper()
+
+    profile = str(
+        device.get("profile")
+        or "wifi"
+    ).strip().lower()
+
+    if normalized_mac:
+        return f"wifi:{profile}:{normalized_mac}"
+
+    return str(
+        device.get("registry_id")
+        or device.get("device_id")
+        or ""
+    ).strip()
+
+
+def _phase28_r177g1_find_registry_entry(registry, device_key):
+    key = str(device_key or "").strip()
+
+    if not key:
+        return None, None
+
+    if key in registry and isinstance(registry[key], dict):
+        return key, registry[key]
+
+    for registry_key, item in registry.items():
+        if not isinstance(item, dict):
+            continue
+
+        candidates = {
+            str(item.get("registry_id") or "").strip(),
+            str(item.get("device_id") or "").strip(),
+            str(item.get("mac_address") or "").strip(),
+        }
+
+        if key in candidates:
+            return registry_key, item
+
+    return None, None
+
+
+def _phase28_r177g1_validate_local_ipv4(value):
+    import ipaddress
+
+    ip_text = str(value or "").strip()
+    ip = ipaddress.ip_address(ip_text)
+
+    if ip.version != 4:
+        raise RuntimeError(
+            "Wi-Fi device control requires IPv4."
+        )
+
+    if not ip.is_private:
+        raise RuntimeError(
+            "Wi-Fi device control is allowed only on local private IPv4."
+        )
+
+    return ip_text
+
+
+def _phase28_r177g1_shelly_rpc(ip_address, method, params):
+    import json
+    from urllib import request
+
+    host = _phase28_r177g1_validate_local_ipv4(
+        ip_address,
+    )
+
+    body = json.dumps(
+        {
+            "id": 1,
+            "method": str(method),
+            "params": dict(params or {}),
+        }
+    ).encode("utf-8")
+
+    req = request.Request(
+        f"http://{host}/rpc",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(req, timeout=4.0) as response:
+            payload = json.loads(
+                response.read().decode(
+                    "utf-8",
+                    errors="replace",
+                )
+            )
+    except Exception as exc:
+        raise RuntimeError(
+            f"Shelly RPC {method} failed: {exc}"
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise RuntimeError(
+            f"Shelly RPC {method} returned invalid payload."
+        )
+
+    if payload.get("error"):
+        raise RuntimeError(
+            f"Shelly RPC {method} error: {payload.get('error')}"
+        )
+
+    result = payload.get("result")
+
+    return result if isinstance(result, dict) else {}
+
+
+def _phase28_r177g1_read_shelly_switch(ip_address):
+    result = _phase28_r177g1_shelly_rpc(
+        ip_address,
+        "Switch.GetStatus",
+        {
+            "id": 0,
+        },
+    )
+
+    output = result.get("output")
+
+    if not isinstance(output, bool):
+        raise RuntimeError(
+            "Shelly Switch.GetStatus did not return boolean output."
+        )
+
+    return output
+
+
+def _phase28_r177g1_enrich_wifi_devices(devices):
+    import copy
+    from datetime import datetime, timezone
+
+    if not isinstance(devices, list):
+        return []
+
+    registry = _phase28_r177g1_load_registry()
+    now = datetime.now(timezone.utc).isoformat()
+    enriched = []
+    changed = False
+
+    for raw_device in devices:
+        if not isinstance(raw_device, dict):
+            continue
+
+        device = copy.deepcopy(raw_device)
+        registry_key = _phase28_r177g1_registry_key(
+            device,
+        )
+
+        if not registry_key:
+            enriched.append(device)
+            continue
+
+        old = registry.get(registry_key)
+        entry = dict(old) if isinstance(old, dict) else {}
+
+        entry.update(
+            {
+                "registry_id": registry_key,
+                "device_id": device.get("device_id"),
+                "profile": device.get("profile"),
+                "manufacturer": device.get("manufacturer"),
+                "model": device.get("model"),
+                "ip_address": device.get("ip_address"),
+                "mac_address": device.get("mac_address"),
+                "discovered_name": (
+                    device.get("discovered_name")
+                    or device.get("name")
+                ),
+                "last_seen_at": now,
+            }
+        )
+
+        friendly_name = str(
+            entry.get("friendly_name") or ""
+        ).strip()
+
+        device["registry_id"] = registry_key
+        device["discovered_name"] = (
+            device.get("discovered_name")
+            or device.get("name")
+        )
+
+        if friendly_name:
+            device["friendly_name"] = friendly_name
+            device["name"] = friendly_name
+
+        onboarding = dict(
+            device.get("onboarding")
+            if isinstance(device.get("onboarding"), dict)
+            else {}
+        )
+
+        if friendly_name:
+            onboarding["status"] = "registered"
+
+        onboarding["requires_ha_ui"] = False
+        device["onboarding"] = onboarding
+
+        profile = str(
+            device.get("profile")
+            or ""
+        ).strip().lower()
+
+        if profile == "shelly_gen2_rpc":
+            ip_address = device.get("ip_address")
+
+            try:
+                switch_state = _phase28_r177g1_read_shelly_switch(
+                    ip_address,
+                )
+            except Exception as exc:
+                device["switch_probe_error"] = str(exc)
+            else:
+                device["capabilities"] = sorted(
+                    set(
+                        list(device.get("capabilities") or [])
+                        + ["switch"]
+                    )
+                )
+
+                entity = {
+                    "entity_id": "switch:0",
+                    "entity_key": "switch:0",
+                    "domain": "switch",
+                    "name": "Spínání",
+                    "state": "on" if switch_state else "off",
+                    "state_bool": switch_state,
+                    "available": True,
+                    "controllable": True,
+                }
+
+                device["entities"] = [entity]
+                device["entity_count"] = 1
+                device["control_entity_count"] = 1
+                device["switch_state"] = switch_state
+
+                entry["switch_state"] = switch_state
+                entry["control_entity_count"] = 1
+                entry["capabilities"] = ["switch"]
+
+        registry[registry_key] = entry
+        changed = True
+        enriched.append(device)
+
+    if changed:
+        _phase28_r177g1_save_registry(
+            registry,
+        )
+
+    return enriched
+
+
+def _phase28_r177g1_register_wifi_device(payload):
+    import re
+    from datetime import datetime, timezone
+
+    if not isinstance(payload, dict):
+        raise RuntimeError(
+            "Wi-Fi registration payload must be an object."
+        )
+
+    device_key = str(
+        payload.get("device_key")
+        or payload.get("registry_id")
+        or payload.get("device_id")
+        or ""
+    ).strip()
+
+    friendly_name = str(
+        payload.get("friendly_name")
+        or payload.get("name")
+        or ""
+    ).strip()
+
+    if not device_key:
+        raise RuntimeError(
+            "Wi-Fi device key is required."
+        )
+
+    if not friendly_name or len(friendly_name) > 80:
+        raise RuntimeError(
+            "Wi-Fi friendly name must contain 1 to 80 characters."
+        )
+
+    if re.search(r"[\x00-\x1f\x7f]", friendly_name):
+        raise RuntimeError(
+            "Wi-Fi friendly name contains invalid control characters."
+        )
+
+    registry = _phase28_r177g1_load_registry()
+    registry_key, entry = _phase28_r177g1_find_registry_entry(
+        registry,
+        device_key,
+    )
+
+    if entry is None:
+        raise RuntimeError(
+            "Wi-Fi device is not present in the local registry. Run discovery first."
+        )
+
+    entry = dict(entry)
+    entry["friendly_name"] = friendly_name
+    entry["registered"] = True
+    entry["registered_at"] = datetime.now(
+        timezone.utc
+    ).isoformat()
+
+    registry[registry_key] = entry
+    _phase28_r177g1_save_registry(
+        registry,
+    )
+
+    return {
+        "phase": "wifi_native_device_registered",
+        "requested_action": "register_wifi_device",
+        "registry_id": registry_key,
+        "device_id": entry.get("device_id"),
+        "friendly_name": friendly_name,
+        "registered": True,
+        "requires_home_assistant_ui": False,
+        "credential_write": False,
+        "wifi_runtime_change": False,
+    }
+
+
+def _phase28_r177g1_set_wifi_switch_state(payload):
+    if not isinstance(payload, dict):
+        raise RuntimeError(
+            "Wi-Fi switch payload must be an object."
+        )
+
+    device_key = str(
+        payload.get("device_key")
+        or payload.get("registry_id")
+        or payload.get("device_id")
+        or ""
+    ).strip()
+
+    target_state = payload.get("target_state")
+
+    if not device_key:
+        raise RuntimeError(
+            "Wi-Fi device key is required."
+        )
+
+    if not isinstance(target_state, bool):
+        raise RuntimeError(
+            "target_state must be boolean."
+        )
+
+    registry = _phase28_r177g1_load_registry()
+    registry_key, entry = _phase28_r177g1_find_registry_entry(
+        registry,
+        device_key,
+    )
+
+    if entry is None:
+        raise RuntimeError(
+            "Wi-Fi device is not present in the local registry."
+        )
+
+    profile = str(
+        entry.get("profile")
+        or ""
+    ).strip().lower()
+
+    if profile != "shelly_gen2_rpc":
+        raise RuntimeError(
+            f"Wi-Fi switch control is not supported for profile {profile or 'unknown'}."
+        )
+
+    ip_address = _phase28_r177g1_validate_local_ipv4(
+        entry.get("ip_address"),
+    )
+
+    _phase28_r177g1_shelly_rpc(
+        ip_address,
+        "Switch.Set",
+        {
+            "id": 0,
+            "on": target_state,
+        },
+    )
+
+    actual_state = _phase28_r177g1_read_shelly_switch(
+        ip_address,
+    )
+
+    entry = dict(entry)
+    entry["switch_state"] = actual_state
+    registry[registry_key] = entry
+    _phase28_r177g1_save_registry(
+        registry,
+    )
+
+    return {
+        "phase": "wifi_native_switch_state_changed",
+        "requested_action": "set_wifi_switch_state",
+        "registry_id": registry_key,
+        "device_id": entry.get("device_id"),
+        "friendly_name": entry.get("friendly_name"),
+        "device_control": True,
+        "control_id": "switch:0",
+        "target_state": target_state,
+        "actual_state": actual_state,
+        "requires_home_assistant_ui": False,
+        "credential_write": False,
+        "wifi_runtime_change": False,
+    }
+# PHASE28_R177G1_R3_WIFI_REGISTRY_CONTROL_END
