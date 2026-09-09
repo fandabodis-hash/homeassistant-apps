@@ -51,6 +51,7 @@ from zigbee_manager import (
     wait_for_new_device,
 )
 from wifi_manager import discover_home_assistant_wifi_devices
+from wifi_native_onboarding import discover_native_wifi_infrastructure
 
 
 DEVICE_CONFIG_PATH = Path(
@@ -260,6 +261,49 @@ def execute_wifi_device_discovery(
         result=result,
     )
 # PHASE28_R120_WIFI_DEVICE_DISCOVERY_AGENT_END
+
+# PHASE28_R135_NATIVE_WIFI_DISCOVERY_AGENT_START
+def execute_wifi_native_discovery(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Discover Wi-Fi/LAN candidates natively through Fanda Agent."""
+
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="running",
+        result={
+            "worker": "command_worker",
+            "executor": "wifi_native_onboarding",
+            "phase": "wifi_native_discovery_started",
+            "infrastructure_mode": True,
+            "requires_home_assistant_ui": False,
+            "transport": "wifi",
+        },
+    )
+
+    result = discover_native_wifi_infrastructure()
+
+    if not isinstance(result, dict):
+        raise HomeAssistantApiError(
+            "Native Wi-Fi discovery returned invalid result format."
+        )
+
+    result["requested_action"] = command_payload.get(
+        "requested_action",
+        "discover_native_wifi_infrastructure",
+    )
+
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result=result,
+    )
+# PHASE28_R135_NATIVE_WIFI_DISCOVERY_AGENT_END
 
 def execute_zigbee_permit_join(
     *,
@@ -2917,6 +2961,15 @@ def execute_command(
 
     if command_type == "zigbee_switch_set":
         execute_zigbee_switch_set(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+
+    if command_type == "wifi_native_discovery":
+        execute_wifi_native_discovery(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
