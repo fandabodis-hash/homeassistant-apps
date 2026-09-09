@@ -81,6 +81,51 @@ ZIGBEE_RECONFIGURE_POLL_SECONDS = 15
 _zigbee_reconfigure_next_check_monotonic = 0.0
 
 
+
+# PHASE28_R160_FIX2_COMMAND_PAYLOAD_SECRET_REDACTION_START
+_PHASE28_R160_FIX2_SENSITIVE_PAYLOAD_KEYS = {
+    "password",
+    "wifi_password",
+    "target_wifi_password",
+    "pass",
+    "passwd",
+    "psk",
+    "secret",
+    "token",
+    "access_token",
+    "refresh_token",
+    "api_key",
+    "authorization",
+}
+
+
+def redact_sensitive_payload_for_logging(value):
+    """Return a copy safe for logs and command result previews."""
+    if isinstance(value, dict):
+        safe = {}
+        for key, item in value.items():
+            key_text = str(key)
+            key_lower = key_text.lower()
+            if (
+                key_lower in _PHASE28_R160_FIX2_SENSITIVE_PAYLOAD_KEYS
+                or "password" in key_lower
+                or "secret" in key_lower
+                or key_lower.endswith("_token")
+            ):
+                safe[key_text] = "***REDACTED***"
+            else:
+                safe[key_text] = redact_sensitive_payload_for_logging(item)
+        return safe
+
+    if isinstance(value, list):
+        return [
+            redact_sensitive_payload_for_logging(item)
+            for item in value
+        ]
+
+    return value
+# PHASE28_R160_FIX2_COMMAND_PAYLOAD_SECRET_REDACTION_END
+
 def load_device_identity() -> dict[str, Any]:
     """Nacte cloudovou identitu a token zarizeni."""
 
@@ -2949,7 +2994,10 @@ def execute_command(
         command_id,
         command_type,
         json.dumps(
-            command_payload,
+            # PHASE28_R160_FIX2_COMMAND_PAYLOAD_LOG_REDACTION_APPLIED
+            redact_sensitive_payload_for_logging(
+                command_payload,
+            ),
             ensure_ascii=False,
             sort_keys=True,
         ),
