@@ -330,40 +330,99 @@ def execute_wifi_native_discovery(
             "infrastructure_mode": True,
             "requires_home_assistant_ui": False,
             "transport": "wifi",
+            # PHASE28_R166_RUNNING_RESULT_ACTION_CONTEXT
+            "requested_action": command_payload.get(
+                "requested_action",
+                "discover_native_wifi_infrastructure",
+            ),
+            "phase28_r166_failure_result_guard": True,
         },
     )
 
-    # PHASE28_R157_DIRECT_SHELLY_ONBOARDING_DISPATCH_START
-    phase28_r157_requested_action = str(
+    # PHASE28_R166_WIFI_NATIVE_FAILURE_RESULT_GUARD_START
+    phase28_r166_requested_action = str(
         command_payload.get(
             "requested_action",
             "",
         )
     ).strip()
 
-    if phase28_r157_requested_action in {
+    phase28_r166_is_shelly_onboarding = phase28_r166_requested_action in {
         "shelly_ap_onboard",
         "onboard_shelly_access_point",
         "shelly_access_point_onboard",
-    }:
-        result = onboard_shelly_access_point(
-            command_payload,
+    }
+
+    try:
+        if phase28_r166_is_shelly_onboarding:
+            result = onboard_shelly_access_point(
+                command_payload,
+            )
+        else:
+            result = discover_native_wifi_infrastructure(
+                command_payload,
+            )
+
+        if not isinstance(result, dict):
+            raise HomeAssistantApiError(
+                "Native Wi-Fi discovery returned invalid result format."
+            )
+
+        result["requested_action"] = command_payload.get(
+            "requested_action",
+            "discover_native_wifi_infrastructure",
         )
-    else:
-        result = discover_native_wifi_infrastructure(
-            command_payload,
-        )
-    # PHASE28_R157_DIRECT_SHELLY_ONBOARDING_DISPATCH_END
-    if not isinstance(result, dict):
-        raise HomeAssistantApiError(
-            "Native Wi-Fi discovery returned invalid result format."
+        result["phase28_r166_failure_result_guard"] = True
+
+    except Exception as exc:
+        phase28_r166_failed_phase = (
+            "shelly_ap_onboarding_failed"
+            if phase28_r166_is_shelly_onboarding
+            else "wifi_native_discovery_failed"
         )
 
-    result["requested_action"] = command_payload.get(
-        "requested_action",
-        "discover_native_wifi_infrastructure",
-    )
+        phase28_r166_failure_result = {
+            "worker": "command_worker",
+            "executor": "wifi_native_onboarding",
+            "phase": phase28_r166_failed_phase,
+            "requested_action": phase28_r166_requested_action,
+            "phase28_r166_failure_result_guard": True,
+            "requires_home_assistant_ui": False,
+            "infrastructure_mode": bool(
+                command_payload.get(
+                    "infrastructure_mode",
+                    True,
+                )
+            ),
+            "transport": "wifi",
+            "credential_write": bool(
+                command_payload.get(
+                    "credential_write",
+                    False,
+                )
+            ),
+            "wifi_runtime_change": bool(
+                command_payload.get(
+                    "wifi_runtime_change",
+                    False,
+                )
+            ),
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+            "payload_keys": sorted(
+                str(key)
+                for key in command_payload.keys()
+            ),
+        }
 
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result=phase28_r166_failure_result,
+        )
+        return
+    # PHASE28_R166_WIFI_NATIVE_FAILURE_RESULT_GUARD_END
     submit_command_result(
         identity=identity,
         command_id=command_id,
