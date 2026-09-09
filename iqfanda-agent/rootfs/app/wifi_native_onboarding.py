@@ -2015,3 +2015,300 @@ def _phase28_r177g1_set_wifi_switch_state(payload):
         "wifi_runtime_change": False,
     }
 # PHASE28_R177G1_R3_WIFI_REGISTRY_CONTROL_END
+
+# PHASE28_R177G4_STABLE_WIFI_ENTITY_CATALOG_START
+_phase28_r177g4_base_enrich_wifi_devices = (
+    _phase28_r177g1_enrich_wifi_devices
+)
+
+
+def _phase28_r177g4_shelly_switch_status(ip_address):
+    return _phase28_r177g1_shelly_rpc(
+        ip_address,
+        "Switch.GetStatus",
+        {
+            "id": 0,
+        },
+    )
+
+
+def _phase28_r177g4_float(value):
+    if isinstance(value, bool):
+        return None
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _phase28_r177g4_entity_id(registry_id, entity_key):
+    return (
+        f"{str(registry_id).strip()}:"
+        f"{str(entity_key).strip()}"
+    )
+
+
+def _phase28_r177g4_build_shelly_entities(
+    *,
+    registry_id,
+    status,
+):
+    entities = []
+
+    output = status.get("output")
+
+    if isinstance(output, bool):
+        entities.append(
+            {
+                "entity_id": _phase28_r177g4_entity_id(
+                    registry_id,
+                    "switch:0",
+                ),
+                "entity_key": "switch:0",
+                "domain": "switch",
+                "device_class": "outlet",
+                "name": "Spínací výstup",
+                "state": "on" if output else "off",
+                "state_bool": output,
+                "value_type": "boolean",
+                "unit": None,
+                "available": True,
+                "controllable": True,
+                "schema_visible": True,
+                "statistics_enabled": False,
+                "statistics_type": None,
+                "source_component": "switch:0",
+            }
+        )
+
+    def add_numeric(
+        *,
+        entity_key,
+        name,
+        source_value,
+        device_class,
+        unit,
+        statistics_type="measurement",
+        transform=None,
+        raw_value=None,
+        raw_unit=None,
+    ):
+        numeric = _phase28_r177g4_float(source_value)
+
+        if numeric is None:
+            return
+
+        if transform is not None:
+            numeric = transform(numeric)
+
+        entity = {
+            "entity_id": _phase28_r177g4_entity_id(
+                registry_id,
+                entity_key,
+            ),
+            "entity_key": entity_key,
+            "domain": "sensor",
+            "device_class": device_class,
+            "name": name,
+            "state": numeric,
+            "state_numeric": numeric,
+            "value_type": "number",
+            "unit": unit,
+            "available": True,
+            "controllable": False,
+            "schema_visible": True,
+            "statistics_enabled": True,
+            "statistics_type": statistics_type,
+            "source_component": "switch:0",
+        }
+
+        if raw_value is not None:
+            entity["raw_value"] = raw_value
+
+        if raw_unit is not None:
+            entity["raw_unit"] = raw_unit
+
+        entities.append(entity)
+
+    add_numeric(
+        entity_key="power:0",
+        name="Okamžitý výkon",
+        source_value=status.get("apower"),
+        device_class="power",
+        unit="W",
+    )
+
+    add_numeric(
+        entity_key="voltage:0",
+        name="Napětí",
+        source_value=status.get("voltage"),
+        device_class="voltage",
+        unit="V",
+    )
+
+    add_numeric(
+        entity_key="current:0",
+        name="Proud",
+        source_value=status.get("current"),
+        device_class="current",
+        unit="A",
+    )
+
+    add_numeric(
+        entity_key="power_factor:0",
+        name="Účiník",
+        source_value=status.get("pf"),
+        device_class="power_factor",
+        unit=None,
+    )
+
+    add_numeric(
+        entity_key="frequency:0",
+        name="Frekvence",
+        source_value=status.get("freq"),
+        device_class="frequency",
+        unit="Hz",
+    )
+
+    aenergy = status.get("aenergy")
+
+    if isinstance(aenergy, dict):
+        total_wh = _phase28_r177g4_float(
+            aenergy.get("total")
+        )
+
+        if total_wh is not None:
+            add_numeric(
+                entity_key="energy_total:0",
+                name="Celková spotřeba",
+                source_value=total_wh,
+                device_class="energy",
+                unit="kWh",
+                statistics_type="total_increasing",
+                transform=lambda value: value / 1000.0,
+                raw_value=total_wh,
+                raw_unit="Wh",
+            )
+
+    temperature = status.get("temperature")
+
+    if isinstance(temperature, dict):
+        add_numeric(
+            entity_key="temperature:0",
+            name="Teplota zařízení",
+            source_value=temperature.get("tC"),
+            device_class="temperature",
+            unit="°C",
+        )
+
+    return entities
+
+
+def _phase28_r177g4_enrich_wifi_devices(devices):
+    enriched = _phase28_r177g4_base_enrich_wifi_devices(
+        devices,
+    )
+
+    if not isinstance(enriched, list):
+        return []
+
+    registry = _phase28_r177g1_load_registry()
+    registry_changed = False
+
+    for device in enriched:
+        if not isinstance(device, dict):
+            continue
+
+        profile = str(
+            device.get("profile")
+            or ""
+        ).strip().lower()
+
+        if profile != "shelly_gen2_rpc":
+            continue
+
+        registry_id = str(
+            device.get("registry_id")
+            or _phase28_r177g1_registry_key(device)
+            or ""
+        ).strip()
+
+        ip_address = str(
+            device.get("ip_address")
+            or ""
+        ).strip()
+
+        if not registry_id or not ip_address:
+            continue
+
+        try:
+            status = _phase28_r177g4_shelly_switch_status(
+                ip_address,
+            )
+        except Exception as exc:
+            device["entity_probe_error"] = str(exc)
+            continue
+
+        entities = _phase28_r177g4_build_shelly_entities(
+            registry_id=registry_id,
+            status=status,
+        )
+
+        if not entities:
+            continue
+
+        device["entities"] = entities
+        device["entity_count"] = len(entities)
+        device["control_entity_count"] = sum(
+            1
+            for entity in entities
+            if entity.get("controllable") is True
+        )
+        device["statistics_entity_count"] = sum(
+            1
+            for entity in entities
+            if entity.get("statistics_enabled") is True
+        )
+
+        switch_entity = next(
+            (
+                entity
+                for entity in entities
+                if entity.get("entity_key") == "switch:0"
+            ),
+            None,
+        )
+
+        if isinstance(switch_entity, dict):
+            device["switch_state"] = switch_entity.get(
+                "state_bool"
+            )
+
+        entry = registry.get(registry_id)
+
+        if isinstance(entry, dict):
+            entry = dict(entry)
+            entry["entities"] = entities
+            entry["entity_count"] = len(entities)
+            entry["control_entity_count"] = (
+                device["control_entity_count"]
+            )
+            entry["statistics_entity_count"] = (
+                device["statistics_entity_count"]
+            )
+            registry[registry_id] = entry
+            registry_changed = True
+
+    if registry_changed:
+        _phase28_r177g1_save_registry(
+            registry,
+        )
+
+    return enriched
+
+
+_phase28_r177g1_enrich_wifi_devices = (
+    _phase28_r177g4_enrich_wifi_devices
+)
+# PHASE28_R177G4_STABLE_WIFI_ENTITY_CATALOG_END
