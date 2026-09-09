@@ -357,6 +357,41 @@ def refresh_update_entity_metadata(
     return None
 
 
+# PHASE28_R145_FIX2_UNIVERSAL_STAGED_AGENT_UPDATE_HELPERS_START
+def _phase28_r145_semver_tuple(value):
+    normalized = str(value or "").strip()
+    parts = normalized.split(".")
+
+    if (
+        len(parts) != 3
+        or any(not part.isdigit() for part in parts)
+    ):
+        return None
+
+    return (
+        int(parts[0]),
+        int(parts[1]),
+        int(parts[2]),
+    )
+
+
+def _phase28_r145_is_forward_intermediate_latest(
+    *,
+    current_version,
+    latest_version,
+    target_version,
+):
+    current = _phase28_r145_semver_tuple(current_version)
+    latest = _phase28_r145_semver_tuple(latest_version)
+    target = _phase28_r145_semver_tuple(target_version)
+
+    if current is None or latest is None or target is None:
+        return False
+
+    return current < latest < target
+# PHASE28_R145_FIX2_UNIVERSAL_STAGED_AGENT_UPDATE_HELPERS_END
+
+
 def wait_for_update_entity(
     *,
     entity_id: str,
@@ -434,6 +469,12 @@ def wait_for_update_entity(
             )
 
         if latest == target_version:
+            candidate["requested_target_version"] = target_version
+            candidate["target_version"] = target_version
+            candidate["effective_target_version"] = target_version
+            candidate["final_target_version"] = target_version
+            candidate["staged_update"] = False
+            candidate["staged_reason"] = None
             return candidate
 
         #
@@ -441,6 +482,22 @@ def wait_for_update_entity(
         # ze Core jeste stale vidi
         # predchozi metadata.
         #
+
+        if _phase28_r145_is_forward_intermediate_latest(
+            current_version=current_version,
+            latest_version=latest,
+            target_version=target_version,
+        ):
+            candidate["requested_target_version"] = target_version
+            candidate["target_version"] = latest
+            candidate["effective_target_version"] = latest
+            candidate["final_target_version"] = target_version
+            candidate["staged_update"] = True
+            candidate["staged_reason"] = (
+                "ha_update_entity_reports_intermediate_latest"
+            )
+            return candidate
+
         if (
             latest
             and latest
@@ -592,7 +649,41 @@ def validate_update_target(
                 "latest_version"
             ]
         ),
-        "target_version": target,
+        "target_version": str(
+            entity.get(
+                "target_version"
+            )
+            or target
+        ),
+        "requested_target_version": str(
+            entity.get(
+                "requested_target_version"
+            )
+            or target
+        ),
+        "effective_target_version": str(
+            entity.get(
+                "effective_target_version"
+            )
+            or entity.get(
+                "target_version"
+            )
+            or target
+        ),
+        "final_target_version": str(
+            entity.get(
+                "final_target_version"
+            )
+            or target
+        ),
+        "staged_update": bool(
+            entity.get(
+                "staged_update"
+            )
+        ),
+        "staged_reason": entity.get(
+            "staged_reason"
+        ),
         "already_current": False,
         "update_entity_id": (
             entity_id
