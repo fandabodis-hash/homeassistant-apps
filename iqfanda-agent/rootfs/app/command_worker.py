@@ -285,8 +285,17 @@ def execute_wifi_native_discovery(
         },
     )
 
-    result = discover_native_wifi_infrastructure()
-
+    # PHASE28_R153_FIX2_WIFI_NATIVE_DISCOVERY_PAYLOAD_PASS_START
+    result = discover_native_wifi_infrastructure(
+        getattr(
+            locals().get("command"),
+            "payload",
+            None,
+        )
+        or locals().get("payload")
+        or {}
+    )
+    # PHASE28_R153_FIX2_WIFI_NATIVE_DISCOVERY_PAYLOAD_PASS_END
     if not isinstance(result, dict):
         raise HomeAssistantApiError(
             "Native Wi-Fi discovery returned invalid result format."

@@ -631,7 +631,28 @@ def ssdp_discovery() -> dict[str, Any]:
     }
 
 
-def discover_native_wifi_infrastructure() -> dict[str, Any]:
+def discover_native_wifi_infrastructure(payload=None) -> dict[str, Any]:
+
+    # PHASE28_R153_FIX2_SHELLY_AP_ONBOARDING_ACTION_DISPATCH_START
+    phase28_r153_payload = payload or {}
+
+    if isinstance(
+        phase28_r153_payload,
+        dict,
+    ) and str(
+        phase28_r153_payload.get(
+            "requested_action",
+            "",
+        )
+    ) in {
+        "shelly_ap_onboard",
+        "onboard_shelly_access_point",
+        "shelly_access_point_onboard",
+    }:
+        return onboard_shelly_access_point(
+            phase28_r153_payload,
+        )
+    # PHASE28_R153_FIX2_SHELLY_AP_ONBOARDING_ACTION_DISPATCH_END
     """Fanda-native read-only Wi-Fi/LAN discovery."""
 
     wifi_scan = scan_wifi_access_points()
@@ -742,3 +763,531 @@ def discover_native_wifi_infrastructure() -> dict[str, Any]:
         ],
         "discovered_at": _utc_now_iso(),
     }
+
+
+# PHASE28_R153_FIX2_SHELLY_AP_ONBOARDING_BASE_START
+def _phase28_r153_redact_secret(value):
+    if value is None:
+        return None
+    text = str(value)
+    if not text:
+        return ""
+    return "***REDACTED***"
+
+
+def _phase28_r153_run_command(args, timeout=30):
+    import subprocess
+    from datetime import datetime, timezone
+
+    started_at = datetime.now(timezone.utc).isoformat()
+    completed = subprocess.run(
+        list(args),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+    return {
+        "args": [
+            "***REDACTED***" if "password" in str(item).lower() else str(item)
+            for item in args
+        ],
+        "returncode": completed.returncode,
+        "stdout": (completed.stdout or "").strip()[-2000:],
+        "stderr": (completed.stderr or "").strip()[-2000:],
+        "started_at": started_at,
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _phase28_r153_parse_nmcli_terse_line(line):
+    parts = []
+    current = []
+    escaped = False
+
+    for char in str(line):
+        if escaped:
+            current.append(char)
+            escaped = False
+            continue
+
+        if char == "\\":
+            escaped = True
+            continue
+
+        if char == ":":
+            parts.append("".join(current))
+            current = []
+            continue
+
+        current.append(char)
+
+    parts.append("".join(current))
+    return parts
+
+
+def _phase28_r153_get_active_wifi_connection(preferred_ifname=None):
+    result = _phase28_r153_run_command(
+        [
+            "nmcli",
+            "-t",
+            "-f",
+            "NAME,UUID,TYPE,DEVICE",
+            "connection",
+            "show",
+            "--active",
+        ],
+        timeout=20,
+    )
+
+    connections = []
+    for line in result.get("stdout", "").splitlines():
+        parts = _phase28_r153_parse_nmcli_terse_line(line)
+        while len(parts) < 4:
+            parts.append("")
+        connections.append(
+            {
+                "name": parts[0],
+                "uuid": parts[1],
+                "type": parts[2],
+                "device": parts[3],
+            }
+        )
+
+    wifi = [
+        item
+        for item in connections
+        if item.get("type") in {"802-11-wireless", "wifi"}
+    ]
+
+    if preferred_ifname:
+        for item in wifi:
+            if item.get("device") == preferred_ifname:
+                return item, connections, result
+
+    if wifi:
+        return wifi[0], connections, result
+
+    return None, connections, result
+
+
+def _phase28_r153_shelly_rpc(host, method, params=None, timeout=8):
+    import json
+    import urllib.request
+
+    body = {
+        "id": 1,
+        "method": method,
+    }
+
+    if params is not None:
+        body["params"] = params
+
+    data = json.dumps(body).encode("utf-8")
+    request = urllib.request.Request(
+        "http://" + str(host).strip() + "/rpc",
+        data=data,
+        headers={
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            response_body = response.read().decode("utf-8", errors="replace")
+            try:
+                parsed = json.loads(response_body)
+            except Exception:
+                parsed = {
+                    "raw": response_body,
+                }
+            return {
+                "ok": True,
+                "method": method,
+                "http_status": getattr(response, "status", None),
+                "response": parsed,
+            }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "method": method,
+            "error": str(exc),
+        }
+
+
+def _phase28_r153_wait_for_shelly_rpc(host, timeout_seconds=45):
+    import time
+
+    deadline = time.monotonic() + timeout_seconds
+    attempts = []
+
+    while time.monotonic() < deadline:
+        result = _phase28_r153_shelly_rpc(
+            host,
+            "Shelly.GetDeviceInfo",
+            {
+                "ident": True,
+            },
+            timeout=6,
+        )
+        attempts.append(result)
+
+        if result.get("ok"):
+            return {
+                "ok": True,
+                "host": host,
+                "result": result,
+                "attempt_count": len(attempts),
+            }
+
+        time.sleep(3)
+
+    return {
+        "ok": False,
+        "host": host,
+        "attempt_count": len(attempts),
+        "attempts": attempts[-5:],
+    }
+
+
+def _phase28_r153_start_wifi_rollback_watchdog(
+    *,
+    marker_path,
+    original_connection_uuid,
+    rollback_timeout_seconds,
+):
+    import shlex
+    import subprocess
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    if not original_connection_uuid:
+        return {
+            "started": False,
+            "reason": "missing_original_connection_uuid",
+        }
+
+    marker = str(marker_path)
+    Path(marker).write_text(
+        datetime.now(timezone.utc).isoformat(),
+        encoding="utf-8",
+    )
+
+    command = (
+        "sleep "
+        + shlex.quote(str(int(rollback_timeout_seconds)))
+        + "; "
+        + "if [ -f "
+        + shlex.quote(marker)
+        + " ]; then "
+        + "nmcli connection up uuid "
+        + shlex.quote(str(original_connection_uuid))
+        + " >/tmp/iqfanda-r153-wifi-rollback.log 2>&1; "
+        + "fi"
+    )
+
+    subprocess.Popen(
+        [
+            "sh",
+            "-c",
+            command,
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+    )
+
+    return {
+        "started": True,
+        "marker_path": marker,
+        "rollback_timeout_seconds": rollback_timeout_seconds,
+    }
+
+
+def _phase28_r153_remove_file(path):
+    from pathlib import Path
+
+    try:
+        Path(path).unlink(missing_ok=True)
+        return True
+    except Exception:
+        return False
+
+
+def onboard_shelly_access_point(payload=None):
+    import time
+
+    payload = payload or {}
+
+    if not isinstance(payload, dict):
+        raise RuntimeError("Shelly onboarding payload must be an object.")
+
+    ap_ssid = str(
+        payload.get("shelly_ap_ssid")
+        or payload.get("ap_ssid")
+        or payload.get("ssid")
+        or ""
+    ).strip()
+
+    target_wifi_ssid = str(
+        payload.get("target_wifi_ssid")
+        or payload.get("wifi_ssid")
+        or ""
+    ).strip()
+
+    target_wifi_password = str(
+        payload.get("target_wifi_password")
+        or payload.get("wifi_password")
+        or ""
+    )
+
+    preferred_ifname = str(
+        payload.get("interface")
+        or payload.get("ifname")
+        or "wlan0"
+    ).strip()
+
+    shelly_host = str(
+        payload.get("shelly_host")
+        or "192.168.33.1"
+    ).strip()
+
+    dry_run = bool(
+        payload.get(
+            "dry_run",
+            True,
+        )
+    )
+
+    rollback_timeout_seconds = int(
+        payload.get(
+            "rollback_timeout_seconds",
+            180,
+        )
+        or 180
+    )
+
+    reboot_after_config = bool(
+        payload.get(
+            "reboot_after_config",
+            True,
+        )
+    )
+
+    if not ap_ssid:
+        raise RuntimeError("Shelly AP SSID is required.")
+
+    if not target_wifi_ssid:
+        raise RuntimeError("Target WiFi SSID is required.")
+
+    if dry_run:
+        return {
+            "phase": "shelly_ap_onboarding_dry_run",
+            "executor": "wifi_native_onboarding",
+            "phase28_r153_shelly_ap_onboarding_base": True,
+            "phase28_r153_fix2": True,
+            "requires_home_assistant_ui": False,
+            "credential_write": False,
+            "wifi_runtime_change": False,
+            "shelly_ap_ssid": ap_ssid,
+            "target_wifi_ssid": target_wifi_ssid,
+            "password_redacted": True,
+            "next_step": "rerun_with_dry_run_false_after_local_password_prompt",
+        }
+
+    if not target_wifi_password:
+        raise RuntimeError(
+            "Target WiFi password is required for non-dry-run onboarding."
+        )
+
+    marker_path = (
+        "/tmp/iqfanda-r153-shelly-onboarding-"
+        + str(int(time.time()))
+        + ".rollback"
+    )
+
+    original_connection = None
+    active_connections = []
+    preflight = {}
+    rollback_watchdog = {}
+    shelly_info = None
+    set_config_result = None
+    reboot_result = None
+    reconnect_result = None
+    ap_connection_result = None
+    rescan_result = None
+    rollback_marker_removed = False
+
+    try:
+        original_connection, active_connections, preflight = (
+            _phase28_r153_get_active_wifi_connection(
+                preferred_ifname=preferred_ifname,
+            )
+        )
+
+        if original_connection is None:
+            raise RuntimeError(
+                "No active WiFi connection found before Shelly onboarding."
+            )
+
+        if not original_connection.get("uuid"):
+            raise RuntimeError("Active WiFi connection UUID is missing.")
+
+        rollback_watchdog = _phase28_r153_start_wifi_rollback_watchdog(
+            marker_path=marker_path,
+            original_connection_uuid=original_connection.get("uuid"),
+            rollback_timeout_seconds=rollback_timeout_seconds,
+        )
+
+        rescan_result = _phase28_r153_run_command(
+            [
+                "nmcli",
+                "device",
+                "wifi",
+                "rescan",
+                "ifname",
+                preferred_ifname,
+            ],
+            timeout=25,
+        )
+
+        ap_connection_result = _phase28_r153_run_command(
+            [
+                "nmcli",
+                "device",
+                "wifi",
+                "connect",
+                ap_ssid,
+                "ifname",
+                preferred_ifname,
+            ],
+            timeout=60,
+        )
+
+        if ap_connection_result.get("returncode") != 0:
+            raise RuntimeError(
+                "Failed to connect Fanda temporarily to Shelly AP."
+            )
+
+        shelly_wait = _phase28_r153_wait_for_shelly_rpc(
+            shelly_host,
+            timeout_seconds=45,
+        )
+
+        if not shelly_wait.get("ok"):
+            raise RuntimeError("Shelly AP RPC endpoint was not reachable.")
+
+        shelly_info = shelly_wait.get("result")
+
+        set_config_result = _phase28_r153_shelly_rpc(
+            shelly_host,
+            "WiFi.SetConfig",
+            {
+                "config": {
+                    "sta": {
+                        "ssid": target_wifi_ssid,
+                        "pass": target_wifi_password,
+                        "enable": True,
+                    }
+                }
+            },
+            timeout=12,
+        )
+
+        if not set_config_result.get("ok"):
+            set_config_result = _phase28_r153_shelly_rpc(
+                shelly_host,
+                "Wifi.SetConfig",
+                {
+                    "config": {
+                        "sta": {
+                            "ssid": target_wifi_ssid,
+                            "pass": target_wifi_password,
+                            "enable": True,
+                        }
+                    }
+                },
+                timeout=12,
+            )
+
+        if not set_config_result.get("ok"):
+            raise RuntimeError("Shelly WiFi.SetConfig failed.")
+
+        if reboot_after_config:
+            reboot_result = _phase28_r153_shelly_rpc(
+                shelly_host,
+                "Shelly.Reboot",
+                {},
+                timeout=6,
+            )
+
+        time.sleep(6)
+
+    finally:
+        if original_connection is not None and original_connection.get("uuid"):
+            reconnect_result = _phase28_r153_run_command(
+                [
+                    "nmcli",
+                    "connection",
+                    "up",
+                    "uuid",
+                    str(original_connection.get("uuid")),
+                ],
+                timeout=60,
+            )
+
+        rollback_marker_removed = _phase28_r153_remove_file(
+            marker_path,
+        )
+
+        try:
+            _phase28_r153_run_command(
+                [
+                    "nmcli",
+                    "connection",
+                    "delete",
+                    "id",
+                    ap_ssid,
+                ],
+                timeout=20,
+            )
+        except Exception:
+            pass
+
+    if reconnect_result is None or reconnect_result.get("returncode") != 0:
+        raise RuntimeError(
+            "Fanda did not reconnect to the original WiFi connection after Shelly onboarding."
+        )
+
+    return {
+        "phase": "shelly_ap_onboarding_completed",
+        "executor": "wifi_native_onboarding",
+        "phase28_r153_shelly_ap_onboarding_base": True,
+        "phase28_r153_fix2": True,
+        "requires_home_assistant_ui": False,
+        "credential_write": True,
+        "wifi_runtime_change": True,
+        "shelly_ap_ssid": ap_ssid,
+        "shelly_host": shelly_host,
+        "target_wifi_ssid": target_wifi_ssid,
+        "target_wifi_password": _phase28_r153_redact_secret(
+            target_wifi_password,
+        ),
+        "password_redacted": True,
+        "preferred_ifname": preferred_ifname,
+        "original_connection": original_connection,
+        "active_connections_before": active_connections,
+        "rollback_watchdog": rollback_watchdog,
+        "rollback_marker_removed": rollback_marker_removed,
+        "preflight_command": preflight,
+        "rescan_result": rescan_result,
+        "ap_connection_result": ap_connection_result,
+        "shelly_info": shelly_info,
+        "set_config_result": set_config_result,
+        "reboot_result": reboot_result,
+        "reconnect_original_result": reconnect_result,
+        "next_step": "discover_shelly_on_lan_after_device_joins_target_wifi",
+    }
+# PHASE28_R153_FIX2_SHELLY_AP_ONBOARDING_BASE_END
