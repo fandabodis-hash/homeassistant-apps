@@ -1016,6 +1016,52 @@ def _phase28_r153_remove_file(path):
         return False
 
 
+# PHASE28_R173_SHELLY_RESULT_SECRET_REDACTION_START
+def _phase28_r173_redact_sensitive_result(value):
+    """Redact sensitive fields before command results are persisted."""
+
+    sensitive_names = {
+        "key",
+        "password",
+        "wifi_password",
+        "target_wifi_password",
+        "pass",
+        "passwd",
+        "psk",
+        "secret",
+        "token",
+        "access_token",
+        "refresh_token",
+        "api_key",
+        "authorization",
+    }
+
+    if isinstance(value, dict):
+        redacted = {}
+        for key, item in value.items():
+            lower_key = str(key).lower()
+            if (
+                lower_key in sensitive_names
+                or "password" in lower_key
+                or "secret" in lower_key
+                or lower_key.endswith("_token")
+                or lower_key == "key"
+                or lower_key.endswith("_key")
+            ):
+                redacted[key] = "***REDACTED***"
+            else:
+                redacted[key] = _phase28_r173_redact_sensitive_result(item)
+        return redacted
+
+    if isinstance(value, list):
+        return [
+            _phase28_r173_redact_sensitive_result(item)
+            for item in value
+        ]
+
+    return value
+# PHASE28_R173_SHELLY_RESULT_SECRET_REDACTION_END
+
 def onboard_shelly_access_point(payload=None):
     import time
 
@@ -1447,9 +1493,9 @@ def onboard_shelly_access_point(payload=None):
         "phase28_r170_wifi_list_after_rescan_result": wifi_list_after_rescan_result,
         "phase28_r170_stale_ap_delete_result": stale_ap_delete_result,
         "phase28_r170_ap_connection_attempts": ap_connection_attempts,
-        "shelly_info": shelly_info,
-        "set_config_result": set_config_result,
-        "reboot_result": reboot_result,
+        "shelly_info": _phase28_r173_redact_sensitive_result(shelly_info),
+        "set_config_result": _phase28_r173_redact_sensitive_result(set_config_result),
+        "reboot_result": _phase28_r173_redact_sensitive_result(reboot_result),
         "reconnect_original_result": reconnect_result,
         "next_step": "discover_shelly_on_lan_after_device_joins_target_wifi",
     }
