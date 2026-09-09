@@ -1,13 +1,13 @@
 """Wi-Fi infrastructure discovery for TNG IQ FANDA Agent.
 
-This module lists Wi-Fi/LAN class devices that already exist in Home Assistant
-and exposes them to the cloud as infrastructure devices on the same level as
-Zigbee. It intentionally does not try to vendor-pair every possible Wi-Fi
-product.
+R131 extends the R120 Wi-Fi discovery with a safer broad detector and with a
+diagnostic audit. It still does not pair Wi-Fi devices and does not execute any
+Home Assistant service. It only reads Home Assistant states and registries.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 
@@ -28,6 +28,7 @@ WIFI_INTEGRATION_DOMAINS = {
     "localtuya",
     "tplink",
     "kasa",
+    "tplink_router",
     "meross",
     "blebox",
     "wled",
@@ -35,6 +36,8 @@ WIFI_INTEGRATION_DOMAINS = {
     "yeelight",
     "xiaomi_miio",
     "mqtt",
+    "rest",
+    "command_line",
 }
 
 EXCLUDED_ZIGBEE_DOMAINS = {
@@ -42,6 +45,35 @@ EXCLUDED_ZIGBEE_DOMAINS = {
     "deconz",
     "zigbee",
     "zigbee2mqtt",
+}
+
+CORE_OR_SYSTEM_DOMAINS = {
+    "homeassistant",
+    "hassio",
+    "supervisor",
+    "mobile_app",
+    "persistent_notification",
+    "sun",
+    "zone",
+    "person",
+    "device_tracker",
+    "scene",
+    "script",
+    "automation",
+}
+
+INFRASTRUCTURE_ENTITY_DOMAINS = {
+    "switch",
+    "light",
+    "sensor",
+    "binary_sensor",
+    "number",
+    "button",
+    "select",
+    "climate",
+    "cover",
+    "fan",
+    "lock",
 }
 
 
@@ -73,6 +105,22 @@ def _safe_ws_list(command_type: str) -> list[dict[str, Any]]:
     ]
 
 
+def _try_ws_list(
+    command_type: str,
+    warnings: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    try:
+        return _safe_ws_list(command_type)
+    except Exception as exc:
+        warnings.append(
+            {
+                "command_type": command_type,
+                "error": str(exc),
+            }
+        )
+        return []
+
+
 def _entity_domain(entity_id: str) -> str:
     return entity_id.split(".", 1)[0].lower() if "." in entity_id else ""
 
@@ -102,6 +150,42 @@ def _integration_domain(entity_registry_item: dict[str, Any]) -> str:
     return config_entry_id
 
 
+def _device_identifier_domains(device: dict[str, Any]) -> set[str]:
+    domains: set[str] = set()
+
+    identifiers = device.get("identifiers")
+    if not isinstance(identifiers, list):
+        return domains
+
+    for identifier in identifiers:
+        if not isinstance(identifier, (list, tuple)) or len(identifier) < 1:
+            continue
+
+        domain = _as_lower(identifier[0])
+        if domain:
+            domains.add(domain)
+
+    return domains
+
+
+def _connection_types(device: dict[str, Any]) -> set[str]:
+    types: set[str] = set()
+
+    connections = device.get("connections")
+    if not isinstance(connections, list):
+        return types
+
+    for connection in connections:
+        if not isinstance(connection, (list, tuple)) or len(connection) < 1:
+            continue
+
+        kind = _as_lower(connection[0])
+        if kind:
+            types.add(kind)
+
+    return types
+
+
 def _contains_wifi_hint(value: Any) -> bool:
     text = _as_lower(value)
     return any(
@@ -109,6 +193,9 @@ def _contains_wifi_hint(value: Any) -> bool:
         for hint in (
             "wifi",
             "wi-fi",
+            "wlan",
+            "lan",
+            "ethernet",
             "shelly",
             "esphome",
             "tasmota",
@@ -122,6 +209,7 @@ def _contains_wifi_hint(value: Any) -> bool:
             "blebox",
             "wled",
             "wiz",
+            "yeelight",
         )
     )
 
@@ -143,65 +231,135 @@ def _contains_zigbee_hint(value: Any) -> bool:
     )
 
 
-def _device_is_probable_wifi(
-    *,
-    device: dict[str, Any],
-    entity_items: list[dict[str, Any]],
-) -> bool:
-    domains = {
+def _entity_domains_for_device(entity_items: list[dict[str, Any]]) -> set[str]:
+    domains: set[str] = set()
+
+    for item in entity_items:
+        entity_id = _as_text(item.get("entity_id"))
+        domain = _entity_domain(entity_id)
+        if domain:
+            domains.add(domain)
+
+    return domains
+
+
+def _platforms_for_device(entity_items: list[dict[str, Any]]) -> set[str]:
+    return {
         _integration_domain(item)
         for item in entity_items
         if _integration_domain(item)
     }
 
-    if domains & EXCLUDED_ZIGBEE_DOMAINS:
-        return False
 
-    if (domains & WIFI_INTEGRATION_DOMAINS) - {"mqtt"}:
-        return True
+def _device_probe_text(device: dict[str, Any]) -> str:
+    pieces = [
+        _as_text(device.get(key))
+        for key in (
+            "name_by_user",
+            "name",
+            "manufacturer",
+            "model",
+            "sw_version",
+            "hw_version",
+            "configuration_url",
+        )
+    ]
+    return " ".join(piece for piece in pieces if piece)
 
-    if "mqtt" in domains:
-        probe = " ".join(
-            _as_text(device.get(key))
-            for key in (
-                "name_by_user",
-                "name",
-                "manufacturer",
-                "model",
-                "sw_version",
-                "hw_version",
-            )
+
+def _classification(
+    *,
+    device: dict[str, Any],
+    entity_items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    platforms = _platforms_for_device(entity_items)
+    identifier_domains = _device_identifier_domains(device)
+    connection_types = _connection_types(device)
+    entity_domains = _entity_domains_for_device(entity_items)
+    probe = _device_probe_text(device)
+
+    reasons: list[str] = []
+    excluded_reasons: list[str] = []
+
+    if platforms & EXCLUDED_ZIGBEE_DOMAINS:
+        excluded_reasons.append(
+            "excluded_zigbee_entity_platform"
         )
 
-        if _contains_zigbee_hint(probe):
-            return False
+    if identifier_domains & EXCLUDED_ZIGBEE_DOMAINS:
+        excluded_reasons.append(
+            "excluded_zigbee_identifier"
+        )
 
-        return _contains_wifi_hint(probe)
+    if _contains_zigbee_hint(probe):
+        excluded_reasons.append(
+            "excluded_zigbee_text_hint"
+        )
 
-    connections = device.get("connections")
-    if isinstance(connections, list):
-        for connection in connections:
-            if (
-                isinstance(connection, (list, tuple))
-                and len(connection) >= 2
-                and _as_lower(connection[0]) in {"mac", "ip", "hostname"}
-            ):
-                probe = " ".join(
-                    _as_text(device.get(key))
-                    for key in (
-                        "name_by_user",
-                        "name",
-                        "manufacturer",
-                        "model",
-                    )
-                )
+    if platforms <= CORE_OR_SYSTEM_DOMAINS and not _contains_wifi_hint(probe):
+        excluded_reasons.append(
+            "excluded_core_or_system_only"
+        )
 
-                if _contains_zigbee_hint(probe):
-                    return False
+    if excluded_reasons:
+        return {
+            "include": False,
+            "reasons": [],
+            "excluded_reasons": excluded_reasons,
+            "platforms": sorted(platforms),
+            "identifier_domains": sorted(identifier_domains),
+            "connection_types": sorted(connection_types),
+            "entity_domains": sorted(entity_domains),
+        }
 
-                return True
+    known_wifi_platforms = (platforms & WIFI_INTEGRATION_DOMAINS) - {"mqtt"}
+    if known_wifi_platforms:
+        reasons.append(
+            "known_wifi_platform:" + ",".join(sorted(known_wifi_platforms))
+        )
 
-    return False
+    known_wifi_identifiers = (
+        identifier_domains & WIFI_INTEGRATION_DOMAINS
+    ) - {"mqtt"}
+    if known_wifi_identifiers:
+        reasons.append(
+            "known_wifi_identifier:" + ",".join(sorted(known_wifi_identifiers))
+        )
+
+    if "mqtt" in platforms or "mqtt" in identifier_domains:
+        if _contains_wifi_hint(probe):
+            reasons.append("mqtt_with_wifi_hint")
+
+    if connection_types & {"mac", "ip", "hostname"}:
+        if entity_domains & INFRASTRUCTURE_ENTITY_DOMAINS:
+            reasons.append(
+                "network_connection_with_infrastructure_entities"
+            )
+
+    configuration_url = _as_lower(device.get("configuration_url"))
+    if configuration_url.startswith("http"):
+        reasons.append("configuration_url_http")
+
+    if _contains_wifi_hint(probe):
+        reasons.append("wifi_text_hint")
+
+    if (
+        not reasons
+        and entity_domains & {"switch", "light"}
+        and platforms
+        and not platforms <= CORE_OR_SYSTEM_DOMAINS
+    ):
+        reasons.append("non_core_controllable_non_zigbee_device")
+
+    return {
+        "include": bool(reasons),
+        "reasons": reasons,
+        "excluded_reasons": excluded_reasons,
+        "platforms": sorted(platforms),
+        "identifier_domains": sorted(identifier_domains),
+        "connection_types": sorted(connection_types),
+        "entity_domains": sorted(entity_domains),
+    }
 
 
 def _normalize_entity(
@@ -267,10 +425,58 @@ def _connection_value(device: dict[str, Any], kind: str) -> str | None:
     return None
 
 
+def _diagnostic_device_summary(
+    *,
+    device: dict[str, Any],
+    entity_items: list[dict[str, Any]],
+    classification: dict[str, Any],
+    max_entities: int = 10,
+) -> dict[str, Any]:
+    entities = [
+        _as_text(item.get("entity_id"))
+        for item in sorted(
+            entity_items,
+            key=lambda item: _as_text(item.get("entity_id")),
+        )
+        if _as_text(item.get("entity_id"))
+    ]
+
+    return {
+        "device_id": _as_text(device.get("id")),
+        "name": _as_text(
+            device.get("name_by_user")
+            or device.get("name")
+            or device.get("model")
+            or device.get("id")
+        ),
+        "manufacturer": _as_text(device.get("manufacturer")),
+        "model": _as_text(device.get("model")),
+        "configuration_url": _as_text(device.get("configuration_url")),
+        "platforms": classification.get("platforms", []),
+        "identifier_domains": classification.get(
+            "identifier_domains",
+            [],
+        ),
+        "connection_types": classification.get("connection_types", []),
+        "entity_domains": classification.get("entity_domains", []),
+        "reasons": classification.get("reasons", []),
+        "excluded_reasons": classification.get("excluded_reasons", []),
+        "entity_count": len(entities),
+        "entity_samples": entities[:max_entities],
+    }
+
+
 def discover_home_assistant_wifi_devices() -> dict[str, Any]:
+    warnings: list[dict[str, Any]] = []
+
     states = get_home_assistant_states()
     entity_registry = _safe_ws_list("config/entity_registry/list")
     device_registry = _safe_ws_list("config/device_registry/list")
+
+    config_entries = _try_ws_list(
+        "config/config_entries/list",
+        warnings,
+    )
 
     states_by_id = _state_by_entity_id(states)
     devices_by_id = _device_by_id(device_registry)
@@ -287,15 +493,48 @@ def discover_home_assistant_wifi_devices() -> dict[str, Any]:
         entities_by_device_id.setdefault(device_id, []).append(entity_item)
 
     discovered_devices: list[dict[str, Any]] = []
+    included_summaries: list[dict[str, Any]] = []
+    excluded_summaries: list[dict[str, Any]] = []
+
+    platform_counter: Counter[str] = Counter()
+    identifier_counter: Counter[str] = Counter()
+    connection_counter: Counter[str] = Counter()
+    entity_domain_counter: Counter[str] = Counter()
+    reason_counter: Counter[str] = Counter()
+    excluded_reason_counter: Counter[str] = Counter()
 
     for device_id, entity_items in sorted(entities_by_device_id.items()):
         device = devices_by_id.get(device_id, {})
-
-        if not _device_is_probable_wifi(
+        classification = _classification(
             device=device,
             entity_items=entity_items,
-        ):
+        )
+
+        platform_counter.update(classification.get("platforms", []))
+        identifier_counter.update(
+            classification.get("identifier_domains", [])
+        )
+        connection_counter.update(classification.get("connection_types", []))
+        entity_domain_counter.update(
+            classification.get("entity_domains", [])
+        )
+        reason_counter.update(classification.get("reasons", []))
+        excluded_reason_counter.update(
+            classification.get("excluded_reasons", [])
+        )
+
+        summary = _diagnostic_device_summary(
+            device=device,
+            entity_items=entity_items,
+            classification=classification,
+        )
+
+        if not classification.get("include"):
+            if len(excluded_summaries) < 20:
+                excluded_summaries.append(summary)
             continue
+
+        included_summaries.append(summary)
 
         normalized_entities = [
             _normalize_entity(
@@ -340,6 +579,17 @@ def discover_home_assistant_wifi_devices() -> dict[str, Any]:
                 "hw_version": _as_text(device.get("hw_version")),
                 "mac_address": _connection_value(device, "mac"),
                 "ip_address": _connection_value(device, "ip"),
+                "classification_reasons": classification.get("reasons", []),
+                "platforms": classification.get("platforms", []),
+                "identifier_domains": classification.get(
+                    "identifier_domains",
+                    [],
+                ),
+                "connection_types": classification.get(
+                    "connection_types",
+                    [],
+                ),
+                "entity_domains": classification.get("entity_domains", []),
                 "entity_count": len(enabled_entities),
                 "control_entity_count": len(control_entities),
                 "entities": enabled_entities,
@@ -350,6 +600,7 @@ def discover_home_assistant_wifi_devices() -> dict[str, Any]:
         "worker": "command_worker",
         "executor": "wifi_manager",
         "phase": "wifi_devices_discovered",
+        "phase28_r131_diagnostic_discovery": True,
         "infrastructure_mode": True,
         "transport": "wifi",
         "device_count": len(discovered_devices),
@@ -358,6 +609,29 @@ def discover_home_assistant_wifi_devices() -> dict[str, Any]:
             "state_count": len(states),
             "entity_registry_count": len(entity_registry),
             "device_registry_count": len(device_registry),
+            "config_entry_count": len(config_entries),
+        },
+        "diagnostics": {
+            "warnings": warnings,
+            "device_with_entities_count": len(entities_by_device_id),
+            "included_candidate_count": len(included_summaries),
+            "excluded_sample_count": len(excluded_summaries),
+            "platform_counts": dict(platform_counter.most_common(40)),
+            "identifier_domain_counts": dict(
+                identifier_counter.most_common(40)
+            ),
+            "connection_type_counts": dict(
+                connection_counter.most_common(40)
+            ),
+            "entity_domain_counts": dict(
+                entity_domain_counter.most_common(40)
+            ),
+            "include_reason_counts": dict(reason_counter.most_common(40)),
+            "excluded_reason_counts": dict(
+                excluded_reason_counter.most_common(40)
+            ),
+            "included_candidate_samples": included_summaries[:20],
+            "excluded_device_samples": excluded_summaries,
         },
         "discovered_at": datetime.now(timezone.utc).isoformat(),
     }
