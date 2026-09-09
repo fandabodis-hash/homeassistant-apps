@@ -4,13 +4,14 @@ This module is independent from Home Assistant device/entity registries. It lets
 TNG IQ FANDA Agent discover local Wi-Fi/LAN candidates while the installer stays
 inside Fanda.
 
-R135 scope:
+R139 scope:
 - no Wi-Fi credential write
 - no AP switching
 - no Home Assistant UI dependency
 - no Home Assistant integration creation
 - no device control
 - safe read-only discovery only
+- hardened Wi-Fi AP parsing and physical-LAN filtering
 """
 
 from __future__ import annotations
@@ -40,6 +41,21 @@ KNOWN_WIFI_AP_PREFIXES = (
     "esp-",
     "smartlife",
     "tuya",
+)
+
+INTERNAL_INTERFACES = (
+    "docker",
+    "br-",
+    "veth",
+    "hassio",
+    "lo",
+)
+
+PHYSICAL_INTERFACE_PREFIXES = (
+    "wlan",
+    "wl",
+    "eth",
+    "en",
 )
 
 
@@ -89,39 +105,68 @@ def _run_command(args: list[str], timeout: float = 3.0) -> dict[str, Any]:
     }
 
 
-def _parse_nmcli_wifi_list(output: str) -> list[dict[str, Any]]:
+def _split_nmcli_terse_line(line: str) -> list[str]:
+    """Split nmcli terse output while respecting backslash escaped separators."""
+
+    values: list[str] = []
+    current: list[str] = []
+    escaped = False
+
+    for char in line:
+        if escaped:
+            current.append(char)
+            escaped = False
+            continue
+
+        if char == "\\":
+            escaped = True
+            continue
+
+        if char == ":":
+            values.append("".join(current))
+            current = []
+            continue
+
+        current.append(char)
+
+    if escaped:
+        current.append("\\")
+
+    values.append("".join(current))
+    return values
+
+
+def _parse_nmcli_wifi_list(output: str, fields: list[str]) -> list[dict[str, Any]]:
     access_points: list[dict[str, Any]] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
+
+    normalized_fields = [field.lower() for field in fields]
 
     for raw_line in output.splitlines():
         line = raw_line.strip()
         if not line:
             continue
 
-        parts = line.split(":")
-        if len(parts) < 2:
-            continue
+        parts = _split_nmcli_terse_line(line)
 
-        ssid = parts[0].strip()
-        bssid = parts[1].strip()
+        row: dict[str, str] = {}
+        for index, field in enumerate(normalized_fields):
+            row[field] = parts[index].strip() if index < len(parts) else ""
 
+        ssid = row.get("ssid", "")
+        bssid = row.get("bssid", "")
         signal = None
-        security = ""
-        channel = ""
+        security = row.get("security", "")
+        channel = row.get("chan", "") or row.get("channel", "")
 
-        if len(parts) >= 3:
+        signal_raw = row.get("signal", "")
+        if signal_raw:
             try:
-                signal = int(parts[2].strip())
+                signal = int(signal_raw)
             except ValueError:
                 signal = None
 
-        if len(parts) >= 4:
-            security = parts[3].strip()
-
-        if len(parts) >= 5:
-            channel = parts[4].strip()
-
-        key = (ssid, bssid)
+        key = (ssid, bssid, channel)
         if key in seen:
             continue
         seen.add(key)
@@ -166,15 +211,56 @@ def scan_wifi_access_points() -> dict[str, Any]:
 
     attempts: list[dict[str, Any]] = []
     commands = [
-        ["nmcli", "-t", "-f", "SSID,BSSID,SIGNAL,SECURITY,CHAN", "dev", "wifi", "list"],
-        ["nmcli", "-t", "-f", "SSID,BSSID,SIGNAL,SECURITY,CHAN", "device", "wifi", "list"],
+        {
+            "fields": ["SSID", "SIGNAL", "SECURITY", "CHAN"],
+            "args": [
+                "nmcli",
+                "-t",
+                "-e",
+                "no",
+                "-f",
+                "SSID,SIGNAL,SECURITY,CHAN",
+                "dev",
+                "wifi",
+                "list",
+                "--rescan",
+                "yes",
+            ],
+        },
+        {
+            "fields": ["SSID", "BSSID", "SIGNAL", "SECURITY", "CHAN"],
+            "args": [
+                "nmcli",
+                "-t",
+                "-e",
+                "yes",
+                "-f",
+                "SSID,BSSID,SIGNAL,SECURITY,CHAN",
+                "dev",
+                "wifi",
+                "list",
+            ],
+        },
+        {
+            "fields": ["SSID", "SIGNAL", "SECURITY", "CHAN"],
+            "args": [
+                "nmcli",
+                "-t",
+                "-f",
+                "SSID,SIGNAL,SECURITY,CHAN",
+                "device",
+                "wifi",
+                "list",
+            ],
+        },
     ]
 
-    for command in commands:
-        result = _run_command(command, timeout=8.0)
+    for command_spec in commands:
+        result = _run_command(command_spec["args"], timeout=12.0)
         attempts.append(
             {
-                "args": command,
+                "args": command_spec["args"],
+                "fields": command_spec["fields"],
                 "ok": result.get("ok"),
                 "returncode": result.get("returncode"),
                 "stderr": _as_text(result.get("stderr"))[:500],
@@ -184,13 +270,18 @@ def scan_wifi_access_points() -> dict[str, Any]:
             return {
                 "ok": True,
                 "source": "nmcli",
-                "access_points": _parse_nmcli_wifi_list(str(result.get("stdout") or "")),
+                "parse_version": "phase28_r139_nmcli_fields_without_required_bssid",
+                "access_points": _parse_nmcli_wifi_list(
+                    str(result.get("stdout") or ""),
+                    command_spec["fields"],
+                ),
                 "attempts": attempts,
             }
 
     return {
         "ok": False,
         "source": None,
+        "parse_version": "phase28_r139_nmcli_fields_without_required_bssid",
         "access_points": [],
         "attempts": attempts,
     }
@@ -272,6 +363,33 @@ def _parse_ip_neigh(output: str) -> list[dict[str, Any]]:
     return neighbors
 
 
+def _is_physical_network_neighbor(item: dict[str, Any]) -> bool:
+    interface = _as_text(item.get("interface")).lower()
+    ip_address = _as_text(item.get("ip_address"))
+
+    if not interface:
+        return False
+
+    if interface.startswith(INTERNAL_INTERFACES):
+        return False
+
+    if not interface.startswith(PHYSICAL_INTERFACE_PREFIXES):
+        return False
+
+    try:
+        parsed = ipaddress.ip_address(ip_address)
+    except ValueError:
+        return False
+
+    if parsed.version != 4:
+        return False
+
+    if parsed.is_loopback or parsed.is_link_local or parsed.is_multicast:
+        return False
+
+    return True
+
+
 def discover_lan_neighbors() -> dict[str, Any]:
     """Read local neighbor table without scanning the whole subnet."""
 
@@ -295,8 +413,16 @@ def discover_lan_neighbors() -> dict[str, Any]:
     neighbors = list(combined.values())
     neighbors.sort(key=lambda item: (str(item.get("interface") or ""), str(item.get("ip_address") or "")))
 
+    physical_neighbors = [
+        item
+        for item in neighbors
+        if _is_physical_network_neighbor(item)
+    ]
+
     return {
         "neighbors": neighbors,
+        "physical_neighbors": physical_neighbors,
+        "physical_neighbor_count": len(physical_neighbors),
         "ip_neigh_available": bool(result.get("ok")),
         "ip_neigh_error": _as_text(result.get("stderr"))[:500],
     }
@@ -394,21 +520,22 @@ def _normalize_shelly_device(
 
 
 def probe_known_lan_devices(neighbors: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Probe only known neighbors. No subnet brute force."""
+    """Probe only known physical neighbors. No subnet brute force."""
 
     discovered: list[dict[str, Any]] = []
     seen_ips: set[str] = set()
 
-    for neighbor in neighbors[:MAX_LAN_PROBE_CANDIDATES]:
+    physical_neighbors = [
+        neighbor
+        for neighbor in neighbors
+        if _is_physical_network_neighbor(neighbor)
+    ]
+
+    for neighbor in physical_neighbors[:MAX_LAN_PROBE_CANDIDATES]:
         ip_address = _as_text(neighbor.get("ip_address"))
         if not ip_address or ip_address in seen_ips:
             continue
         seen_ips.add(ip_address)
-
-        try:
-            ipaddress.ip_address(ip_address)
-        except ValueError:
-            continue
 
         gen2 = _http_get_json_or_text(f"http://{ip_address}/rpc/Shelly.GetDeviceInfo")
         if gen2.get("ok") and _looks_like_shelly_payload(gen2.get("json")):
@@ -515,6 +642,10 @@ def discover_native_wifi_infrastructure() -> dict[str, Any]:
     if not isinstance(neighbors, list):
         neighbors = []
 
+    physical_neighbors = lan.get("physical_neighbors")
+    if not isinstance(physical_neighbors, list):
+        physical_neighbors = []
+
     access_points = wifi_scan.get("access_points")
     if not isinstance(access_points, list):
         access_points = []
@@ -534,7 +665,7 @@ def discover_native_wifi_infrastructure() -> dict[str, Any]:
             "requires_ha_ui": False,
             "status": "discovery_supported",
             "runtime_action": "read_only_probe",
-            "next_step": "credential_onboarding_profile_not_enabled_in_r135",
+            "next_step": "credential_onboarding_profile_not_enabled_in_r139",
         },
         {
             "profile": "shelly_access_point",
@@ -542,7 +673,7 @@ def discover_native_wifi_infrastructure() -> dict[str, Any]:
             "requires_ha_ui": False,
             "status": "candidate_detection_supported",
             "runtime_action": "read_only_ap_scan",
-            "next_step": "temporary_ap_connect_not_enabled_in_r135",
+            "next_step": "temporary_ap_connect_not_enabled_in_r139",
         },
         {
             "profile": "esphome",
@@ -575,6 +706,7 @@ def discover_native_wifi_infrastructure() -> dict[str, Any]:
         "executor": "wifi_native_onboarding",
         "phase": "wifi_native_discovery_completed",
         "phase28_r135_native_wifi_onboarding": True,
+        "phase28_r139_native_wifi_scan_hardened": True,
         "infrastructure_mode": True,
         "requires_home_assistant_ui": False,
         "credential_write": False,
@@ -582,12 +714,20 @@ def discover_native_wifi_infrastructure() -> dict[str, Any]:
         "transport": "wifi",
         "device_count": len(lan_devices),
         "devices": lan_devices,
+        "wifi_scan": {
+            "ok": wifi_scan.get("ok"),
+            "source": wifi_scan.get("source"),
+            "parse_version": wifi_scan.get("parse_version"),
+            "attempts": wifi_scan.get("attempts"),
+        },
         "wifi_access_point_count": len(access_points),
         "wifi_access_points": access_points[:40],
         "wifi_setup_candidate_count": len(ap_candidates),
         "wifi_setup_candidates": ap_candidates[:20],
         "lan_neighbor_count": len(neighbors),
         "lan_neighbors": neighbors[:MAX_LAN_PROBE_CANDIDATES],
+        "lan_physical_neighbor_count": len(physical_neighbors),
+        "lan_physical_neighbors": physical_neighbors[:MAX_LAN_PROBE_CANDIDATES],
         "ssdp": ssdp,
         "onboarding_profiles": onboarding_profiles,
         "supported_native_profiles": [
