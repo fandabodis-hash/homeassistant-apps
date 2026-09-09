@@ -2929,6 +2929,7 @@ def execute_command(
             command_id=command_id,
             command_payload=command_payload,
         )
+        return
     elif command_type == "zigbee_permit_join":
         execute_zigbee_permit_join(
             identity=identity,
