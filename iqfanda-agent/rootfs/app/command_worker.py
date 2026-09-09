@@ -50,6 +50,7 @@ from zigbee_manager import (
     trigger_zha_topology_update,
     wait_for_new_device,
 )
+from wifi_manager import discover_home_assistant_wifi_devices
 
 
 DEVICE_CONFIG_PATH = Path(
@@ -217,6 +218,48 @@ def normalize_duration_seconds(
 
     return duration
 
+
+# PHASE28_R120_WIFI_DEVICE_DISCOVERY_AGENT_START
+def execute_wifi_device_discovery(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Discover already integrated Home Assistant Wi-Fi devices."""
+
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="running",
+        result={
+            "worker": "command_worker",
+            "executor": "wifi_manager",
+            "phase": "wifi_device_discovery_started",
+            "infrastructure_mode": True,
+            "transport": "wifi",
+        },
+    )
+
+    result = discover_home_assistant_wifi_devices()
+
+    if not isinstance(result, dict):
+        raise HomeAssistantApiError(
+            "Wi-Fi discovery returned invalid result format."
+        )
+
+    result["requested_action"] = command_payload.get(
+        "requested_action",
+        "discover_home_assistant_wifi_devices",
+    )
+
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result=result,
+    )
+# PHASE28_R120_WIFI_DEVICE_DISCOVERY_AGENT_END
 
 def execute_zigbee_permit_join(
     *,
@@ -2880,7 +2923,13 @@ def execute_command(
         )
         return
 
-    if command_type == "zigbee_permit_join":
+    if command_type == "wifi_device_discovery":
+        execute_wifi_device_discovery(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+    elif command_type == "zigbee_permit_join":
         execute_zigbee_permit_join(
             identity=identity,
             command_id=command_id,
