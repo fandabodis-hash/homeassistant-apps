@@ -1141,6 +1141,55 @@ def onboard_shelly_access_point(payload=None):
             rollback_timeout_seconds=rollback_timeout_seconds,
         )
 
+        # PHASE28_R170_SHELLY_AP_CONNECT_DIAGNOSTICS_START
+        def phase28_r170_compact_command_result(value):
+            if not isinstance(value, dict):
+                return {
+                    "value": str(value)[:1000],
+                }
+
+            safe = {}
+            for key in (
+                "returncode",
+                "stdout",
+                "stderr",
+                "command",
+                "timeout",
+                "ok",
+            ):
+                if key in value:
+                    item = value.get(key)
+                    if isinstance(item, str) and len(item) > 1800:
+                        item = item[:1800] + "...TRUNCATED"
+                    safe[key] = item
+            return safe
+
+        wifi_list_before_result = _phase28_r153_run_command(
+            [
+                "nmcli",
+                "-t",
+                "-f",
+                "SSID,SIGNAL,SECURITY,CHAN",
+                "device",
+                "wifi",
+                "list",
+                "ifname",
+                preferred_ifname,
+            ],
+            timeout=25,
+        )
+
+        stale_ap_delete_result = _phase28_r153_run_command(
+            [
+                "nmcli",
+                "connection",
+                "delete",
+                "id",
+                ap_ssid,
+            ],
+            timeout=20,
+        )
+
         rescan_result = _phase28_r153_run_command(
             [
                 "nmcli",
@@ -1153,9 +1202,28 @@ def onboard_shelly_access_point(payload=None):
             timeout=25,
         )
 
+        wifi_list_after_rescan_result = _phase28_r153_run_command(
+            [
+                "nmcli",
+                "-t",
+                "-f",
+                "SSID,SIGNAL,SECURITY,CHAN",
+                "device",
+                "wifi",
+                "list",
+                "ifname",
+                preferred_ifname,
+            ],
+            timeout=25,
+        )
+
+        ap_connection_attempts = []
+
         ap_connection_result = _phase28_r153_run_command(
             [
                 "nmcli",
+                "--wait",
+                "45",
                 "device",
                 "wifi",
                 "connect",
@@ -1163,14 +1231,105 @@ def onboard_shelly_access_point(payload=None):
                 "ifname",
                 preferred_ifname,
             ],
-            timeout=60,
+            timeout=70,
+        )
+        ap_connection_attempts.append(
+            {
+                "method": "ssid_connect_after_stale_profile_delete",
+                "result": phase28_r170_compact_command_result(
+                    ap_connection_result
+                ),
+            }
         )
 
         if ap_connection_result.get("returncode") != 0:
-            raise RuntimeError(
-                "Failed to connect Fanda temporarily to Shelly AP."
+            second_rescan_result = _phase28_r153_run_command(
+                [
+                    "nmcli",
+                    "device",
+                    "wifi",
+                    "rescan",
+                    "ifname",
+                    preferred_ifname,
+                ],
+                timeout=25,
             )
 
+            second_wifi_list_result = _phase28_r153_run_command(
+                [
+                    "nmcli",
+                    "-t",
+                    "-f",
+                    "SSID,SIGNAL,SECURITY,CHAN",
+                    "device",
+                    "wifi",
+                    "list",
+                    "ifname",
+                    preferred_ifname,
+                ],
+                timeout=25,
+            )
+
+            time.sleep(3)
+
+            ap_connection_retry_result = _phase28_r153_run_command(
+                [
+                    "nmcli",
+                    "--wait",
+                    "45",
+                    "device",
+                    "wifi",
+                    "connect",
+                    ap_ssid,
+                    "ifname",
+                    preferred_ifname,
+                ],
+                timeout=70,
+            )
+
+            ap_connection_attempts.append(
+                {
+                    "method": "ssid_connect_second_rescan_retry",
+                    "result": phase28_r170_compact_command_result(
+                        ap_connection_retry_result
+                    ),
+                    "second_rescan_result": phase28_r170_compact_command_result(
+                        second_rescan_result
+                    ),
+                    "second_wifi_list_result": phase28_r170_compact_command_result(
+                        second_wifi_list_result
+                    ),
+                }
+            )
+
+            ap_connection_result = ap_connection_retry_result
+
+        if ap_connection_result.get("returncode") != 0:
+            diagnostic = {
+                "phase28_r170_shelly_ap_connect_diagnostics": True,
+                "ap_ssid": ap_ssid,
+                "preferred_ifname": preferred_ifname,
+                "wifi_list_before_result": phase28_r170_compact_command_result(
+                    wifi_list_before_result
+                ),
+                "stale_ap_delete_result": phase28_r170_compact_command_result(
+                    stale_ap_delete_result
+                ),
+                "rescan_result": phase28_r170_compact_command_result(
+                    rescan_result
+                ),
+                "wifi_list_after_rescan_result": phase28_r170_compact_command_result(
+                    wifi_list_after_rescan_result
+                ),
+                "ap_connection_attempts": ap_connection_attempts,
+            }
+
+            raise RuntimeError(
+                "Failed to connect Fanda temporarily to Shelly AP. "
+                + "R170 diagnostics: "
+                + repr(diagnostic)
+            )
+        # PHASE28_R170_SHELLY_AP_CONNECT_DIAGNOSTICS_END
         shelly_wait = _phase28_r153_wait_for_shelly_rpc(
             shelly_host,
             timeout_seconds=45,
@@ -1284,6 +1443,10 @@ def onboard_shelly_access_point(payload=None):
         "preflight_command": preflight,
         "rescan_result": rescan_result,
         "ap_connection_result": ap_connection_result,
+        "phase28_r170_wifi_list_before_result": wifi_list_before_result,
+        "phase28_r170_wifi_list_after_rescan_result": wifi_list_after_rescan_result,
+        "phase28_r170_stale_ap_delete_result": stale_ap_delete_result,
+        "phase28_r170_ap_connection_attempts": ap_connection_attempts,
         "shelly_info": shelly_info,
         "set_config_result": set_config_result,
         "reboot_result": reboot_result,
