@@ -1421,11 +1421,25 @@ def onboard_shelly_access_point(payload=None):
             "WiFi.SetConfig",
             {
                 "config": {
+
                     "sta": {
+
                         "ssid": target_wifi_ssid,
+
                         "pass": target_wifi_password,
+
                         "enable": True,
-                    }
+
+                    },
+
+                    # PHASE29_06G4H_DISABLE_SHELLY_SETUP_AP
+
+                    "ap": {
+
+                        "enable": False,
+
+                    },
+
                 }
             },
             timeout=12,
@@ -1437,11 +1451,25 @@ def onboard_shelly_access_point(payload=None):
                 "Wifi.SetConfig",
                 {
                     "config": {
+
                         "sta": {
+
                             "ssid": target_wifi_ssid,
+
                             "pass": target_wifi_password,
+
                             "enable": True,
-                        }
+
+                        },
+
+                        # PHASE29_06G4H_DISABLE_SHELLY_SETUP_AP
+
+                        "ap": {
+
+                            "enable": False,
+
+                        },
+
                     }
                 },
                 timeout=12,
@@ -2312,3 +2340,193 @@ _phase28_r177g1_enrich_wifi_devices = (
     _phase28_r177g4_enrich_wifi_devices
 )
 # PHASE28_R177G4_STABLE_WIFI_ENTITY_CATALOG_END
+# PHASE29_06G4F_REGISTERED_WIFI_PERSISTENCE_START
+_phase29_06g4f_live_enrich_wifi_devices = (
+    _phase28_r177g1_enrich_wifi_devices
+)
+
+
+def _phase29_06g4f_registry_only_device(
+    registry_id,
+    entry,
+):
+    import copy
+
+    if not isinstance(entry, dict):
+        return None
+
+    friendly_name = str(
+        entry.get("friendly_name") or ""
+    ).strip()
+
+    is_registered = (
+        entry.get("registered") is True
+        or bool(friendly_name)
+    )
+
+    if not is_registered:
+        return None
+
+    discovered_name = str(
+        entry.get("discovered_name")
+        or entry.get("device_id")
+        or registry_id
+        or ""
+    ).strip()
+
+    entities = copy.deepcopy(
+        entry.get("entities")
+        if isinstance(entry.get("entities"), list)
+        else []
+    )
+
+    for entity in entities:
+        if not isinstance(entity, dict):
+            continue
+
+        entity["available"] = False
+        entity["last_known"] = True
+
+    return {
+        "registry_id": str(
+            entry.get("registry_id")
+            or registry_id
+            or ""
+        ).strip(),
+        "device_id": entry.get("device_id"),
+        "transport": "wifi",
+        "source": "wifi_native_registry",
+        "profile": entry.get("profile"),
+        "manufacturer": entry.get("manufacturer"),
+        "model": entry.get("model"),
+        "ip_address": entry.get("ip_address"),
+        "mac_address": entry.get("mac_address"),
+        "discovered_name": discovered_name,
+        "friendly_name": friendly_name,
+        "name": friendly_name or discovered_name,
+        "registered": True,
+        "registered_at": entry.get("registered_at"),
+        "last_seen_at": entry.get("last_seen_at"),
+        "online": False,
+        "available": False,
+        "registry_only": True,
+        "capabilities": list(
+            entry.get("capabilities") or []
+        ),
+        "switch_state": entry.get("switch_state"),
+        "entities": entities,
+        "entity_count": len(entities),
+        "control_entity_count": sum(
+            1
+            for entity in entities
+            if isinstance(entity, dict)
+            and entity.get("controllable") is True
+        ),
+        "statistics_entity_count": sum(
+            1
+            for entity in entities
+            if isinstance(entity, dict)
+            and entity.get("statistics_enabled") is True
+        ),
+        "onboarding": {
+            "status": "registered",
+            "requires_ha_ui": False,
+        },
+    }
+
+
+def _phase29_06g4f_merge_registered_wifi_devices(
+    devices,
+):
+    enriched = (
+        _phase29_06g4f_live_enrich_wifi_devices(
+            devices
+        )
+    )
+
+    if not isinstance(enriched, list):
+        enriched = []
+
+    registry = _phase28_r177g1_load_registry()
+
+    if not isinstance(registry, dict):
+        return enriched
+
+    visible_registry_ids = set()
+
+    for device in enriched:
+        if not isinstance(device, dict):
+            continue
+
+        registry_id = str(
+            device.get("registry_id")
+            or _phase28_r177g1_registry_key(
+                device
+            )
+            or ""
+        ).strip()
+
+        if not registry_id:
+            continue
+
+        visible_registry_ids.add(
+            registry_id
+        )
+
+        entry = registry.get(
+            registry_id
+        )
+
+        if not isinstance(entry, dict):
+            continue
+
+        friendly_name = str(
+            entry.get("friendly_name") or ""
+        ).strip()
+
+        if (
+            entry.get("registered") is True
+            or friendly_name
+        ):
+            device["registered"] = True
+
+            if friendly_name:
+                device["friendly_name"] = friendly_name
+                device["name"] = friendly_name
+
+            onboarding = dict(
+                device.get("onboarding")
+                if isinstance(
+                    device.get("onboarding"),
+                    dict,
+                )
+                else {}
+            )
+
+            onboarding["status"] = "registered"
+            onboarding["requires_ha_ui"] = False
+            device["onboarding"] = onboarding
+
+    for registry_id, entry in registry.items():
+        if registry_id in visible_registry_ids:
+            continue
+
+        registry_only = (
+            _phase29_06g4f_registry_only_device(
+                registry_id,
+                entry,
+            )
+        )
+
+        if registry_only is not None:
+            enriched.append(
+                registry_only
+            )
+
+    return enriched
+
+
+_phase28_r177g1_enrich_wifi_devices = (
+    _phase29_06g4f_merge_registered_wifi_devices
+)
+# PHASE29_06G4F_REGISTERED_WIFI_PERSISTENCE_END
