@@ -2530,3 +2530,396 @@ _phase28_r177g1_enrich_wifi_devices = (
     _phase29_06g4f_merge_registered_wifi_devices
 )
 # PHASE29_06G4F_REGISTERED_WIFI_PERSISTENCE_END
+
+# PHASE29_07I_SHELLY_PRO_3EM_PROFILE_START
+_phase29_07i_pro3em_base_enrich_wifi_devices = (
+    _phase28_r177g1_enrich_wifi_devices
+)
+
+
+def _phase29_07i_is_shelly_pro_3em(device):
+    if not isinstance(device, dict):
+        return False
+
+    if str(
+        device.get("manufacturer") or ""
+    ).strip().lower() != "shelly":
+        return False
+
+    evidence = json.dumps(
+        {
+            "model": device.get("model"),
+            "name": device.get("name"),
+            "profile": device.get("profile"),
+            "device_id": device.get("device_id"),
+            "raw_info": device.get("raw_info"),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+    ).lower()
+
+    return any(
+        token in evidence
+        for token in (
+            "spem-003cebeu63",
+            "spem-003cebeu",
+            "shellypro3em3ct63",
+            "shellypro3em",
+            "pro3em",
+        )
+    )
+
+
+def _phase29_07i_shelly_em_status(ip_address):
+    return _phase28_r177g1_shelly_rpc(
+        ip_address,
+        "EM.GetStatus",
+        {"id": 0},
+    )
+
+
+def _phase29_07i_shelly_emdata_status(ip_address):
+    return _phase28_r177g1_shelly_rpc(
+        ip_address,
+        "EMData.GetStatus",
+        {"id": 0},
+    )
+
+
+def _phase29_07i_pro3em_float(value):
+    if isinstance(value, bool):
+        return None
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _phase29_07i_build_pro3em_entities(
+    *,
+    registry_id,
+    em_status,
+    emdata_status,
+):
+    entities = []
+
+    def add_numeric(
+        *,
+        entity_key,
+        name,
+        source_value,
+        device_class,
+        unit,
+        statistics_type="measurement",
+        source_component="em:0",
+        transform=None,
+    ):
+        numeric = _phase29_07i_pro3em_float(
+            source_value
+        )
+
+        if numeric is None:
+            return
+
+        raw_value = numeric
+
+        if transform is not None:
+            numeric = transform(numeric)
+
+        entity = {
+            "entity_id": _phase28_r177g4_entity_id(
+                registry_id,
+                entity_key,
+            ),
+            "entity_key": entity_key,
+            "domain": "sensor",
+            "device_class": device_class,
+            "name": name,
+            "state": numeric,
+            "state_numeric": numeric,
+            "value_type": "number",
+            "unit": unit,
+            "available": True,
+            "controllable": False,
+            "schema_visible": True,
+            "statistics_enabled": True,
+            "statistics_type": statistics_type,
+            "source_component": source_component,
+            "measurement_profile": "shelly_pro_3em",
+        }
+
+        if raw_value != numeric:
+            entity["raw_value"] = raw_value
+            entity["raw_unit"] = (
+                "Wh"
+                if source_component == "emdata:0"
+                else unit
+            )
+
+        entities.append(entity)
+
+    add_numeric(
+        entity_key="power_total:0",
+        name="Okamzity cinny vykon celkem",
+        source_value=em_status.get("total_act_power"),
+        device_class="power",
+        unit="W",
+    )
+
+    add_numeric(
+        entity_key="apparent_power_total:0",
+        name="Okamzity zdanlivy vykon celkem",
+        source_value=em_status.get("total_aprt_power"),
+        device_class="apparent_power",
+        unit="VA",
+    )
+
+    add_numeric(
+        entity_key="current_total:0",
+        name="Proud celkem",
+        source_value=em_status.get("total_current"),
+        device_class="current",
+        unit="A",
+    )
+
+    phase_names = (
+        ("a", "l1", "L1"),
+        ("b", "l2", "L2"),
+        ("c", "l3", "L3"),
+    )
+
+    for phase, key, label in phase_names:
+        add_numeric(
+            entity_key=f"power_{key}:0",
+            name=f"Cinny vykon {label}",
+            source_value=em_status.get(f"{phase}_act_power"),
+            device_class="power",
+            unit="W",
+        )
+
+        add_numeric(
+            entity_key=f"apparent_power_{key}:0",
+            name=f"Zdanlivy vykon {label}",
+            source_value=em_status.get(f"{phase}_aprt_power"),
+            device_class="apparent_power",
+            unit="VA",
+        )
+
+        add_numeric(
+            entity_key=f"voltage_{key}:0",
+            name=f"Napeti {label}",
+            source_value=em_status.get(f"{phase}_voltage"),
+            device_class="voltage",
+            unit="V",
+        )
+
+        add_numeric(
+            entity_key=f"current_{key}:0",
+            name=f"Proud {label}",
+            source_value=em_status.get(f"{phase}_current"),
+            device_class="current",
+            unit="A",
+        )
+
+        add_numeric(
+            entity_key=f"power_factor_{key}:0",
+            name=f"Ucinik {label}",
+            source_value=em_status.get(f"{phase}_pf"),
+            device_class="power_factor",
+            unit=None,
+        )
+
+        add_numeric(
+            entity_key=f"frequency_{key}:0",
+            name=f"Frekvence {label}",
+            source_value=em_status.get(f"{phase}_freq"),
+            device_class="frequency",
+            unit="Hz",
+        )
+
+    def wh_to_kwh(value):
+        return round(value / 1000.0, 6)
+
+    add_numeric(
+        entity_key="energy_import_total:0",
+        name="Celkova odebrana energie",
+        source_value=emdata_status.get("total_act"),
+        device_class="energy",
+        unit="kWh",
+        statistics_type="total_increasing",
+        source_component="emdata:0",
+        transform=wh_to_kwh,
+    )
+
+    add_numeric(
+        entity_key="energy_export_total:0",
+        name="Celkova dodana energie",
+        source_value=emdata_status.get("total_act_ret"),
+        device_class="energy",
+        unit="kWh",
+        statistics_type="total_increasing",
+        source_component="emdata:0",
+        transform=wh_to_kwh,
+    )
+
+    for phase, key, label in phase_names:
+        add_numeric(
+            entity_key=f"energy_import_{key}:0",
+            name=f"Odebrana energie {label}",
+            source_value=emdata_status.get(
+                f"{phase}_total_act_energy"
+            ),
+            device_class="energy",
+            unit="kWh",
+            statistics_type="total_increasing",
+            source_component="emdata:0",
+            transform=wh_to_kwh,
+        )
+
+        add_numeric(
+            entity_key=f"energy_export_{key}:0",
+            name=f"Dodana energie {label}",
+            source_value=emdata_status.get(
+                f"{phase}_total_act_ret_energy"
+            ),
+            device_class="energy",
+            unit="kWh",
+            statistics_type="total_increasing",
+            source_component="emdata:0",
+            transform=wh_to_kwh,
+        )
+
+    return entities
+
+
+def _phase29_07i_enrich_shelly_pro_3em(devices):
+    enriched = (
+        _phase29_07i_pro3em_base_enrich_wifi_devices(
+            devices
+        )
+    )
+
+    if not isinstance(enriched, list):
+        return []
+
+    registry = _phase28_r177g1_load_registry()
+    registry_changed = False
+
+    for device in enriched:
+        if not _phase29_07i_is_shelly_pro_3em(device):
+            continue
+
+        registry_id = str(
+            device.get("registry_id")
+            or _phase28_r177g1_registry_key(device)
+            or ""
+        ).strip()
+
+        ip_address = str(
+            device.get("ip_address") or ""
+        ).strip()
+
+        if not registry_id:
+            continue
+
+        device["profile"] = "shelly_pro_3em"
+        device["measurement_device"] = True
+        device["controllable"] = False
+        device["capabilities"] = [
+            "three_phase_energy_meter",
+            "power_measurement",
+            "voltage_measurement",
+            "current_measurement",
+            "frequency_measurement",
+            "power_factor_measurement",
+            "energy_import_measurement",
+            "energy_export_measurement",
+        ]
+
+        if not ip_address:
+            continue
+
+        try:
+            em_status = (
+                _phase29_07i_shelly_em_status(
+                    ip_address
+                )
+            )
+
+            emdata_status = (
+                _phase29_07i_shelly_emdata_status(
+                    ip_address
+                )
+            )
+        except Exception as exc:
+            device["entity_probe_error"] = (
+                "Shelly Pro 3EM RPC: "
+                + str(exc)
+            )
+            continue
+
+        if not isinstance(em_status, dict):
+            device["entity_probe_error"] = (
+                "Shelly Pro 3EM EM.GetStatus did not return an object."
+            )
+            continue
+
+        if not isinstance(emdata_status, dict):
+            emdata_status = {}
+
+        entities = (
+            _phase29_07i_build_pro3em_entities(
+                registry_id=registry_id,
+                em_status=em_status,
+                emdata_status=emdata_status,
+            )
+        )
+
+        device["entities"] = entities
+        device["entity_count"] = len(entities)
+        device["control_entity_count"] = 0
+        device["statistics_entity_count"] = sum(
+            1
+            for entity in entities
+            if entity.get("statistics_enabled") is True
+        )
+        device["switch_state"] = None
+        device["raw_em_status"] = em_status
+        device["raw_emdata_status"] = emdata_status
+        device.pop("entity_probe_error", None)
+
+        entry = registry.get(registry_id)
+
+        if isinstance(entry, dict):
+            entry = dict(entry)
+            entry["profile"] = "shelly_pro_3em"
+            entry["capabilities"] = list(
+                device["capabilities"]
+            )
+            entry["entities"] = [
+                dict(entity)
+                for entity in entities
+            ]
+            entry["entity_count"] = device["entity_count"]
+            entry["control_entity_count"] = 0
+            entry["statistics_entity_count"] = (
+                device["statistics_entity_count"]
+            )
+            entry["switch_state"] = None
+            registry[registry_id] = entry
+            registry_changed = True
+
+    if registry_changed:
+        _phase28_r177g1_save_registry(
+            registry
+        )
+
+    return enriched
+
+
+_phase28_r177g1_enrich_wifi_devices = (
+    _phase29_07i_enrich_shelly_pro_3em
+)
+# PHASE29_07I_SHELLY_PRO_3EM_PROFILE_END
