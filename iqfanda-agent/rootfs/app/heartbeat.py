@@ -233,6 +233,10 @@ def build_communication_state() -> dict:
         }
 
 
+    # F30_04C_R6_REGISTERED_WIFI_RUNTIME: no discovery or registry writes.
+    from wifi_runtime_telemetry import collect_registered_wifi_telemetry
+    communication_state["wifi_telemetry"] = collect_registered_wifi_telemetry()
+
     return communication_state
 
 
@@ -440,7 +444,10 @@ def main() -> None:
         "IQ FANDA heartbeat agent spuštěn.",
     )
 
+    from wifi_runtime_telemetry import cycle_sleep, fast_cycle_required
+
     while True:
+        cycle_started = time.monotonic()
         interval = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
 
         try:
@@ -492,7 +499,9 @@ def main() -> None:
                 "Heartbeat skončil neočekávanou chybou."
             )
 
-        time.sleep(interval)
+        # A fresh registered-device cycle is scheduled relative to its START.
+        # Other installations retain their original configured heartbeat sleep.
+        time.sleep(cycle_sleep(interval, cycle_started, fast=fast_cycle_required()))
 
 
 if __name__ == "__main__":
