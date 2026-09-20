@@ -1,4 +1,4 @@
-"""Cloudovy vykonavatel prikazu TNG IQ FANDA Agentu."""
+﻿"""Cloudovy vykonavatel prikazu TNG IQ FANDA Agentu."""
 
 import json
 from datetime import datetime, timedelta, timezone
@@ -95,6 +95,7 @@ _PHASE28_R160_FIX2_SENSITIVE_PAYLOAD_KEYS = {
     "access_token",
     "refresh_token",
     "api_key",
+    "key",
     "authorization",
 }
 
@@ -111,6 +112,10 @@ def redact_sensitive_payload_for_logging(value):
                 or "password" in key_lower
                 or "secret" in key_lower
                 or key_lower.endswith("_token")
+                # PHASE28_R173B_GENERIC_KEY_REDACTION_START
+                or key_lower == "key"
+                or key_lower.endswith("_key")
+                # PHASE28_R173B_GENERIC_KEY_REDACTION_END
             ):
                 safe[key_text] = "***REDACTED***"
             else:
