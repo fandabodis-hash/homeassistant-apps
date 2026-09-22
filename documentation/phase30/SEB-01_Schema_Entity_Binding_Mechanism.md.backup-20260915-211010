@@ -1,0 +1,382 @@
+# SEB-01 — Schema Entity Binding Mechanism
+
+**Český název:** Mechanismus vazby entity Zigbee/Wi‑Fi do místa schématu  
+**Projekt:** TNG IQ FANDA  
+**Fáze:** 30  
+**Status:** závazný funkční mechanismus / významný milník  
+**Referenční ověření:** model 00012, individuální schéma SVJ Blansko, karta `BOJLER`, bod `TEPLOTA`  
+**Referenční vazba:** `Teplota bojler → Teplota`  
+**Referenční entita:** `sensor.sonoff_snzb_02ld`  
+**Datum zápisu:** 2026-09-15
+
+---
+
+## 1. Účel mechanismu
+
+SEB-01 definuje jednotný způsob, jak v individuálním grafickém schématu zákazníka napojit konkrétní místo v grafu na konkrétní entitu zařízení, které je napárované na právě editovaného Fandu.
+
+Typický postup:
+
+1. Uživatel v individuálním schématu ukáže nebo určí místo, kde se má zobrazit hodnota.
+2. Systém v tomto místě zobrazí administrační výběr.
+3. Výběr obsahuje Zigbee a Wi‑Fi zařízení patřící pouze k právě editovanému modelu / účtu / místu instalace.
+4. Zařízení se zobrazují pod názvy, které zadal instalatér.
+5. Pod zařízením se zobrazují jeho hlavní entity, například `Teplota`, `Napětí`, `Proud`, `Výkon`, `Energie`, `Stav`, `Baterie`.
+6. Admin vybere konkrétní entitu a klikne na `Uložit`.
+7. Systém uloží vazbu a okamžitě zobrazí hodnotu v daném místě schématu.
+8. Klientský účet nevidí výběr ani technické entity; vidí pouze výslednou hodnotu / stav.
+
+---
+
+## 2. Název mechanismu
+
+**SEB-01 — Schema Entity Binding Mechanism**
+
+Doporučený český název v dokumentaci a komentářích:
+
+**Mechanismus vazby entity zařízení do místa schématu**
+
+Krátký pracovní název:
+
+**Vazba entity do schématu**
+
+---
+
+## 3. Vztah k WIM-01
+
+SEB-01 navazuje na mechanismus:
+
+**WIM-01 — Workspace Injection Mechanism**  
+**Mechanismus vkládání prvků do aktivní pracovní plochy**
+
+WIM-01 řeší, jak do správné aktivní render větve vložit vizuální komponentu.
+
+SEB-01 řeší, jak tato komponenta získá a uloží vazbu na konkrétní entitu zařízení a jak tuto hodnotu následně zobrazuje adminovi i klientovi.
+
+Zjednodušeně:
+
+```text
+WIM-01 = kam se prvek vloží
+SEB-01 = jak se vložený prvek napojí na konkrétní entitu zařízení
+```
+
+---
+
+## 4. Závazný princip rozsahu
+
+SEB-01 nikdy nesmí hledat zařízení globálně přes celý cloud.
+
+Každý výběr entit musí být omezen na aktuální kontext:
+
+```text
+device_uuid právě editovaného Fandy
+site_id právě editovaného místa instalace
+účet / zákazník daného zařízení
+aktuální individuální modul / schéma
+```
+
+Pro referenční model 00012:
+
+```text
+target_model: 00012
+target_device_uuid: 28fb44c3-4f8d-4ea4-90ab-f7e6a3b509fc
+target_site_id: 9c4c4838-ae80-41ed-9d45-2e75cad523a9
+schema: f29-00012-schema-v2
+card: BOJLER
+value: TEPLOTA_BOJLERU
+```
+
+---
+
+## 5. Závazné pravidlo zobrazování názvů
+
+Selector nesmí jako hlavní názvy zobrazovat technické identifikátory typu:
+
+```text
+BASIC-ZB1GSP
+SNZB-02LD bez vlastního názvu
+ieee
+nwk
+neighbor_count
+entity_count
+device_reg_id
+entity_id jako název zařízení
+```
+
+Selector musí jako primární názvy zobrazovat názvy, které zadal instalatér, například:
+
+```text
+Teplota bojler
+Elektroměr L1
+Elektroměr L2
+Elektroměr L3
+Akumulační nádrž
+Teplota přívod topná bojler
+Teplota zpátečka topná bojler
+Spínač bojler stupeň 1
+Spínač bojler stupeň 2
+```
+
+Technické údaje mohou být uloženy uvnitř vazby, ale běžně se nemají zobrazovat jako hlavní text výběru.
+
+---
+
+## 6. Struktura výběru
+
+Výběr má být pro admina seskupený podle instalátorského názvu zařízení.
+
+Příklad pro Zigbee seznam modelu 00012:
+
+```text
+Doporučeno pro tento bod
+  Teplota bojler → Teplota
+
+Teplota bojler
+  Teplota
+  Baterie
+  LQI
+  RSSI
+
+Elektroměr L1
+  Napětí
+  Proud
+  Výkon
+  Energie
+  Stav
+  LQI
+  RSSI
+
+Elektroměr L2
+  Napětí
+  Proud
+  Výkon
+  Energie
+  Stav
+  LQI
+  RSSI
+
+Elektroměr L3
+  Napětí
+  Proud
+  Výkon
+  Energie
+  Stav
+  LQI
+  RSSI
+```
+
+U konkrétního bodu ve schématu se má nahoře zobrazit doporučená skupina podle významu bodu.
+
+Příklad:
+
+```text
+Bod ve schématu: BOJLER → TEPLOTA
+Doporučená položka: Teplota bojler → Teplota
+```
+
+---
+
+## 7. Datový model vazby
+
+Doporučený minimální tvar uložené vazby:
+
+```json
+{
+  "mechanism": "SEB-01",
+  "target_model": "00012",
+  "target_device_uuid": "28fb44c3-4f8d-4ea4-90ab-f7e6a3b509fc",
+  "target_site_id": "9c4c4838-ae80-41ed-9d45-2e75cad523a9",
+  "schema_key": "f29-00012-schema-v2",
+  "element_key": "boiler.temperature",
+  "target_card": "BOJLER",
+  "target_value": "TEPLOTA_BOJLERU",
+  "transport": "zigbee",
+  "device_name": "Teplota bojler",
+  "entity_name": "Teplota",
+  "entity_id": "sensor.sonoff_snzb_02ld",
+  "capability": "temperature",
+  "unit": "°C",
+  "client_visibility": "value_only",
+  "admin_visibility": "selector_and_value"
+}
+```
+
+---
+
+## 8. Admin pohled
+
+Admin pohled musí obsahovat:
+
+```text
+1. aktuální hodnotu v grafu,
+2. výběrové pole pro vazbu,
+3. seznam zařízení podle instalátorských názvů,
+4. hlavní entity pod každým zařízením,
+5. tlačítko Uložit,
+6. potvrzení, že vazba byla uložena a hodnota převzata.
+```
+
+Admin může vidět technické údaje jen jako rozšířenou diagnostiku, ne jako hlavní text výběru.
+
+---
+
+## 9. Klientský pohled
+
+Klientský pohled nesmí zobrazovat:
+
+```text
+selector,
+entity_id,
+device_uuid,
+site_id,
+technické názvy zařízení,
+vnitřní vazební klíče,
+diagnostické texty,
+tlačítko Uložit.
+```
+
+Klientský pohled smí zobrazit pouze běžný uživatelský výsledek, například:
+
+```text
+TEPLOTA 51,7 °C
+```
+
+Volitelně může zobrazit srozumitelný zdroj bez technických identifikátorů:
+
+```text
+Zdroj: Teplota bojler
+```
+
+---
+
+## 10. Bezpečnostní pravidla
+
+SEB-01 nesmí při výběru nebo uložení vazby odeslat žádný příkaz do fyzického zařízení.
+
+Zakázáno:
+
+```text
+Zigbee command
+Wi-Fi command
+zapnutí/vypnutí zásuvky
+párování
+identify efekt
+reset zařízení
+změna konfigurace zařízení
+změna command queue
+globální cleanup cloudu
+```
+
+Povolené v rámci SEB-01:
+
+```text
+čtení katalogu zařízení a entit,
+zobrazení selectoru adminovi,
+uložení vazby entity do konfigurace individuálního modulu,
+zobrazení hodnoty v grafu,
+zobrazení hodnoty klientovi.
+```
+
+---
+
+## 11. Napojení na Zigbee a Wi‑Fi infrastrukturu
+
+SEB-01 nesmí zakládat Zigbee ani Wi‑Fi zařízení.
+
+Platí pravidlo:
+
+```text
+Zigbee/Wi‑Fi infrastruktura je samostatná.
+Zařízení se nejdříve napárují a pojmenují v příslušné infrastrukturní kartě.
+Technologický modul nebo individuální schéma z těchto existujících zařízení pouze vybírá entity.
+```
+
+To znamená:
+
+```text
+Konfigurovat Zigbee síť = párování, pojmenování, stav zařízení
+Konfigurovat Wi‑Fi zařízení = registrace, pojmenování, stav zařízení
+Individuální schéma = výběr již existující entity a její zobrazení
+```
+
+---
+
+## 12. Referenční ověření ve Fázi 30
+
+Referenční ověřený případ:
+
+```text
+model: 00012
+schéma: SVJ Blansko
+karta: BOJLER
+bod: TEPLOTA
+zařízení: Teplota bojler
+entita: Teplota
+HA entita: sensor.sonoff_snzb_02ld
+typ hodnoty: temperature
+jednotka: °C
+admin: výběr + uložit
+klient: pouze hodnota
+```
+
+Ověřený uživatelský závěr:
+
+```text
+Seznam má používat názvy zadané instalatérem.
+Pro bod ve schématu se má vybrat konkrétní entita.
+Po uložení se hodnota musí zobrazit normálně v admin pohledu i v klientském pohledu.
+```
+
+---
+
+## 13. Závazný postup pro další body ve schématu
+
+Pro každý další bod se použije stejný postup:
+
+```text
+1. Identifikovat aktivní schéma a konkrétní bod.
+2. Vložit selector pouze do tohoto místa.
+3. Načíst zařízení pouze pro aktuální model / device_uuid / site_id.
+4. Zobrazit názvy podle instalátora.
+5. Doporučit relevantní entity podle typu bodu.
+6. Po výběru uložit vazbu.
+7. V admin pohledu zobrazit selector + hodnotu.
+8. V klientském pohledu zobrazit pouze hodnotu.
+```
+
+Příklady dalších bodů:
+
+```text
+AKU NÁDRŽ → TEPLOTA
+TOPNÝ OKRUH 1 → STAV
+TOPNÝ OKRUH 2 → STAV
+ELEKTROMĚR → AKTUÁLNÍ VÝKON
+BIVALENCE TUV → STAV ZAP/VYP
+BIVALENCE TUV → MOTO HODINY
+```
+
+---
+
+## 14. Poznámka k dočasným implementacím F30
+
+Dočasné hotfixy F30.2I až F30.2U slouží jako ověřovací implementace mechanismu.
+
+Finální implementace má být sjednocena takto:
+
+```text
+1. Nepoužívat statické JSON soubory jako trvalé úložiště.
+2. Vazbu ukládat serverově do konfigurace individuálního modulu.
+3. Katalog entit generovat z aktuálního cloudového stavu zařízení.
+4. Klientskému pohledu vracet pouze sanitizovanou hodnotu.
+5. Technické entity a identifikátory neukazovat běžnému klientovi.
+6. Mechanismus zobecnit pro všechny body individuálního schématu.
+```
+
+---
+
+## 15. Stav dokumentace
+
+Tento dokument zavádí mechanismus **SEB-01** jako závazný projektový celek.
+
+Od této chvíle se při řešení individuálních schémat nesmí znovu začínat od globálního hledání entit v cloudu. Každý další bod ve schématu musí vycházet z tohoto mechanismu.
+
