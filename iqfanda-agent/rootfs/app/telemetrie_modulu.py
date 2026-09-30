@@ -26,6 +26,10 @@ from spot_boiler_intent import (
     load_spot_boiler_intent,
 )
 
+from pv_surplus_target_intent import (
+    load_pv_surplus_target_intent,
+)
+
 from pv_surplus_decision import (
     STAV_ACTIVE,
     STAV_FAULT,
@@ -434,8 +438,12 @@ def vytvorit_pv_surplus_entity(
                     sensor.get("reference") or ""
                 ).strip()
 
+                # R3R11_ISOLATED_MULTI_TARGET_PV_SURPLUS
                 if (
-                    role != "water_temperature"
+                    role not in {
+                        "water_temperature",
+                        "temperature",
+                    }
                     or not reference
                 ):
                     continue
@@ -480,7 +488,7 @@ def vytvorit_pv_surplus_entity(
                             "ha_entity_id":
                                 reference,
                             "role":
-                                "water_temperature",
+                                role,
                         },
                     }
                 )
@@ -1104,6 +1112,404 @@ def vyhodnotit_pv_surplus_dry_run(
     return result
 
 
+
+def _r3r11_target_priority(target: dict[str, Any]) -> int:
+    try:
+        return int(target.get("priority") or 999999)
+    except (TypeError, ValueError):
+        return 999999
+
+
+def _r3r11_active_targets(
+    configuration: dict[str, Any],
+) -> list[dict[str, Any]]:
+    targets = configuration.get("targets")
+    if not isinstance(targets, list):
+        return []
+
+    return sorted(
+        (
+            target
+            for target in targets
+            if isinstance(target, dict)
+            and target.get("enabled") is True
+            and target.get("configuration_status") == "verified"
+        ),
+        key=_r3r11_target_priority,
+    )
+
+
+def _r3r11_target_temperature_sensor(
+    target: dict[str, Any],
+) -> dict[str, Any] | None:
+    target_type = str(target.get("type") or "").strip().lower()
+
+    if target_type == "domestic_hot_water":
+        accepted_roles = ("water_temperature",)
+    elif target_type == "generic_load":
+        # Historical transport alias remains accepted.
+        accepted_roles = ("temperature", "water_temperature")
+    else:
+        return None
+
+    sensors = target.get("sensors")
+    if not isinstance(sensors, list):
+        return None
+
+    for preferred_role in accepted_roles:
+        for sensor in sensors:
+            if not isinstance(sensor, dict):
+                continue
+            if sensor.get("status") != "verified":
+                continue
+
+            role = str(sensor.get("role") or "").strip().lower()
+            reference = str(sensor.get("reference") or "").strip()
+
+            if role == preferred_role and reference:
+                return sensor
+
+    return None
+
+
+def _r3r11_read_target_context(
+    target: dict[str, Any],
+) -> dict[str, Any]:
+    target_id = str(target.get("id") or "").strip()
+    target_name = str(target.get("name") or "Cil").strip()
+    target_type = str(target.get("type") or "").strip().lower()
+
+    if target_type not in {
+        "domestic_hot_water",
+        "generic_load",
+    }:
+        raise ValueError(
+            "Nepodporovany typ energetickeho cile: "
+            f"{target_type or 'unknown'}"
+        )
+
+    conditions = target.get("conditions")
+    if not isinstance(conditions, dict):
+        raise ValueError("Energeticky cil nema conditions.")
+
+    temperature_operator = str(
+        conditions.get("temperature_operator")
+        or "below_or_equal"
+    ).strip().lower()
+
+    if target_type == "domestic_hot_water":
+        temperature_operator = "below_or_equal"
+
+    if (
+        target_type == "generic_load"
+        and temperature_operator != "below_or_equal"
+    ):
+        raise ValueError(
+            "Autonomni generic_load zatim podporuje "
+            "pouze temperature_operator=below_or_equal."
+        )
+
+    sensor = _r3r11_target_temperature_sensor(target)
+    if sensor is None:
+        raise ValueError(
+            "Energeticky cil nema overene "
+            "teplotni cidlo podporovane role."
+        )
+
+    temperature_reference = str(
+        sensor.get("reference") or ""
+    ).strip()
+
+    temperature_state = nacist_ha_stav(temperature_reference)
+    temperature_value, _, _ = normalizovat_ha_hodnotu(
+        temperature_reference,
+        temperature_state,
+    )
+
+    if temperature_value is None:
+        raise ValueError(
+            "Teplotni entita energetickeho cile "
+            "nema platnou hodnotu."
+        )
+
+    output = target.get("output")
+    if not isinstance(output, dict):
+        raise ValueError("Energeticky cil nema vystup.")
+
+    if output.get("status") != "verified":
+        raise ValueError("Vystup energetickeho cile neni overen.")
+
+    output_reference = str(
+        output.get("reference") or ""
+    ).strip()
+
+    if not output_reference:
+        raise ValueError("Energeticky cil nema output reference.")
+
+    output_state = nacist_ha_stav(output_reference)
+    output_value, _, _ = normalizovat_ha_hodnotu(
+        output_reference,
+        output_state,
+    )
+
+    if not isinstance(output_value, bool):
+        raise ValueError(
+            "Vystup energetickeho cile nema platny boolean stav."
+        )
+
+    return {
+        "target": target,
+        "target_id": target_id,
+        "target_name": target_name,
+        "target_type": target_type,
+        "priority": _r3r11_target_priority(target),
+        "temperature_operator": temperature_operator,
+        "temperature_reference": temperature_reference,
+        "temperature_c": temperature_value,
+        "output_reference": output_reference,
+        "actual_output_on": output_value,
+    }
+
+
+def vyhodnotit_pv_surplus_targets_dry_run(
+    *,
+    cloud_config: dict[str, Any],
+    fve_entities: list[dict[str, Any]],
+    now: float,
+) -> list[dict[str, Any]]:
+    """
+    R3R11 isolated multi-target evaluator.
+
+    FVE energy state is evaluated once.
+    Every verified target is evaluated independently.
+    Failure of one target must not suppress another target.
+    """
+    runtime_configuration = najdi_pv_surplus_runtime(cloud_config)
+    if runtime_configuration is None:
+        return []
+
+    configuration = runtime_configuration.get("configuration")
+    if not isinstance(configuration, dict):
+        return []
+
+    surplus_source = configuration.get("surplus_source")
+    if not isinstance(surplus_source, dict):
+        return []
+
+    if surplus_source.get("type") != "battery_soc":
+        return []
+
+    battery_soc = surplus_source.get("battery_soc")
+    if not isinstance(battery_soc, dict):
+        return []
+
+    source_configuration = {
+        **battery_soc,
+        "confirmation_seconds": surplus_source.get(
+            "confirmation_seconds",
+            30,
+        ),
+    }
+
+    targets = _r3r11_active_targets(configuration)
+    if not targets:
+        return []
+
+    contexts = []
+    errors = {}
+
+    for target in targets:
+        target_id = str(target.get("id") or "").strip()
+        try:
+            contexts.append(_r3r11_read_target_context(target))
+        except Exception as exc:
+            errors[target_id] = str(exc)
+
+    any_output_active = any(
+        context.get("actual_output_on") is True
+        for context in contexts
+    )
+
+    previous_state = str(
+        _pv_surplus_dry_run_state.get("state")
+        or STAV_OFF
+    )
+    confirming_since = _pv_surplus_dry_run_state.get(
+        "confirming_since"
+    )
+
+    energy_result = vyhodnotit_stav_prebytku(
+        konfigurace=source_configuration,
+        fve_entity=fve_entities,
+        predchozi_stav=previous_state,
+        confirming_since=confirming_since,
+        now=now,
+    )
+
+    energy_result = aplikovat_pv_surplus_telemetry_grace(
+        energy_result=energy_result,
+        previous_state=previous_state,
+        output_active=any_output_active,
+        now=now,
+    )
+
+    _pv_surplus_dry_run_state["state"] = energy_result["state"]
+    _pv_surplus_dry_run_state["confirming_since"] = (
+        energy_result.get("confirming_since")
+    )
+
+    context_by_id = {
+        context["target_id"]: context
+        for context in contexts
+    }
+
+    results = []
+
+    for target in targets:
+        target_id = str(target.get("id") or "").strip()
+        target_name = str(target.get("name") or "Cil").strip()
+        target_type = str(target.get("type") or "").strip().lower()
+        priority = _r3r11_target_priority(target)
+        context = context_by_id.get(target_id)
+
+        if context is None:
+            results.append(
+                {
+                    "target_id": target_id,
+                    "target_name": target_name,
+                    "target_type": target_type,
+                    "priority": priority,
+                    "resource_key": "pv_surplus_target:" + target_id,
+                    "energy_state": energy_result["state"],
+                    "energy_reason": energy_result["reason"],
+                    "target_state": STAV_FAULT,
+                    "target_reason": errors.get(
+                        target_id,
+                        "target_context_fault",
+                    ),
+                    "heat_demand": False,
+                    "should_be_on": False,
+                    "actual_output_on": None,
+                    "can_actuate": False,
+                    "soc_percent": energy_result.get("soc_percent"),
+                    "pv_power_w": energy_result.get("pv_power_w"),
+                    "grid_power_w": energy_result.get("grid_power_w"),
+                }
+            )
+            continue
+
+        try:
+            target_result = vyhodnotit_teplotu_cile(
+                target=target,
+                temperature_c=context["temperature_c"],
+                vystup_aktivni=context["actual_output_on"],
+            )
+
+            combined_result = vyhodnotit_cil_prebytku(
+                surplus_result=energy_result,
+                target_result=target_result,
+            )
+
+            # R3R20R6_MULTI_TARGET_GRACE_HOLD_ONLY
+            actual_output_on = bool(context["actual_output_on"])
+            should_be_on = bool(combined_result["should_be_on"])
+
+            # Historical grace contract may keep only a target
+            # that was already physically ON. A different OFF
+            # target must never start merely because another
+            # target keeps the shared energy state in grace.
+            telemetry_grace_hold_only = (
+                energy_result.get("telemetry_grace_active") is True
+                and not actual_output_on
+            )
+
+            if telemetry_grace_hold_only:
+                should_be_on = False
+
+            if should_be_on:
+                would_action = (
+                    "NONE_ALREADY_ON"
+                    if actual_output_on
+                    else "WOULD_TURN_ON"
+                )
+            else:
+                would_action = (
+                    "WOULD_TURN_OFF"
+                    if actual_output_on
+                    else "NONE_ALREADY_OFF"
+                )
+
+            result = {
+                "target_id": target_id,
+                "target_name": target_name,
+                "target_type": target_type,
+                "priority": priority,
+                "resource_key": "pv_surplus_target:" + target_id,
+                "temperature_operator": context["temperature_operator"],
+                "temperature_reference": context["temperature_reference"],
+                "output_reference": context["output_reference"],
+                "energy_state": energy_result["state"],
+                "energy_reason": energy_result["reason"],
+                "target_state": target_result["state"],
+                "target_reason": target_result["reason"],
+                "heat_demand": target_result["heat_demand"],
+                "should_be_on": should_be_on,
+                "would_action": would_action,
+                "actual_output_on": actual_output_on,
+                "can_actuate": True,
+                "telemetry_grace_hold_only":
+                    telemetry_grace_hold_only,
+                "soc_percent": energy_result.get("soc_percent"),
+                "pv_power_w": energy_result.get("pv_power_w"),
+                "grid_power_w": energy_result.get("grid_power_w"),
+                "temperature_c": target_result.get("temperature_c"),
+            }
+
+        except Exception as exc:
+            result = {
+                "target_id": target_id,
+                "target_name": target_name,
+                "target_type": target_type,
+                "priority": priority,
+                "resource_key": "pv_surplus_target:" + target_id,
+                "output_reference": context.get("output_reference"),
+                "energy_state": energy_result["state"],
+                "energy_reason": energy_result["reason"],
+                "target_state": STAV_FAULT,
+                "target_reason": str(exc),
+                "heat_demand": False,
+                "should_be_on": False,
+                "actual_output_on": context.get("actual_output_on"),
+                "can_actuate": False,
+                "soc_percent": energy_result.get("soc_percent"),
+                "pv_power_w": energy_result.get("pv_power_w"),
+                "grid_power_w": energy_result.get("grid_power_w"),
+            }
+
+        results.append(result)
+
+        logging.info(
+            "PV SURPLUS TARGET | "
+            "cil=%s | typ=%s | priorita=%s | "
+            "energy=%s/%s | target=%s/%s | "
+            "soc=%s %% | teplota=%s C | "
+            "actual=%s | should=%s | action=%s",
+            result["target_name"],
+            result["target_type"],
+            result["priority"],
+            result["energy_state"],
+            result["energy_reason"],
+            result["target_state"],
+            result["target_reason"],
+            result.get("soc_percent"),
+            result.get("temperature_c"),
+            result.get("actual_output_on"),
+            result.get("should_be_on"),
+            result.get("would_action"),
+        )
+
+    return results
+
 def provest_pv_surplus_action(
     *,
     output_reference: str,
@@ -1231,12 +1637,11 @@ def vyhodnotit_pv_surplus_control_jednou(
     now: float | None = None,
 ) -> dict[str, Any] | None:
     """
-    Provede jeden rychly PV surplus control cyklus.
+    R3R11 multi-target control dispatcher.
 
-    Fyzicke ovladani je povoleno pouze pri
-    configuration.actuation_enabled == True.
-    Bez explicitni hodnoty True zustava cyklus
-    pouze v dry-run rezimu.
+    Shared FVE decision is evaluated once.
+    Targets are controlled independently.
+    Newer target-intent and spot-boiler arbitration is preserved.
     """
     cloud_config = load_cached_cloud_config()
 
@@ -1245,23 +1650,20 @@ def vyhodnotit_pv_surplus_control_jednou(
             "Cloudova konfigurace zatim neni dostupna."
         )
 
-    pv_surplus_runtime = najdi_pv_surplus_runtime(
-        cloud_config
-    )
-
+    pv_surplus_runtime = najdi_pv_surplus_runtime(cloud_config)
     if pv_surplus_runtime is None:
         return None
 
-    if (
-        not isinstance(fve_entities, list)
-        or not fve_entities
-    ):
+    if not isinstance(fve_entities, list) or not fve_entities:
         raise RuntimeError(
-            "FVE entity pro rizeni prebytku "
-            "nejsou dostupne."
+            "FVE entity pro rizeni prebytku nejsou dostupne."
         )
 
-    control_entities = fve_entities
+    configuration = pv_surplus_runtime.get("configuration")
+    if not isinstance(configuration, dict):
+        raise RuntimeError(
+            "PV surplus runtime nema platnou konfiguraci."
+        )
 
     evaluation_time = (
         time.monotonic()
@@ -1269,114 +1671,167 @@ def vyhodnotit_pv_surplus_control_jednou(
         else float(now)
     )
 
-    result = vyhodnotit_pv_surplus_dry_run(
+    results = vyhodnotit_pv_surplus_targets_dry_run(
         cloud_config=cloud_config,
-        fve_entities=control_entities,
+        fve_entities=fve_entities,
         now=evaluation_time,
     )
 
-    if result is None:
+    if not results:
         return None
-
-    configuration = pv_surplus_runtime.get(
-        "configuration"
-    )
-
-    if not isinstance(configuration, dict):
-        raise RuntimeError(
-            "PV surplus runtime nema platnou konfiguraci."
-        )
 
     actuation_enabled = (
         configuration.get("actuation_enabled") is True
     )
 
-    result["actuation_enabled"] = actuation_enabled
-    result["actuator_result"] = None
+    used_outputs: set[str] = set()
 
+    for result in results:
+        result["actuation_enabled"] = actuation_enabled
+        result["actuator_result"] = None
+        result["actuator_error"] = None
 
-    #
-    # SPOT + PV SURPLUS ARBITRAZ
-    #
-    # Existuje pouze jeden fyzicky actuator.
-    # PV a spot pouze vytvareji spolecny pozadavek.
-    #
-    pv_should_be_on = bool(
-        result["should_be_on"]
-    )
+        if result.get("can_actuate") is not True:
+            result["control_source"] = "target_fault"
+            logging.warning(
+                "PV SURPLUS TARGET SKIP | cil=%s | reason=%s",
+                result.get("target_name"),
+                result.get("target_reason"),
+            )
+            continue
 
-    spot_intent = load_spot_boiler_intent()
-
-    #
-    # Intent patri pouze vystupu, pro ktery
-    # byl cloudem vytvoren.
-    #
-    if (
-        isinstance(spot_intent, dict)
-        and str(
-            spot_intent.get(
-                "output_reference"
-            ) or ""
+        output_reference = str(
+            result.get("output_reference") or ""
         ).strip()
-        != str(
-            result["output_reference"]
-        ).strip()
-    ):
-        spot_intent = None
 
-    combined_control = combine_boiler_requests(
-        pv_should_be_on=pv_should_be_on,
-        spot_intent=spot_intent,
-    )
+        if (
+            not output_reference
+            or output_reference in used_outputs
+        ):
+            result["control_source"] = "duplicate_output_guard"
+            result["actuator_error"] = (
+                "Output je prazdny nebo jej pouziva vice cilu."
+            )
+            continue
 
-    result["pv_should_be_on"] = (
-        combined_control["pv_should_be_on"]
-    )
+        used_outputs.add(output_reference)
 
-    result["spot_should_be_on"] = (
-        combined_control["spot_should_be_on"]
-    )
+        desired_on = bool(result.get("should_be_on"))
+        target_type = str(
+            result.get("target_type") or ""
+        ).strip().lower()
 
-    result["control_source"] = (
-        combined_control["source"]
-    )
+        if target_type == "domestic_hot_water":
+            spot_intent = load_spot_boiler_intent()
 
-    result["spot_intent"] = spot_intent
+            if (
+                isinstance(spot_intent, dict)
+                and str(
+                    spot_intent.get("output_reference") or ""
+                ).strip()
+                != output_reference
+            ):
+                spot_intent = None
 
-    result["should_be_on"] = (
-        combined_control["should_be_on"]
-    )
-    if not actuation_enabled:
-        logging.info(
-            "PV SURPLUS ACTUATOR | "
-            "cil=%s | enabled=False | "
-            "action=DRY_RUN_ONLY",
-            result["target_name"],
-        )
+            combined_control = combine_boiler_requests(
+                pv_should_be_on=desired_on,
+                spot_intent=spot_intent,
+            )
 
-        return result
+            result["pv_should_be_on"] = (
+                combined_control["pv_should_be_on"]
+            )
+            result["spot_should_be_on"] = (
+                combined_control["spot_should_be_on"]
+            )
+            result["spot_intent"] = spot_intent
+            result["control_source"] = combined_control["source"]
+            desired_on = bool(combined_control["should_be_on"])
 
-    actuator_result = provest_pv_surplus_action(
-        output_reference=result["output_reference"],
-        should_be_on=result["should_be_on"],
-        actual_output_on=result["actual_output_on"],
-    )
+        elif target_type == "generic_load":
+            target_intent = None
 
-    result["actuator_result"] = actuator_result
+            try:
+                target_intent = load_pv_surplus_target_intent(
+                    resource_key=result["resource_key"],
+                    output_reference=output_reference,
+                )
+            except Exception as exc:
+                logging.warning(
+                    "PV target intent read selhal pro %s: %s",
+                    result.get("target_name"),
+                    exc,
+                )
 
-    logging.info(
-        "PV SURPLUS ACTUATOR | "
-        "cil=%s | enabled=True | "
-        "output=%s | action=%s | "
-        "readback=%s",
-        result["target_name"],
-        result["output_reference"],
-        actuator_result["action"],
-        actuator_result.get("readback_state"),
-    )
+            result["target_intent"] = target_intent
 
-    return result
+            if isinstance(target_intent, dict):
+                desired_on = (
+                    target_intent.get("desired_on") is True
+                )
+                result["control_source"] = (
+                    "pv_surplus_target_intent"
+                )
+            else:
+                result["control_source"] = "pv_surplus"
 
+        else:
+            result["control_source"] = "unsupported_target_type"
+            continue
+
+        result["should_be_on"] = desired_on
+
+        if not actuation_enabled:
+            logging.info(
+                "PV SURPLUS ACTUATOR | cil=%s | "
+                "enabled=False | action=DRY_RUN_ONLY",
+                result.get("target_name"),
+            )
+            continue
+
+        try:
+            actuator_result = provest_pv_surplus_action(
+                output_reference=output_reference,
+                should_be_on=desired_on,
+                actual_output_on=bool(
+                    result.get("actual_output_on")
+                ),
+            )
+
+            result["actuator_result"] = actuator_result
+
+            logging.info(
+                "PV SURPLUS ACTUATOR | cil=%s | typ=%s | "
+                "source=%s | output=%s | action=%s | readback=%s",
+                result.get("target_name"),
+                target_type,
+                result.get("control_source"),
+                output_reference,
+                actuator_result.get("action"),
+                actuator_result.get("readback_state"),
+            )
+
+        except Exception as exc:
+            result["actuator_error"] = str(exc)
+            logging.warning(
+                "PV SURPLUS ACTUATOR selhal | "
+                "cil=%s | output=%s | error=%s",
+                result.get("target_name"),
+                output_reference,
+                exc,
+            )
+
+    if len(results) == 1:
+        return results[0]
+
+    return {
+        "multi_target": True,
+        "target_count": len(results),
+        "actuation_enabled": actuation_enabled,
+        "energy_state": results[0].get("energy_state"),
+        "energy_reason": results[0].get("energy_reason"),
+        "targets": results,
+    }
 
 def vytvorit_cas_snapshotu() -> str:
     """Vrati aktualni UTC cas ve formatu ISO 8601."""
