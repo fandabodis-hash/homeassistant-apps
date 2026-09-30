@@ -1,0 +1,31 @@
+name: Agent 0.1.126 universal Smart Control
+
+on:
+  push:
+    branches:
+      - release/agent-0.1.126-universal-smart-control
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version contract
+        run: |
+          test "$(cat iqfanda-agent/rootfs/app/VERSION)" = "0.1.126"
+          grep -Fx 'version: "0.1.126"' iqfanda-agent/config.yaml
+          grep -Fx '  software_version: "0.1.126"' iqfanda-agent/config.yaml
+
+      - name: Compile Smart Control runtime
+        run: |
+          python -m py_compile             iqfanda-agent/rootfs/app/telemetrie_modulu.py             iqfanda-agent/rootfs/app/pv_surplus_decision.py             iqfanda-agent/rootfs/app/pv_surplus_target_control.py             iqfanda-agent/rootfs/app/command_worker.py
+
+      - name: Universal identity contract
+        run: |
+          ! grep -R -F 'F800711-TNG-00007'             iqfanda-agent/rootfs/app/telemetrie_modulu.py             iqfanda-agent/rootfs/app/pv_surplus_decision.py             iqfanda-agent/rootfs/app/pv_surplus_target_control.py             iqfanda-agent/rootfs/app/command_worker.py
+          ! grep -R -F '1c25a8d4-b986-43ee-b2fc-eaa152e9bdf8'             iqfanda-agent/rootfs/app/telemetrie_modulu.py             iqfanda-agent/rootfs/app/pv_surplus_decision.py             iqfanda-agent/rootfs/app/pv_surplus_target_control.py             iqfanda-agent/rootfs/app/command_worker.py
