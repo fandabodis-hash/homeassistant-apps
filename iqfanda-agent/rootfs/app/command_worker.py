@@ -1638,6 +1638,12 @@ def execute_spot_battery_intent(
                 target_soc_percent=stored[
                     "target_soc_percent"
                 ],
+                allowed_discharge_power_w=stored[
+                    "allowed_discharge_power_w"
+                ],
+                minimum_discharge_soc_percent=stored[
+                    "minimum_discharge_soc_percent"
+                ],
             )
         )
 
@@ -1685,7 +1691,20 @@ def execute_spot_battery_intent(
             ),
             "allowed_charge_power_w": (
                 applied.applied_power_w
+                if applied.action == "charge_grid"
+                else 0
             ),
+            "requested_discharge_power_w": stored[
+                "requested_discharge_power_w"
+            ],
+            "allowed_discharge_power_w": (
+                applied.applied_power_w
+                if applied.action == "discharge_grid"
+                else 0
+            ),
+            "minimum_discharge_soc_percent": stored[
+                "minimum_discharge_soc_percent"
+            ],
             "target_soc_percent": stored[
                 "target_soc_percent"
             ],

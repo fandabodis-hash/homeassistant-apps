@@ -426,6 +426,8 @@ def execute_battery_control_from_cloud_config(
     action: str,
     allowed_charge_power_w: int,
     target_soc_percent: float,
+    allowed_discharge_power_w: int = 0,
+    minimum_discharge_soc_percent: float = 20.0,
 ) -> InverterBatteryControlResult:
     """
     Provede univerzalni battery charge control.
@@ -473,15 +475,31 @@ def execute_battery_control_from_cloud_config(
         action=normalized_action,
     )
 
-    driver_result = driver(
-        cloud_config=cloud_config,
-        action=normalized_action,
-        allowed_charge_power_w=int(
+    driver_kwargs: dict[str, Any] = {
+        "cloud_config": cloud_config,
+        "action": normalized_action,
+        "allowed_charge_power_w": int(
             allowed_charge_power_w
         ),
-        target_soc_percent=float(
+        "target_soc_percent": float(
             target_soc_percent
         ),
+    }
+
+    if normalized_action == "discharge_grid":
+        driver_kwargs[
+            "allowed_discharge_power_w"
+        ] = int(
+            allowed_discharge_power_w
+        )
+        driver_kwargs[
+            "minimum_discharge_soc_percent"
+        ] = float(
+            minimum_discharge_soc_percent
+        )
+
+    driver_result = driver(
+        **driver_kwargs
     )
 
     if driver_result is None:

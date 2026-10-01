@@ -21,8 +21,11 @@ EMS_POWER_REGISTER = 47512
 
 EMS_MODE_AUTO = 1
 EMS_MODE_CHARGE_FROM_GRID = 4
+EMS_MODE_DISCHARGE_BATTERY = 12
 
 MAXIMUM_CHARGE_POWER_W = 5000
+MAXIMUM_DISCHARGE_POWER_W = 500
+MINIMUM_DISCHARGE_SOC_MARGIN_PERCENT = 2.0
 
 SUPPORTED_DEVICE_IDS = {
     247,
@@ -31,6 +34,7 @@ SUPPORTED_DEVICE_IDS = {
 SUPPORTED_ACTIONS = {
     "auto",
     "charge_grid",
+    "discharge_grid",
 }
 
 
@@ -95,6 +99,17 @@ def _validate_charge_power(
             "bezpecnostni limit 5000 W."
         )
 
+    return normalized
+
+
+def _validate_discharge_power(
+    power_w: int,
+) -> int:
+    normalized = int(power_w)
+    if normalized < 0:
+        raise ValueError("Vybijeci vykon nesmi byt zaporny.")
+    if normalized > MAXIMUM_DISCHARGE_POWER_W:
+        raise ValueError("Vybijeci vykon prekrocil candidate limit 500 W.")
     return normalized
 
 
@@ -278,166 +293,56 @@ def apply_goodwe_ems_action(
     device_id: int,
     action: str,
     allowed_charge_power_w: int,
+    allowed_discharge_power_w: int = 0,
 ) -> GoodweEmsResult:
-    """
-    Provede jednu atomicitou chranenou EMS zmenu.
-
-    Funkce sama klienta nevytvari.
-    Proto ji lze plne testovat nad fake klientem.
-
-    Bezpecnostni poradi:
-      AUTO:
-        47511 = 1
-        47512 = 0
-
-      CHARGE_GRID:
-        47512 = vykon
-        readback vykonu
-        47511 = 4
-        readback rezimu
-
-    Pri chybe charge_grid se funkce pokusi
-    vratit GoodWe do AUTO.
-    """
-
-    device_id = _validate_device_id(
-        device_id
-    )
-
-    action = _validate_action(
-        action
-    )
-
-    power_w = _validate_charge_power(
-        allowed_charge_power_w
-    )
+    device_id = _validate_device_id(device_id)
+    action = _validate_action(action)
+    charge_power_w = _validate_charge_power(allowed_charge_power_w)
+    discharge_power_w = _validate_discharge_power(allowed_discharge_power_w)
 
     if action == "auto":
-        if power_w != 0:
-            raise ValueError(
-                "Akce auto musi mit vykon 0 W."
-            )
+        if charge_power_w != 0 or discharge_power_w != 0:
+            raise ValueError("Akce auto musi mit oba vykony 0 W.")
+        _write_single_register(client=client, device_id=device_id, address=EMS_MODE_REGISTER, value=EMS_MODE_AUTO)
+        _verify_register(client=client, device_id=device_id, address=EMS_MODE_REGISTER, expected=EMS_MODE_AUTO)
+        _write_single_register(client=client, device_id=device_id, address=EMS_POWER_REGISTER, value=0)
+        _verify_register(client=client, device_id=device_id, address=EMS_POWER_REGISTER, expected=0)
+        return GoodweEmsResult(action="auto", requested_power_w=0, applied_power_w=0, ems_mode=EMS_MODE_AUTO, ems_power_register=0, verified=True)
 
-        _write_single_register(
-            client=client,
-            device_id=device_id,
-            address=EMS_MODE_REGISTER,
-            value=EMS_MODE_AUTO,
-        )
-
-        _verify_register(
-            client=client,
-            device_id=device_id,
-            address=EMS_MODE_REGISTER,
-            expected=EMS_MODE_AUTO,
-        )
-
-        _write_single_register(
-            client=client,
-            device_id=device_id,
-            address=EMS_POWER_REGISTER,
-            value=0,
-        )
-
-        _verify_register(
-            client=client,
-            device_id=device_id,
-            address=EMS_POWER_REGISTER,
-            expected=0,
-        )
-
-        return GoodweEmsResult(
-            action="auto",
-            requested_power_w=0,
-            applied_power_w=0,
-            ems_mode=EMS_MODE_AUTO,
-            ems_power_register=0,
-            verified=True,
-        )
-
-    if power_w <= 0:
-        raise ValueError(
-            "charge_grid vyzaduje "
-            "kladny vykon."
-        )
+    if action == "charge_grid":
+        if discharge_power_w != 0:
+            raise ValueError("charge_grid nesmi obsahovat discharge vykon.")
+        selected_power_w = charge_power_w
+        selected_mode = EMS_MODE_CHARGE_FROM_GRID
+        if selected_power_w <= 0:
+            raise ValueError("charge_grid vyzaduje kladny vykon.")
+    elif action == "discharge_grid":
+        if charge_power_w != 0:
+            raise ValueError("discharge_grid nesmi obsahovat charge vykon.")
+        selected_power_w = discharge_power_w
+        selected_mode = EMS_MODE_DISCHARGE_BATTERY
+        if selected_power_w <= 0:
+            raise ValueError("discharge_grid vyzaduje kladny vykon.")
+    else:
+        raise ValueError(f"Nepodporovana EMS akce: {action}")
 
     try:
-        #
-        # Fyzicky overene poradi:
-        # nejdrive vykon, potom aktivace
-        # IMPORT_AC.
-        #
-        _write_single_register(
-            client=client,
-            device_id=device_id,
-            address=EMS_POWER_REGISTER,
-            value=power_w,
-        )
-
-        _verify_register(
-            client=client,
-            device_id=device_id,
-            address=EMS_POWER_REGISTER,
-            expected=power_w,
-        )
-
-        _write_single_register(
-            client=client,
-            device_id=device_id,
-            address=EMS_MODE_REGISTER,
-            value=EMS_MODE_CHARGE_FROM_GRID,
-        )
-
-        _verify_register(
-            client=client,
-            device_id=device_id,
-            address=EMS_MODE_REGISTER,
-            expected=EMS_MODE_CHARGE_FROM_GRID,
-        )
-
+        _write_single_register(client=client, device_id=device_id, address=EMS_POWER_REGISTER, value=selected_power_w)
+        _verify_register(client=client, device_id=device_id, address=EMS_POWER_REGISTER, expected=selected_power_w)
+        _write_single_register(client=client, device_id=device_id, address=EMS_MODE_REGISTER, value=selected_mode)
+        _verify_register(client=client, device_id=device_id, address=EMS_MODE_REGISTER, expected=selected_mode)
     except Exception:
-        #
-        # FAIL-SAFE:
-        # pri chybe se vzdy pokusime vratit AUTO.
-        #
-        #
-        # Kazdy bezpecnostni zapis se zkousi
-        # nezavisle. Selhani 47511 nesmi zabranit
-        # pokusu o vynulovani 47512 a naopak.
-        #
         try:
-            _write_single_register(
-                client=client,
-                device_id=device_id,
-                address=EMS_MODE_REGISTER,
-                value=EMS_MODE_AUTO,
-            )
-
+            _write_single_register(client=client, device_id=device_id, address=EMS_MODE_REGISTER, value=EMS_MODE_AUTO)
         except Exception:
             pass
-
         try:
-            _write_single_register(
-                client=client,
-                device_id=device_id,
-                address=EMS_POWER_REGISTER,
-                value=0,
-            )
-
+            _write_single_register(client=client, device_id=device_id, address=EMS_POWER_REGISTER, value=0)
         except Exception:
             pass
-
         raise
 
-    return GoodweEmsResult(
-        action="charge_grid",
-        requested_power_w=power_w,
-        applied_power_w=power_w,
-        ems_mode=EMS_MODE_CHARGE_FROM_GRID,
-        ems_power_register=power_w,
-        verified=True,
-    )
-
+    return GoodweEmsResult(action=action, requested_power_w=selected_power_w, applied_power_w=selected_power_w, ems_mode=selected_mode, ems_power_register=selected_power_w, verified=True)
 
 def _select_goodwe_runtime_configuration(
     cloud_config: dict[str, Any],
@@ -520,193 +425,70 @@ def execute_goodwe_ems_from_cloud_config(
     action: str,
     allowed_charge_power_w: int,
     target_soc_percent: float,
+    allowed_discharge_power_w: int = 0,
+    minimum_discharge_soc_percent: float = 20.0,
 ) -> GoodweEmsResult:
-    """
-    Provede fyzicke EMS rizeni pres stejnou
-    RS485 cestu a stejny zamek jako telemetrie.
+    runtime = _select_goodwe_runtime_configuration(cloud_config)
+    communicator_id = str(runtime["communicator_id"]).strip()
+    device_id = _validate_device_id(runtime["modbus_device_id"])
+    action = _validate_action(action)
+    charge_power_w = _validate_charge_power(allowed_charge_power_w)
+    discharge_power_w = _validate_discharge_power(allowed_discharge_power_w)
+    target_soc = float(target_soc_percent)
+    minimum_discharge_soc = float(minimum_discharge_soc_percent)
 
-    DISCHARGE neni podporovan.
-    Pred CHARGE_GRID znovu kontroluje lokalni
-    SOC a BMS charge-current limit.
-    """
+    if target_soc < 0 or target_soc > 100:
+        raise ValueError("Target SOC je mimo rozsah 0 az 100 %.")
+    if minimum_discharge_soc < 0 or minimum_discharge_soc > 95:
+        raise ValueError("Minimum discharge SOC je mimo rozsah 0 az 95 %.")
 
-    runtime = (
-        _select_goodwe_runtime_configuration(
-            cloud_config
-        )
-    )
-
-    communicator_id = str(
-        runtime["communicator_id"]
-    ).strip()
-
-    device_id = _validate_device_id(
-        runtime["modbus_device_id"]
-    )
-
-    action = _validate_action(
-        action
-    )
-
-    power_w = _validate_charge_power(
-        allowed_charge_power_w
-    )
-
-    target_soc = float(
-        target_soc_percent
-    )
-
-    if (
-        target_soc < 0
-        or target_soc > 100
-    ):
-        raise ValueError(
-            "Target SOC je mimo rozsah 0 az 100 %."
-        )
-
-    _communicator, serial_path = (
-        _find_communicator(
-            communicator_id
-        )
-    )
-
-    bus_lock = ziskej_zamek_modbus_sbernice(
-        serial_path
-    )
+    _communicator, serial_path = _find_communicator(communicator_id)
+    bus_lock = ziskej_zamek_modbus_sbernice(serial_path)
 
     with bus_lock:
-        client = ModbusSerialClient(
-            port=serial_path,
-            baudrate=9600,
-            bytesize=8,
-            parity="N",
-            stopbits=1,
-            timeout=1.0,
-            retries=0,
-        )
-
+        client = ModbusSerialClient(port=serial_path, baudrate=9600, bytesize=8, parity="N", stopbits=1, timeout=1.0, retries=0)
         try:
             if not client.connect():
-                raise RuntimeError(
-                    "GoodWe EMS nelze otevrit "
-                    "seriovy port."
-                )
+                raise RuntimeError("GoodWe EMS nelze otevrit seriovy port.")
 
-            current_mode = _read_single_register(
-                client=client,
-                device_id=device_id,
-                address=EMS_MODE_REGISTER,
-            )
-
-            current_power = _read_single_register(
-                client=client,
-                device_id=device_id,
-                address=EMS_POWER_REGISTER,
-            )
+            current_mode = _read_single_register(client=client, device_id=device_id, address=EMS_MODE_REGISTER)
+            current_power = _read_single_register(client=client, device_id=device_id, address=EMS_POWER_REGISTER)
 
             if action == "charge_grid":
-                local_soc = _read_single_register(
-                    client=client,
-                    device_id=device_id,
-                    address=37007,
-                )
+                if discharge_power_w != 0:
+                    raise ValueError("charge_grid nesmi obsahovat discharge vykon.")
+                local_soc = _read_single_register(client=client, device_id=device_id, address=37007)
+                charge_current_limit = _read_single_register(client=client, device_id=device_id, address=37004)
+                if local_soc >= target_soc or charge_current_limit <= 0:
+                    if current_mode != EMS_MODE_AUTO or current_power != 0:
+                        apply_goodwe_ems_action(client=client, device_id=device_id, action="auto", allowed_charge_power_w=0, allowed_discharge_power_w=0)
+                    raise RuntimeError("Charge safety guard zablokoval rizeni.")
+                desired_mode = EMS_MODE_CHARGE_FROM_GRID
+                desired_power = charge_power_w
 
-                charge_current_limit = (
-                    _read_single_register(
-                        client=client,
-                        device_id=device_id,
-                        address=37004,
-                    )
-                )
-
-                if (
-                    local_soc
-                    >= target_soc
-                ):
-                    if (
-                        current_mode
-                        != EMS_MODE_AUTO
-                        or current_power != 0
-                    ):
-                        apply_goodwe_ems_action(
-                            client=client,
-                            device_id=device_id,
-                            action="auto",
-                            allowed_charge_power_w=0,
-                        )
-
-                    raise RuntimeError(
-                        "Lokalni SOC dosahl "
-                        "cilove hodnoty."
-                    )
-
-                if charge_current_limit <= 0:
-                    if (
-                        current_mode
-                        != EMS_MODE_AUTO
-                        or current_power != 0
-                    ):
-                        apply_goodwe_ems_action(
-                            client=client,
-                            device_id=device_id,
-                            action="auto",
-                            allowed_charge_power_w=0,
-                        )
-
-                    raise RuntimeError(
-                        "BMS nepovoluje nabijeci proud."
-                    )
-
-                desired_mode = (
-                    EMS_MODE_CHARGE_FROM_GRID
-                )
-
-                desired_power = power_w
+            elif action == "discharge_grid":
+                if charge_power_w != 0:
+                    raise ValueError("discharge_grid nesmi obsahovat charge vykon.")
+                local_soc = _read_single_register(client=client, device_id=device_id, address=37007)
+                discharge_current_limit = _read_single_register(client=client, device_id=device_id, address=37005)
+                minimum_with_margin = minimum_discharge_soc + MINIMUM_DISCHARGE_SOC_MARGIN_PERCENT
+                if local_soc <= minimum_with_margin or discharge_current_limit <= 0:
+                    if current_mode != EMS_MODE_AUTO or current_power != 0:
+                        apply_goodwe_ems_action(client=client, device_id=device_id, action="auto", allowed_charge_power_w=0, allowed_discharge_power_w=0)
+                    raise RuntimeError("Discharge safety guard zablokoval rizeni.")
+                desired_mode = EMS_MODE_DISCHARGE_BATTERY
+                desired_power = discharge_power_w
 
             else:
                 desired_mode = EMS_MODE_AUTO
                 desired_power = 0
 
-            if (
-                current_mode == desired_mode
-                and current_power
-                == desired_power
-            ):
-                return GoodweEmsResult(
-                    action=action,
-                    requested_power_w=power_w,
-                    applied_power_w=power_w,
-                    ems_mode=desired_mode,
-                    ems_power_register=(
-                        desired_power
-                    ),
-                    verified=True,
-                    write_performed=False,
-                )
+            if current_mode == desired_mode and current_power == desired_power:
+                selected_power = charge_power_w if action == "charge_grid" else (discharge_power_w if action == "discharge_grid" else 0)
+                return GoodweEmsResult(action=action, requested_power_w=selected_power, applied_power_w=selected_power, ems_mode=desired_mode, ems_power_register=desired_power, verified=True, write_performed=False)
 
-            result = apply_goodwe_ems_action(
-                client=client,
-                device_id=device_id,
-                action=action,
-                allowed_charge_power_w=power_w,
-            )
-
-            return GoodweEmsResult(
-                action=result.action,
-                requested_power_w=(
-                    result.requested_power_w
-                ),
-                applied_power_w=(
-                    result.applied_power_w
-                ),
-                ems_mode=result.ems_mode,
-                ems_power_register=(
-                    result.ems_power_register
-                ),
-                verified=result.verified,
-                write_performed=True,
-            )
-
+            result = apply_goodwe_ems_action(client=client, device_id=device_id, action=action, allowed_charge_power_w=charge_power_w, allowed_discharge_power_w=discharge_power_w)
+            return GoodweEmsResult(action=result.action, requested_power_w=result.requested_power_w, applied_power_w=result.applied_power_w, ems_mode=result.ems_mode, ems_power_register=result.ems_power_register, verified=result.verified, write_performed=True)
         finally:
             client.close()
 

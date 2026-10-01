@@ -1,4 +1,4 @@
-"""Docasny spotovy pozadavek pro nabijeni baterie."""
+"""Docasny spotovy pozadavek pro nabijeni nebo vybijeni baterie."""
 
 from __future__ import annotations
 
@@ -20,10 +20,13 @@ SPOT_BATTERY_INTENT_PATH = Path(
 VALID_ACTIONS = {
     "auto",
     "charge_grid",
+    "discharge_grid",
 }
 
 
 MAXIMUM_ALLOWED_CHARGE_POWER_W = 5000
+MAXIMUM_ALLOWED_DISCHARGE_POWER_W = 500
+MINIMUM_DISCHARGE_SOC_MARGIN_PERCENT = 2.0
 
 
 def _parse_datetime(
@@ -163,6 +166,18 @@ def save_spot_battery_intent(
         "allowed_charge_power_w",
     )
 
+    requested_discharge_power_w = int(
+        payload.get("requested_discharge_power_w", 0)
+    )
+
+    allowed_discharge_power_w = int(
+        payload.get("allowed_discharge_power_w", 0)
+    )
+
+    minimum_discharge_soc_percent = float(
+        payload.get("minimum_discharge_soc_percent", 20.0)
+    )
+
     battery_capacity_kwh = _required_float(
         payload,
         "battery_capacity_kwh",
@@ -201,6 +216,21 @@ def save_spot_battery_intent(
             "allowed_charge_power_w nesmi byt zaporny."
         )
 
+    if requested_discharge_power_w < 0:
+        raise ValueError(
+            "requested_discharge_power_w nesmi byt zaporny."
+        )
+
+    if allowed_discharge_power_w < 0:
+        raise ValueError(
+            "allowed_discharge_power_w nesmi byt zaporny."
+        )
+
+    if not (0.0 <= minimum_discharge_soc_percent <= 95.0):
+        raise ValueError(
+            "minimum_discharge_soc_percent musi byt 0 az 95."
+        )
+
     if (
         requested_charge_power_w
         > MAXIMUM_ALLOWED_CHARGE_POWER_W
@@ -219,16 +249,32 @@ def save_spot_battery_intent(
             "bezpecnostni limit 5000 W."
         )
 
+    if requested_discharge_power_w > MAXIMUM_ALLOWED_DISCHARGE_POWER_W:
+        raise ValueError(
+            "requested_discharge_power_w prekrocil candidate limit 500 W."
+        )
+
+    if allowed_discharge_power_w > MAXIMUM_ALLOWED_DISCHARGE_POWER_W:
+        raise ValueError(
+            "allowed_discharge_power_w prekrocil candidate limit 500 W."
+        )
+
     if action == "auto":
         if (
             requested_charge_power_w != 0
             or allowed_charge_power_w != 0
+            or requested_discharge_power_w != 0
+            or allowed_discharge_power_w != 0
         ):
             raise ValueError(
                 "Akce auto musi mit vykon 0 W."
             )
 
     if action == "charge_grid":
+        if requested_discharge_power_w != 0 or allowed_discharge_power_w != 0:
+            raise ValueError(
+                "charge_grid nesmi obsahovat discharge vykon."
+            )
         if allowed_charge_power_w <= 0:
             raise ValueError(
                 "charge_grid vyzaduje kladny "
@@ -248,6 +294,32 @@ def save_spot_battery_intent(
             raise ValueError(
                 "charge_grid neni povolen pri "
                 "dosazenem cilovem SOC."
+            )
+
+    if action == "discharge_grid":
+        if requested_charge_power_w != 0 or allowed_charge_power_w != 0:
+            raise ValueError(
+                "discharge_grid nesmi obsahovat charge vykon."
+            )
+
+        if allowed_discharge_power_w <= 0:
+            raise ValueError(
+                "discharge_grid vyzaduje kladny allowed_discharge_power_w."
+            )
+
+        if allowed_discharge_power_w > requested_discharge_power_w:
+            raise ValueError(
+                "Povoleny discharge vykon nesmi byt vyssi nez pozadovany."
+            )
+
+        minimum_with_margin = (
+            minimum_discharge_soc_percent
+            + MINIMUM_DISCHARGE_SOC_MARGIN_PERCENT
+        )
+
+        if current_soc_percent <= minimum_with_margin:
+            raise ValueError(
+                "discharge_grid je blokovan pri nizkem SOC."
             )
 
     valid_until = _parse_datetime(
@@ -271,6 +343,9 @@ def save_spot_battery_intent(
         "allowed_charge_power_w": (
             allowed_charge_power_w
         ),
+        "requested_discharge_power_w": requested_discharge_power_w,
+        "allowed_discharge_power_w": allowed_discharge_power_w,
+        "minimum_discharge_soc_percent": minimum_discharge_soc_percent,
         "target_soc_percent": (
             target_soc_percent
         ),
