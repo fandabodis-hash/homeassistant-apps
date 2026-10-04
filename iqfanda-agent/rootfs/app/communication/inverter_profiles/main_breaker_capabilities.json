@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "contract": {
+    "breaker_configuration_source": "spot_prices.configuration.main_breaker",
+    "breaker_current_field": "rated_current_a",
+    "breaker_reserve_field": "safety_reserve_a",
+    "breaker_phases_field": "phases",
+    "profile_selection": "manufacturer_plus_model",
+    "raw_modbus_registers_in_core": false,
+    "phase_current_priority": [
+      "direct_phase_current",
+      "apparent_power_div_voltage",
+      "active_power_div_voltage_estimate"
+    ],
+    "safe_control_sources": [
+      "direct_phase_current",
+      "apparent_power_div_voltage"
+    ],
+    "display_only_sources": [
+      "active_power_div_voltage_estimate"
+    ],
+    "stale_telemetry_fail_safe": "deny_new_battery_action",
+    "dynamic_guard_scope": [
+      "manual_charge",
+      "manual_discharge",
+      "automatic_charge",
+      "automatic_discharge"
+    ]
+  },
+  "initial_supported_families": [
+    {
+      "family_id": "goodwe_et_gen1_5_10kw",
+      "label": "GoodWe ET 5â€“10 kW prvnĂ­ generace",
+      "profile_ids": [
+        "goodwe_et"
+      ],
+      "register_status": "existing_in_fanda",
+      "profile_status": "existing",
+      "main_breaker_source_status": "apparent_power_profile_mapped_pending_physical_00003",
+      "main_breaker_control_ready": false,
+      "canary_device_serial": "F800711-TNG-00003"
+    },
+    {
+      "family_id": "goodwe_et_gen1_15_30kw",
+      "label": "GoodWe ET 15â€“30 kW prvnĂ­ generace",
+      "profile_ids": [
+        "goodwe_et_15_30kw"
+      ],
+      "register_status": "existing_in_fanda",
+      "profile_status": "existing"
+    },
+    {
+      "family_id": "foxess_h3",
+      "label": "FoxESS H3",
+      "profile_ids": [
+        "foxess_h3_10_0_e"
+      ],
+      "register_status": "existing_in_fanda",
+      "profile_status": "existing"
+    },
+    {
+      "family_id": "solax_g4",
+      "label": "SolaX G4",
+      "profile_ids": [
+        "solax_x3_hybrid_g4"
+      ],
+      "register_status": "existing_in_fanda",
+      "profile_status": "existing"
+    },
+    {
+      "family_id": "deye_hybrid_lv_10_20kw",
+      "label": "Deye Hybrid LV 10â€“20 kW",
+      "profile_ids": [],
+      "register_status": "existing_in_project_documentation",
+      "profile_status": "exact_profile_link_pending",
+      "must_not_reuse_profile_id": "deye_3x_lv_off_grid"
+    },
+    {
+      "family_id": "goodwe_et_gen2",
+      "label": "GoodWe ET druhĂ© generace",
+      "profile_ids": [],
+      "register_status": "pending",
+      "profile_status": "pending"
+    },
+    {
+      "family_id": "foxess_hybrid_all_in_one",
+      "label": "FoxESS HybridnĂ­ All-in-One",
+      "profile_ids": [],
+      "register_status": "pending",
+      "profile_status": "pending"
+    }
+  ]
+}

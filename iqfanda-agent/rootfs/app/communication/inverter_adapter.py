@@ -2699,3 +2699,22 @@ def probe_inverter_modbus(
 
 
 # PHASE 21 GENERIC INVERTER PROBE END
+
+def select_main_breaker_protection_capability(
+    *,
+    manufacturer: str,
+    model: str,
+) -> dict[str, Any]:
+    """Return vendor-neutral main breaker capability for selected profile."""
+    from communication.main_breaker_capability import (
+        resolve_profile_main_breaker_capability,
+    )
+
+    profile = select_inverter_profile(
+        manufacturer=manufacturer,
+        model=model,
+    )
+
+    return resolve_profile_main_breaker_capability(
+        profile
+    )

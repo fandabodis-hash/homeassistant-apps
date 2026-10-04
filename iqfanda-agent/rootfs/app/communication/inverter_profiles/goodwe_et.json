@@ -392,6 +392,69 @@
       "word_order": "big"
     },
     {
+      "entity_key": "smartmeter.zdanlivy_vykon_l1",
+      "category": "smartmeter",
+      "name": "ZdĂˇnlivĂ˝ vĂ˝kon sĂ­tÄ› L1",
+      "address": 36035,
+      "register_type": "int32",
+      "scale": 1.0,
+      "unit": "VA",
+      "value_type": "integer",
+      "source_address": 36035,
+      "attributes": {
+        "device_class": "apparent_power",
+        "main_breaker_role": "phase_apparent_power_l1",
+        "verification_status": "goodwe_protocol_mapped_pending_physical_00003"
+      },
+      "addresses": [
+        36035,
+        36036
+      ],
+      "word_order": "big"
+    },
+    {
+      "entity_key": "smartmeter.zdanlivy_vykon_l2",
+      "category": "smartmeter",
+      "name": "ZdĂˇnlivĂ˝ vĂ˝kon sĂ­tÄ› L2",
+      "address": 36037,
+      "register_type": "int32",
+      "scale": 1.0,
+      "unit": "VA",
+      "value_type": "integer",
+      "source_address": 36037,
+      "attributes": {
+        "device_class": "apparent_power",
+        "main_breaker_role": "phase_apparent_power_l2",
+        "verification_status": "goodwe_protocol_mapped_pending_physical_00003"
+      },
+      "addresses": [
+        36037,
+        36038
+      ],
+      "word_order": "big"
+    },
+    {
+      "entity_key": "smartmeter.zdanlivy_vykon_l3",
+      "category": "smartmeter",
+      "name": "ZdĂˇnlivĂ˝ vĂ˝kon sĂ­tÄ› L3",
+      "address": 36039,
+      "register_type": "int32",
+      "scale": 1.0,
+      "unit": "VA",
+      "value_type": "integer",
+      "source_address": 36039,
+      "attributes": {
+        "device_class": "apparent_power",
+        "main_breaker_role": "phase_apparent_power_l3",
+        "verification_status": "goodwe_protocol_mapped_pending_physical_00003"
+      },
+      "addresses": [
+        36039,
+        36040
+      ],
+      "word_order": "big"
+    },
+    {
       "entity_key": "smartmeter.frekvence",
       "category": "smartmeter",
       "name": "Frekvence sítě",
@@ -916,5 +979,23 @@
       "word_order": "big",
       "divisor": 10.0
     }
-  ]
+  ],
+  "main_breaker_protection": {
+    "schema_version": 1,
+    "source": "apparent_power_div_voltage",
+    "phase_apparent_power_entity_keys": [
+      "smartmeter.zdanlivy_vykon_l1",
+      "smartmeter.zdanlivy_vykon_l2",
+      "smartmeter.zdanlivy_vykon_l3"
+    ],
+    "phase_voltage_entity_keys": [
+      "sit.napeti_l1",
+      "sit.napeti_l2",
+      "sit.napeti_l3"
+    ],
+    "control_ready": false,
+    "display_ready": true,
+    "verification_status": "protocol_mapped_pending_physical_00003",
+    "canary_device_serial": "F800711-TNG-00003"
+  }
 }
