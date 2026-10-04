@@ -54,6 +54,16 @@
       ],
       "file": "deye_3x_lv_off_grid.json",
       "status": "physical_registers_verified_00011_adapter_pending"
+    },
+    {
+      "profile_id": "deye_50_hybrid_hv",
+      "manufacturer": "deye",
+      "manufacturer_name": "Deye",
+      "models": [
+        "Deye 50 hybrid HV"
+      ],
+      "file": "deye_50_hybrid_hv.json",
+      "status": "candidate_read_only_identity_00015"
     }
   ]
 }

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "profile_id": "deye_50_hybrid_hv",
+  "manufacturer": "deye",
+  "manufacturer_name": "Deye",
+  "family": "sun_sg01hp3_20_50kw_hv",
+  "models": [
+    "Deye 50 hybrid HV"
+  ],
+  "verification_status": "candidate_read_only_identity_00015",
+  "protocol": {
+    "type": "modbus_rtu",
+    "function_code": 3,
+    "baudrate": 9600,
+    "bytesize": 8,
+    "parity": "N",
+    "stopbits": 1,
+    "timeout_seconds": 1.5,
+    "retries": 1,
+    "allowed_device_ids": [
+      1
+    ]
+  },
+  "snapshot_reader": {
+    "module": "communication.deye_50_hybrid_hv",
+    "function": "read_snapshot"
+  },
+  "read_blocks": [],
+  "entities": []
+}
