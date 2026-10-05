@@ -8,7 +8,6 @@
     "H3-10.0-E"
   ],
   "verification_status": "physically_verified_00007",
-
   "protocol": {
     "type": "modbus_rtu",
     "function_code": 3,
@@ -22,7 +21,6 @@
       247
     ]
   },
-
   "identification": {
     "model": {
       "address": 30000,
@@ -37,7 +35,6 @@
       "count": 3
     }
   },
-
   "read_blocks": [
     {
       "address": 31000,
@@ -56,7 +53,6 @@
       "count": 1
     }
   ],
-
   "entities": [
     {
       "entity_key": "pv1.napeti",
@@ -95,7 +91,6 @@
       "sign_convention": "positive_generation",
       "verification_status": "physically_verified_00007"
     },
-
     {
       "entity_key": "pv2.napeti",
       "category": "pv_vstup",
@@ -133,7 +128,6 @@
       "sign_convention": "positive_generation",
       "verification_status": "map_confirmed_output_zero"
     },
-
     {
       "entity_key": "sit.napeti_l1",
       "category": "sit",
@@ -182,7 +176,6 @@
       "device_class": "frequency",
       "verification_status": "physically_verified_grid_off"
     },
-
     {
       "entity_key": "stridac.teplota_chladice",
       "category": "stridac",
@@ -221,7 +214,6 @@
         "3": "eps_off_grid"
       }
     },
-
     {
       "entity_key": "backup.napeti_l1",
       "category": "backup",
@@ -258,7 +250,6 @@
       "device_class": "voltage",
       "verification_status": "physically_verified_00007"
     },
-
     {
       "entity_key": "backup.proud_l1",
       "category": "backup",
@@ -295,7 +286,6 @@
       "device_class": "current",
       "verification_status": "physically_verified_00007"
     },
-
     {
       "entity_key": "backup.vykon_l1",
       "category": "backup",
@@ -365,7 +355,6 @@
       "device_class": "frequency",
       "verification_status": "physically_verified_00007"
     },
-
     {
       "entity_key": "spotreba.vykon_l1",
       "category": "spotreba",
@@ -423,7 +412,6 @@
       "sign_convention": "positive_consumption",
       "verification_status": "physically_verified_00007"
     },
-
     {
       "entity_key": "baterie.napeti",
       "category": "baterie_souhrn",
@@ -486,7 +474,6 @@
       "device_class": "battery",
       "verification_status": "physically_verified_00007"
     },
-
     {
       "entity_key": "smartmeter.vykon_l1",
       "enabled": false,
@@ -511,7 +498,6 @@
       "scale": 1,
       "verification_status": "pending_grid_test"
     },
-
     {
       "entity_key": "stridac.vykon_l1",
       "enabled": false,
@@ -537,7 +523,6 @@
       "verification_status": "pending_grid_test"
     }
   ],
-
   "selector_read_blocks": [
     {
       "address": 30028,
@@ -1127,5 +1112,18 @@
         }
       ]
     }
-  ]
+  ],
+  "control_capabilities": {
+    "battery_charge_control": {
+      "schema_version": 1,
+      "driver_module": "communication.foxess_ems_controller",
+      "driver_function": "execute_foxess_h3_from_cloud_config",
+      "supported_actions": [
+        "auto",
+        "charge_grid"
+      ],
+      "discharge_allowed": false,
+      "verification_status": "candidate_protocol_115_read_map_verified_00007"
+    }
+  }
 }
