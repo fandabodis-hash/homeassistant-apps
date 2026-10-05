@@ -14,6 +14,9 @@ from communication.inverter_control_adapter import (
 from communication.inverter_adapter import (
     probe_inverter_modbus,
 )
+from communication.foxess_remote_control_probe import (
+    probe_foxess_remote_control_from_cloud_config,
+)
 from agent_updater import (
     AgentUpdateError,
     clear_pending_agent_update,
@@ -1345,6 +1348,71 @@ def execute_zigbee_permit_join(
             exc,
         )
 
+
+
+def execute_foxess_remote_control_probe(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Execute one strictly read-only FoxESS H3 control register probe."""
+
+    try:
+        if command_payload.get("read_only") is not True:
+            raise ValueError(
+                "FoxESS control probe vyzaduje read_only=true."
+            )
+
+        cloud_config = load_cached_cloud_config()
+
+        if not isinstance(cloud_config, dict):
+            raise RuntimeError(
+                "Cloudova konfigurace neni lokalne dostupna."
+            )
+
+        result = probe_foxess_remote_control_from_cloud_config(
+            cloud_config=cloud_config,
+        )
+
+        if result.get("write_performed") is not False:
+            raise RuntimeError(
+                "FoxESS control probe porusil read-only kontrakt."
+            )
+
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": "foxess_remote_control_probe",
+                "phase": "read_only_probe_failed",
+                "read_only": True,
+                "write_performed": False,
+                "error_type": type(exc).__name__,
+            },
+            error_message=str(exc),
+        )
+
+        logging.exception(
+            "FoxESS remote control read-only probe %s selhal.",
+            command_id,
+        )
+        return
+
+    result["worker"] = "command_worker"
+    result["executor"] = "foxess_remote_control_probe"
+    result["phase"] = "read_only_probe_succeeded"
+
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result=result,
+        error_message=None,
+    )
 
 
 def execute_photovoltaic_modbus_probe(
@@ -3157,6 +3225,14 @@ def execute_command(
 
     if command_type == "spot_battery_intent":
         execute_spot_battery_intent(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "foxess_remote_control_probe":
+        execute_foxess_remote_control_probe(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
