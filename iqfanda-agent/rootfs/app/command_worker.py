@@ -17,6 +17,9 @@ from communication.inverter_adapter import (
 from communication.foxess_remote_control_probe import (
     probe_foxess_remote_control_from_cloud_config,
 )
+from communication.deye_50_hv_register_survey import (
+    probe_deye_50_hv_register_survey_from_cloud_config,
+)
 from agent_updater import (
     AgentUpdateError,
     clear_pending_agent_update,
@@ -1405,6 +1408,75 @@ def execute_foxess_remote_control_probe(
     result["worker"] = "command_worker"
     result["executor"] = "foxess_remote_control_probe"
     result["phase"] = "read_only_probe_succeeded"
+
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result=result,
+        error_message=None,
+    )
+
+
+
+def execute_deye_50_hv_register_survey(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Execute one strictly read-only Deye 50 HV register survey."""
+
+    try:
+        if command_payload.get("read_only") is not True:
+            raise ValueError(
+                "Deye 50 HV survey vyzaduje read_only=true."
+            )
+
+        cloud_config = load_cached_cloud_config()
+
+        if not isinstance(cloud_config, dict):
+            raise RuntimeError(
+                "Cloudova konfigurace neni lokalne dostupna."
+            )
+
+        result = (
+            probe_deye_50_hv_register_survey_from_cloud_config(
+                cloud_config=cloud_config,
+            )
+        )
+
+        if result.get("write_performed") is not False:
+            raise RuntimeError(
+                "Deye 50 HV survey porusil read-only kontrakt."
+            )
+
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": "deye_50_hv_register_survey",
+                "phase": "read_only_survey_failed",
+                "read_only": True,
+                "write_performed": False,
+                "error_type": type(exc).__name__,
+            },
+            error_message=str(exc),
+        )
+
+        logging.exception(
+            "Deye 50 HV register survey %s selhal.",
+            command_id,
+        )
+
+        return
+
+    result["worker"] = "command_worker"
+    result["executor"] = "deye_50_hv_register_survey"
+    result["phase"] = "read_only_survey_succeeded"
 
     submit_command_result(
         identity=identity,
@@ -3233,6 +3305,14 @@ def execute_command(
 
     if command_type == "foxess_remote_control_probe":
         execute_foxess_remote_control_probe(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "deye_50_hv_register_survey":
+        execute_deye_50_hv_register_survey(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
