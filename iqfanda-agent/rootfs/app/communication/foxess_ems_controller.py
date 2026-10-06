@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 import os
+import time
 from pathlib import Path
 import tempfile
 from typing import Any
@@ -38,6 +39,12 @@ REMOTE_TIMEOUT_SECONDS = 180
 MAXIMUM_CHARGE_POWER_W = 5000
 MAXIMUM_DISCHARGE_POWER_W = 10000
 MINIMUM_DISCHARGE_SOC_MARGIN_PERCENT = 2.0
+
+MODBUS_READ_ATTEMPTS = 3
+MODBUS_READ_RETRY_DELAY_SECONDS = 0.35
+MODBUS_WRITE_ATTEMPTS = 3
+MODBUS_WRITE_SETTLE_SECONDS = 0.45
+MODBUS_POST_VERIFY_SETTLE_SECONDS = 0.20
 
 SUPPORTED_ACTIONS = {
     "auto",
@@ -108,46 +115,68 @@ def _read_registers(
     address: int,
     count: int,
 ) -> list[int]:
-    response = client.read_holding_registers(
-        address=address,
-        count=count,
-        device_id=device_id,
-    )
+    last_error: Exception | None = None
 
-    if response is None:
-        raise RuntimeError(
-            f"FoxESS read {address}/{count} vratil None."
-        )
-
-    is_error = getattr(
-        response,
-        "isError",
-        None,
-    )
-
-    if callable(is_error) and is_error():
-        raise RuntimeError(
-            f"FoxESS read {address}/{count} vratil chybu."
-        )
-
-    registers = getattr(
-        response,
-        "registers",
-        None,
-    )
-
-    if (
-        not isinstance(registers, list)
-        or len(registers) != count
+    for attempt in range(
+        1,
+        MODBUS_READ_ATTEMPTS + 1,
     ):
-        raise RuntimeError(
-            f"FoxESS read {address}/{count} nema platny vysledek."
-        )
+        if attempt > 1:
+            time.sleep(
+                MODBUS_READ_RETRY_DELAY_SECONDS
+            )
 
-    return [
-        int(value) & 0xFFFF
-        for value in registers
-    ]
+        try:
+            response = client.read_holding_registers(
+                address=address,
+                count=count,
+                device_id=device_id,
+            )
+
+            if response is None:
+                raise RuntimeError(
+                    f"FoxESS read {address}/{count} vratil None."
+                )
+
+            is_error = getattr(
+                response,
+                "isError",
+                None,
+            )
+
+            if callable(is_error) and is_error():
+                raise RuntimeError(
+                    f"FoxESS read {address}/{count} vratil chybu."
+                )
+
+            registers = getattr(
+                response,
+                "registers",
+                None,
+            )
+
+            if (
+                not isinstance(registers, list)
+                or len(registers) != count
+            ):
+                raise RuntimeError(
+                    f"FoxESS read {address}/{count} nema platny vysledek."
+                )
+
+            return [
+                int(value) & 0xFFFF
+                for value in registers
+            ]
+
+        except Exception as exc:
+            last_error = exc
+
+            if attempt >= MODBUS_READ_ATTEMPTS:
+                raise
+
+    raise RuntimeError(
+        f"FoxESS read {address}/{count} selhal."
+    ) from last_error
 
 
 def _read_one(
@@ -205,38 +234,91 @@ def _write_one(
     address: int,
     value: int,
 ) -> None:
-    response = client.write_register(
-        address=address,
-        value=int(value) & 0xFFFF,
-        device_id=device_id,
-    )
+    expected = int(value) & 0xFFFF
+    last_error: Exception | None = None
 
-    if response is None:
-        raise RuntimeError(
-            f"FoxESS write {address} vratil None."
+    for attempt in range(
+        1,
+        MODBUS_WRITE_ATTEMPTS + 1,
+    ):
+        if attempt > 1:
+            time.sleep(
+                MODBUS_READ_RETRY_DELAY_SECONDS
+            )
+
+        write_error: Exception | None = None
+
+        try:
+            response = client.write_register(
+                address=address,
+                value=expected,
+                device_id=device_id,
+            )
+
+            if response is None:
+                raise RuntimeError(
+                    f"FoxESS write {address} vratil None."
+                )
+
+            is_error = getattr(
+                response,
+                "isError",
+                None,
+            )
+
+            if callable(is_error) and is_error():
+                raise RuntimeError(
+                    f"FoxESS write {address} selhal."
+                )
+
+        except Exception as exc:
+            #
+            # FoxESS H3 protocol 115 muze zapis fyzicky prijmout,
+            # ale neodpovedet na Modbus write response. Po settle
+            # intervalu proto vzdy overime skutecny registr.
+            #
+            write_error = exc
+
+        time.sleep(
+            MODBUS_WRITE_SETTLE_SECONDS
         )
 
-    is_error = getattr(
-        response,
-        "isError",
-        None,
-    )
+        try:
+            actual = _read_one(
+                client=client,
+                device_id=device_id,
+                address=address,
+            )
+        except Exception as exc:
+            last_error = exc
 
-    if callable(is_error) and is_error():
-        raise RuntimeError(
-            f"FoxESS write {address} selhal."
+            if attempt >= MODBUS_WRITE_ATTEMPTS:
+                if write_error is not None:
+                    raise RuntimeError(
+                        f"FoxESS write/readback {address} selhal "
+                        f"po {MODBUS_WRITE_ATTEMPTS} pokusech."
+                    ) from write_error
+                raise
+
+            continue
+
+        if actual == expected:
+            time.sleep(
+                MODBUS_POST_VERIFY_SETTLE_SECONDS
+            )
+            return
+
+        last_error = RuntimeError(
+            f"FoxESS registr {address}: "
+            f"ocekavano {expected}, nacteno {actual}."
         )
 
-    actual = _read_one(
-        client=client,
-        device_id=device_id,
-        address=address,
-    )
+        if attempt >= MODBUS_WRITE_ATTEMPTS:
+            raise last_error
 
-    if actual != (int(value) & 0xFFFF):
-        raise RuntimeError(
-            f"FoxESS registr {address} readback nesouhlasi."
-        )
+    raise RuntimeError(
+        f"FoxESS write {address} selhal."
+    ) from last_error
 
 
 def _write_s16(
@@ -256,23 +338,17 @@ def _write_s16(
             "FoxESS signed16 setpoint je mimo rozsah."
         )
 
+    #
+    # _write_one potvrzuje presny 16bit raw obraz hodnoty.
+    # Dalsi okamzity readback zde zbytecne zvysoval pocet
+    # RTU transakci a u H3 protocol 115 zhorsoval stabilitu.
+    #
     _write_one(
         client=client,
         device_id=device_id,
         address=address,
         value=normalized,
     )
-
-    actual = _read_s16(
-        client=client,
-        device_id=device_id,
-        address=address,
-    )
-
-    if actual != normalized:
-        raise RuntimeError(
-            f"FoxESS registr {address} signed16 readback nesouhlasi."
-        )
 
 
 def _write_s32(
@@ -1139,7 +1215,7 @@ def execute_foxess_h3_from_cloud_config(
             bytesize=8,
             parity="N",
             stopbits=1,
-            timeout=1.0,
+            timeout=1.5,
             retries=0,
         )
 
