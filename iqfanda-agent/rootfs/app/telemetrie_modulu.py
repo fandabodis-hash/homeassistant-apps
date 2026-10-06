@@ -10,6 +10,9 @@ from typing import Any
 from communication.inverter_adapter import (
     read_inverter_snapshot,
 )
+from communication.pylontech_us5000 import (
+    read_pylontech_snapshot,
+)
 from device_config import (
     load_cached_cloud_config,
     load_device_identity,
@@ -133,6 +136,64 @@ def najdi_fve_runtime(
 
         if (
             runtime_configuration.get(
+                "read_only"
+            )
+            is not True
+        ):
+            continue
+
+        matches.append(
+            runtime_configuration
+        )
+
+    if len(matches) != 1:
+        return None
+
+    return matches[0]
+
+
+def najdi_baterie_runtime(
+    cloud_config: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Najde jedinou aktivni read-only runtime baterie."""
+    runtime_configurations = cloud_config.get(
+        "module_runtime_configurations"
+    )
+
+    if not isinstance(
+        runtime_configurations,
+        list,
+    ):
+        return None
+
+    matches: list[dict[str, Any]] = []
+
+    for runtime_configuration in (
+        runtime_configurations
+    ):
+        if not isinstance(
+            runtime_configuration,
+            dict,
+        ):
+            continue
+
+        if (
+            str(
+                runtime_configuration.get(
+                    "module_key"
+                )
+                or ""
+            ).strip().lower()
+            != "battery"
+        ):
+            continue
+
+        if (
+            runtime_configuration.get(
+                "telemetry_enabled"
+            )
+            is not True
+            or runtime_configuration.get(
                 "read_only"
             )
             is not True
@@ -1842,6 +1903,99 @@ def vytvorit_cas_snapshotu() -> str:
     )
 
 
+def odeslat_baterie_telemetrii(
+    *,
+    identity: dict[str, Any],
+    cloud_config: dict[str, Any],
+) -> None:
+    """
+    Odesle samostatnou Pylontech bateriovou telemetrii.
+
+    Selhani baterie nesmi zastavit FVE ani ostatni moduly.
+    """
+    runtime_configuration = (
+        najdi_baterie_runtime(
+            cloud_config
+        )
+    )
+
+    if runtime_configuration is None:
+        return
+
+    snapshot = read_pylontech_snapshot(
+        runtime_configuration
+    )
+
+    if not isinstance(snapshot, dict):
+        raise RuntimeError(
+            "Pylontech adapter nevratil snapshot."
+        )
+
+    entities = snapshot.get("entities")
+
+    if (
+        not isinstance(entities, list)
+        or not entities
+    ):
+        raise RuntimeError(
+            "Pylontech snapshot nema entity."
+        )
+
+    telemetry_source = str(
+        snapshot.get("telemetry_source")
+        or "pylontech_us5000_rs232"
+    ).strip()
+
+    response = cloud_client.submit_module_telemetry(
+        device_uuid=str(
+            identity["device_uuid"]
+        ),
+        device_token=str(
+            identity["device_token"]
+        ),
+        module_key="battery",
+        source=telemetry_source,
+        captured_at=vytvorit_cas_snapshotu(),
+        entities=entities,
+        snapshot_complete=(
+            snapshot.get("complete")
+            is True
+        ),
+    )
+
+    if (
+        not isinstance(response, dict)
+        or not response.get("ok")
+    ):
+        status_code = (
+            response.get("status_code")
+            if isinstance(response, dict)
+            else None
+        )
+        error = (
+            response.get("error")
+            if isinstance(response, dict)
+            else "Neplatna odpoved cloudoveho klienta."
+        )
+
+        raise RuntimeError(
+            "Odeslani bateriove telemetrie selhalo. "
+            f"HTTP: {status_code}, chyba: {error}"
+        )
+
+    logging.info(
+        "Pylontech bateriova telemetrie odeslana. "
+        "Moduly=%s/%s entity=%s.",
+        snapshot.get(
+            "detected_module_count"
+        ),
+        snapshot.get(
+            "expected_module_count"
+        ),
+        len(entities),
+    )
+
+
 def odeslat_telemetrii_jednou() -> int:
     """Nacte a odesle jeden snapshot FVE telemetrie."""
     identity = load_device_identity()
@@ -1855,6 +2009,17 @@ def odeslat_telemetrii_jednou() -> int:
     local_interval = ziskej_interval_telemetrie(
         cloud_config
     )
+
+    try:
+        odeslat_baterie_telemetrii(
+            identity=identity,
+            cloud_config=cloud_config,
+        )
+    except Exception as exc:
+        logging.warning(
+            "Pylontech bateriova telemetrie selhala: %s",
+            exc,
+        )
 
     runtime_configuration = najdi_fve_runtime(
         cloud_config
