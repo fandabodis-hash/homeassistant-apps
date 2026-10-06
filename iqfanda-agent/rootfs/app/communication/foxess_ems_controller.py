@@ -26,8 +26,7 @@ WORK_MODE_REGISTER = 41000
 MAX_SOC_REGISTER = 41010
 REMOTE_ENABLE_REGISTER = 44000
 REMOTE_TIMEOUT_REGISTER = 44001
-REMOTE_ACTIVE_POWER_HIGH_REGISTER = 44002
-REMOTE_ACTIVE_POWER_LOW_REGISTER = 44003
+REMOTE_ACTIVE_POWER_REGISTER = 44002
 BATTERY_POWER_REGISTER = 31036
 BATTERY_SOC_REGISTER = 31038
 
@@ -165,6 +164,21 @@ def _read_one(
     )[0]
 
 
+def _read_s16(
+    *,
+    client: Any,
+    device_id: int,
+    address: int,
+) -> int:
+    return _decode_s16(
+        _read_one(
+            client=client,
+            device_id=device_id,
+            address=address,
+        )
+    )
+
+
 def _read_s32(
     *,
     client: Any,
@@ -222,6 +236,42 @@ def _write_one(
     if actual != (int(value) & 0xFFFF):
         raise RuntimeError(
             f"FoxESS registr {address} readback nesouhlasi."
+        )
+
+
+def _write_s16(
+    *,
+    client: Any,
+    device_id: int,
+    address: int,
+    value: int,
+) -> None:
+    normalized = int(value)
+
+    if (
+        normalized < -0x8000
+        or normalized > 0x7FFF
+    ):
+        raise ValueError(
+            "FoxESS signed16 setpoint je mimo rozsah."
+        )
+
+    _write_one(
+        client=client,
+        device_id=device_id,
+        address=address,
+        value=normalized,
+    )
+
+    actual = _read_s16(
+        client=client,
+        device_id=device_id,
+        address=address,
+    )
+
+    if actual != normalized:
+        raise RuntimeError(
+            f"FoxESS registr {address} signed16 readback nesouhlasi."
         )
 
 
@@ -461,17 +511,17 @@ def _restore_auto(
 ) -> bool:
     writes = False
 
-    active_power = _read_s32(
+    active_power = _read_s16(
         client=client,
         device_id=device_id,
-        address=REMOTE_ACTIVE_POWER_HIGH_REGISTER,
+        address=REMOTE_ACTIVE_POWER_REGISTER,
     )
 
     if active_power != 0:
-        _write_s32(
+        _write_s16(
             client=client,
             device_id=device_id,
-            address=REMOTE_ACTIVE_POWER_HIGH_REGISTER,
+            address=REMOTE_ACTIVE_POWER_REGISTER,
             value=0,
         )
         writes = True
@@ -832,10 +882,10 @@ def apply_foxess_h3_action(
                 value=1,
             )
 
-        current_active_power = _read_s32(
+        current_active_power = _read_s16(
             client=client,
             device_id=device_id,
-            address=REMOTE_ACTIVE_POWER_HIGH_REGISTER,
+            address=REMOTE_ACTIVE_POWER_REGISTER,
         )
 
         if not isinstance(
@@ -847,17 +897,21 @@ def apply_foxess_h3_action(
             )
 
         #
-        # Protocol-115 Remote Active Power is signed inverter AC power:
-        #   negative = force charge/import,
-        #   positive = force discharge/export.
+        # Protocol-115 Remote Active Power is one signed 16-bit register:
+        #   44002 < 0 = force charge/import,
+        #   44002 > 0 = force discharge/export.
+        #
+        # 44003 is not part of this V1 active-power setpoint.
+        # Read/write 44000, 44001 and 44002 individually because
+        # multi-register reads can return invalid values on this family.
         #
         # Write on every intent because the FoxESS remote-control
         # watchdog is refreshed by the active-power command.
         #
-        _write_s32(
+        _write_s16(
             client=client,
             device_id=device_id,
-            address=REMOTE_ACTIVE_POWER_HIGH_REGISTER,
+            address=REMOTE_ACTIVE_POWER_REGISTER,
             value=desired_active_power,
         )
 
@@ -874,10 +928,10 @@ def apply_foxess_h3_action(
             )
 
         if (
-            _read_s32(
+            _read_s16(
                 client=client,
                 device_id=device_id,
-                address=REMOTE_ACTIVE_POWER_HIGH_REGISTER,
+                address=REMOTE_ACTIVE_POWER_REGISTER,
             )
             != desired_active_power
         ):

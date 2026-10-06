@@ -20,8 +20,7 @@ WORK_MODE_REGISTER = 41000
 MAX_SOC_REGISTER = 41010
 REMOTE_ENABLE_REGISTER = 44000
 REMOTE_TIMEOUT_REGISTER = 44001
-REMOTE_ACTIVE_POWER_HIGH_REGISTER = 44002
-REMOTE_ACTIVE_POWER_LOW_REGISTER = 44003
+REMOTE_ACTIVE_POWER_REGISTER = 44002
 BATTERY_POWER_REGISTER = 31036
 BATTERY_SOC_REGISTER = 31038
 
@@ -29,7 +28,9 @@ READ_BLOCKS = (
     (PROTOCOL_VERSION_REGISTER, 1),
     (WORK_MODE_REGISTER, 1),
     (MAX_SOC_REGISTER, 1),
-    (REMOTE_ENABLE_REGISTER, 4),
+    (REMOTE_ENABLE_REGISTER, 1),
+    (REMOTE_TIMEOUT_REGISTER, 1),
+    (REMOTE_ACTIVE_POWER_REGISTER, 1),
     (BATTERY_POWER_REGISTER, 1),
     (BATTERY_SOC_REGISTER, 1),
 )
@@ -169,9 +170,11 @@ def probe_foxess_remote_control_from_cloud_config(
     max_soc = values[MAX_SOC_REGISTER]
     remote_enable = values[REMOTE_ENABLE_REGISTER]
     timeout_set = values[REMOTE_TIMEOUT_REGISTER]
-    active_power_w = _decode_s32(
-        values[REMOTE_ACTIVE_POWER_HIGH_REGISTER],
-        values[REMOTE_ACTIVE_POWER_LOW_REGISTER],
+    active_power_raw = values[
+        REMOTE_ACTIVE_POWER_REGISTER
+    ]
+    active_power_w = _decode_s16(
+        active_power_raw
     )
     battery_power_w = _decode_s16(values[BATTERY_POWER_REGISTER])
     battery_soc_percent = values[BATTERY_SOC_REGISTER]
@@ -197,7 +200,8 @@ def probe_foxess_remote_control_from_cloud_config(
             "max_soc_41010": max_soc,
             "remote_enable_44000": remote_enable,
             "remote_timeout_44001": timeout_set,
-            "remote_active_power_w_44002_44003": active_power_w,
+            "remote_active_power_raw_44002": active_power_raw,
+            "remote_active_power_w_44002": active_power_w,
             "battery_power_w_31036": battery_power_w,
             "battery_soc_percent_31038": battery_soc_percent,
         },
@@ -205,8 +209,7 @@ def probe_foxess_remote_control_from_cloud_config(
         "candidate_control_map": {
             "remote_enable": 44000,
             "timeout_set": 44001,
-            "active_power_high": 44002,
-            "active_power_low": 44003,
+            "active_power": 44002,
             "work_mode": 41000,
             "max_soc": 41010,
             "battery_power": 31036,
