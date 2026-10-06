@@ -14,6 +14,9 @@ from communication.inverter_control_adapter import (
 from communication.inverter_adapter import (
     probe_inverter_modbus,
 )
+from communication.pylontech_us5000 import (
+    probe_pylontech_us5000,
+)
 from communication.foxess_remote_control_probe import (
     probe_foxess_remote_control_from_cloud_config,
 )
@@ -1591,6 +1594,125 @@ def execute_photovoltaic_modbus_probe(
             probe_result.get(
                 "profile_id"
             ),
+        )
+
+
+def execute_battery_rs232_probe(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """
+    Provede pouze diagnosticky Pylontech US5000 pwr dotaz.
+
+    UART obsahuje TX diagnosticke query, ale zadny prikaz
+    pro zmenu konfigurace baterie.
+    """
+    try:
+        probe_result = (
+            probe_pylontech_us5000(
+                command_payload
+            )
+        )
+
+        if not isinstance(
+            probe_result,
+            dict,
+        ):
+            raise RuntimeError(
+                "Pylontech adapter vratil "
+                "neplatny probe vysledek."
+            )
+
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": (
+                    "pylontech_us5000_adapter"
+                ),
+                "phase": "probe_failed",
+                "read_only": True,
+                "diagnostic_query_only": True,
+                "battery_configuration_write": False,
+                "serial_tx": (
+                    "diagnostic_query_only"
+                ),
+                "error_type": (
+                    type(exc).__name__
+                ),
+            },
+            error_message=str(exc),
+        )
+
+        logging.exception(
+            "Pylontech US5000 RS232 probe "
+            "pro prikaz %s selhal.",
+            command_id,
+        )
+
+        return
+
+    verified = (
+        probe_result.get(
+            "profile_verified"
+        )
+        is True
+    )
+
+    probe_result[
+        "worker"
+    ] = "command_worker"
+    probe_result[
+        "executor"
+    ] = "pylontech_us5000_adapter"
+    probe_result[
+        "phase"
+    ] = "console_response"
+
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status=(
+            "succeeded"
+            if verified
+            else "failed"
+        ),
+        result=probe_result,
+        error_message=(
+            None
+            if verified
+            else (
+                "Pylontech US5000 nebyl "
+                "profilove overen."
+            )
+        ),
+    )
+
+    if verified:
+        logging.info(
+            "Pylontech US5000 komunikace potvrzena. "
+            "Prikaz=%s prevodnik=%s moduly=%s/%s.",
+            command_id,
+            probe_result.get(
+                "communicator_serial_number"
+            ),
+            probe_result.get(
+                "detected_module_count"
+            ),
+            probe_result.get(
+                "expected_module_count"
+            ),
+        )
+    else:
+        logging.warning(
+            "Pylontech US5000 komunikace nebyla "
+            "profilove potvrzena. Prikaz=%s.",
+            command_id,
         )
 
 
@@ -3321,6 +3443,14 @@ def execute_command(
 
     if command_type == "photovoltaic_modbus_probe":
         execute_photovoltaic_modbus_probe(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "battery_rs232_probe":
+        execute_battery_rs232_probe(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
