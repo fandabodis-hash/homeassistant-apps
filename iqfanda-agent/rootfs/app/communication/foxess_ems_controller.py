@@ -37,7 +37,7 @@ WORK_MODE_BACK_UP = 2
 
 REMOTE_TIMEOUT_SECONDS = 180
 MAXIMUM_CHARGE_POWER_W = 5000
-MAXIMUM_DISCHARGE_POWER_W = 5000
+MAXIMUM_DISCHARGE_POWER_W = 10000
 MINIMUM_DISCHARGE_SOC_MARGIN_PERCENT = 2.0
 
 SUPPORTED_ACTIONS = {
@@ -446,7 +446,7 @@ def _validate_discharge_power(
 
     if power > MAXIMUM_DISCHARGE_POWER_W:
         raise ValueError(
-            "FoxESS vybijeci vykon prekrocil candidate limit 500 W."
+            "FoxESS vybijeci vykon prekrocil maximalni vykon menice 10000 W."
         )
 
     return power
@@ -594,11 +594,11 @@ def apply_foxess_h3_action(
         )
 
     if (
-        minimum_discharge_soc < 0
-        or minimum_discharge_soc > 95
+        minimum_discharge_soc < 10
+        or minimum_discharge_soc > 100
     ):
         raise ValueError(
-            "FoxESS minimum discharge SOC je mimo 0 az 95 %."
+            "FoxESS minimum discharge SOC je mimo 10 az 100 %."
         )
 
     if action == "auto":

@@ -24,7 +24,7 @@ EMS_MODE_CHARGE_FROM_GRID = 4
 EMS_MODE_DISCHARGE_BATTERY = 12
 
 MAXIMUM_CHARGE_POWER_W = 5000
-MAXIMUM_DISCHARGE_POWER_W = 500
+MAXIMUM_DISCHARGE_POWER_W = 5000
 MINIMUM_DISCHARGE_SOC_MARGIN_PERCENT = 2.0
 
 SUPPORTED_DEVICE_IDS = {
@@ -109,7 +109,7 @@ def _validate_discharge_power(
     if normalized < 0:
         raise ValueError("Vybijeci vykon nesmi byt zaporny.")
     if normalized > MAXIMUM_DISCHARGE_POWER_W:
-        raise ValueError("Vybijeci vykon prekrocil candidate limit 500 W.")
+        raise ValueError("Vybijeci vykon prekrocil maximalni vykon menice 5000 W.")
     return normalized
 
 
@@ -439,8 +439,8 @@ def execute_goodwe_ems_from_cloud_config(
 
     if target_soc < 0 or target_soc > 100:
         raise ValueError("Target SOC je mimo rozsah 0 az 100 %.")
-    if minimum_discharge_soc < 0 or minimum_discharge_soc > 95:
-        raise ValueError("Minimum discharge SOC je mimo rozsah 0 az 95 %.")
+    if minimum_discharge_soc < 10 or minimum_discharge_soc > 100:
+        raise ValueError("Minimum discharge SOC je mimo rozsah 10 az 100 %.")
 
     _communicator, serial_path = _find_communicator(communicator_id)
     bus_lock = ziskej_zamek_modbus_sbernice(serial_path)

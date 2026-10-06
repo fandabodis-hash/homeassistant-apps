@@ -25,7 +25,7 @@ VALID_ACTIONS = {
 
 
 MAXIMUM_ALLOWED_CHARGE_POWER_W = 5000
-MAXIMUM_ALLOWED_DISCHARGE_POWER_W = 500
+MAXIMUM_ALLOWED_DISCHARGE_POWER_W = 100000000
 MINIMUM_DISCHARGE_SOC_MARGIN_PERCENT = 2.0
 
 
@@ -226,9 +226,9 @@ def save_spot_battery_intent(
             "allowed_discharge_power_w nesmi byt zaporny."
         )
 
-    if not (0.0 <= minimum_discharge_soc_percent <= 95.0):
+    if not (10.0 <= minimum_discharge_soc_percent <= 100.0):
         raise ValueError(
-            "minimum_discharge_soc_percent musi byt 0 az 95."
+            "minimum_discharge_soc_percent musi byt 10 az 100."
         )
 
     if (
@@ -251,12 +251,12 @@ def save_spot_battery_intent(
 
     if requested_discharge_power_w > MAXIMUM_ALLOWED_DISCHARGE_POWER_W:
         raise ValueError(
-            "requested_discharge_power_w prekrocil candidate limit 500 W."
+            "requested_discharge_power_w prekrocil univerzalni ochranny limit."
         )
 
     if allowed_discharge_power_w > MAXIMUM_ALLOWED_DISCHARGE_POWER_W:
         raise ValueError(
-            "allowed_discharge_power_w prekrocil candidate limit 500 W."
+            "allowed_discharge_power_w prekrocil univerzalni ochranny limit."
         )
 
     if action == "auto":

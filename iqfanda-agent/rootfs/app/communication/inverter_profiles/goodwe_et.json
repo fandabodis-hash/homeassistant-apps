@@ -19,9 +19,9 @@
         "discharge_grid"
       ],
       "discharge_allowed": true,
-      "verification_status": "candidate_discharge_mode12_500w_00003",
+      "verification_status": "goodwe_et_bidirectional_verified_00003_profile_max_5kw",
       "maximum_charge_power_w": 5000,
-      "maximum_discharge_power_w": 500
+      "maximum_discharge_power_w": 5000
     }
   },
   "protocol": {
