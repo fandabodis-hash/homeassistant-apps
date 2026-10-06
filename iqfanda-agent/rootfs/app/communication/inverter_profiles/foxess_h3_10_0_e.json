@@ -1124,7 +1124,9 @@
         "discharge_grid"
       ],
       "discharge_allowed": true,
-      "verification_status": "candidate_protocol_115_bidirectional_00018_pending_physical_canary"
+      "verification_status": "candidate_protocol_115_bidirectional_00018_pending_physical_canary_500w_first",
+      "maximum_charge_power_w": 5000,
+      "maximum_discharge_power_w": 5000
     }
   }
 }

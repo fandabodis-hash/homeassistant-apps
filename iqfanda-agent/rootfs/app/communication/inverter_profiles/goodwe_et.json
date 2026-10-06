@@ -19,7 +19,9 @@
         "discharge_grid"
       ],
       "discharge_allowed": true,
-      "verification_status": "candidate_discharge_mode12_500w_00003"
+      "verification_status": "candidate_discharge_mode12_500w_00003",
+      "maximum_charge_power_w": 5000,
+      "maximum_discharge_power_w": 500
     }
   },
   "protocol": {
@@ -29,7 +31,7 @@
     "bytesize": 8,
     "parity": "N",
     "stopbits": 1,
-    "timeout_seconds": 1.0,
+    "timeout_seconds": 1,
     "retries": 0,
     "allowed_device_ids": [
       247,
@@ -103,7 +105,7 @@
       "attributes": {
         "device_class": "voltage"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "pv1.proud",
@@ -117,7 +119,7 @@
       "attributes": {
         "device_class": "current"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "pv1.vykon",
@@ -125,7 +127,7 @@
       "name": "Výkon PV1",
       "address": 35105,
       "register_type": "uint32",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "number",
       "source_address": 35105,
@@ -150,7 +152,7 @@
       "attributes": {
         "device_class": "voltage"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "pv2.proud",
@@ -164,7 +166,7 @@
       "attributes": {
         "device_class": "current"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "pv2.vykon",
@@ -172,7 +174,7 @@
       "name": "Výkon PV2",
       "address": 35109,
       "register_type": "uint32",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "number",
       "source_address": 35109,
@@ -198,7 +200,7 @@
         "device_class": "voltage",
         "verification": "physically_verified_00003"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "sit.napeti_l2",
@@ -213,7 +215,7 @@
         "device_class": "voltage",
         "verification": "physically_verified_00003"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "sit.napeti_l3",
@@ -228,7 +230,7 @@
         "device_class": "voltage",
         "verification": "physically_verified_00003"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "stridac.vykon_celkem",
@@ -236,7 +238,7 @@
       "name": "Celkový výkon střídače",
       "address": 35138,
       "register_type": "int16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "integer",
       "source_address": 35137,
@@ -250,7 +252,7 @@
       "name": "Aktivní výkon střídače",
       "address": 35140,
       "register_type": "int16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "integer",
       "source_address": 35139,
@@ -271,7 +273,7 @@
       "attributes": {
         "device_class": "temperature"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "stridac.teplota_chladice",
@@ -285,7 +287,7 @@
       "attributes": {
         "device_class": "temperature"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "stridac.pracovni_rezim",
@@ -293,7 +295,7 @@
       "name": "Pracovní režim střídače",
       "address": 35187,
       "register_type": "uint16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": null,
       "value_type": "integer",
       "source_address": null,
@@ -305,7 +307,7 @@
       "name": "Varování střídače",
       "address": 35185,
       "register_type": "uint16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": null,
       "value_type": "integer",
       "source_address": null,
@@ -317,7 +319,7 @@
       "name": "Výkon sítě L1",
       "address": 36019,
       "register_type": "int32",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "integer",
       "source_address": 36020,
@@ -337,7 +339,7 @@
       "name": "Výkon sítě L2",
       "address": 36021,
       "register_type": "int32",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "integer",
       "source_address": 36021,
@@ -357,7 +359,7 @@
       "name": "Výkon sítě L3",
       "address": 36023,
       "register_type": "int32",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "integer",
       "source_address": 36023,
@@ -377,7 +379,7 @@
       "name": "Výkon sítě celkem",
       "address": 36025,
       "register_type": "int32",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "integer",
       "source_address": 36025,
@@ -397,7 +399,7 @@
       "name": "ZdĂˇnlivĂ˝ vĂ˝kon sĂ­tÄ› L1",
       "address": 36035,
       "register_type": "int32",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "VA",
       "value_type": "integer",
       "source_address": 36035,
@@ -418,7 +420,7 @@
       "name": "ZdĂˇnlivĂ˝ vĂ˝kon sĂ­tÄ› L2",
       "address": 36037,
       "register_type": "int32",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "VA",
       "value_type": "integer",
       "source_address": 36037,
@@ -439,7 +441,7 @@
       "name": "ZdĂˇnlivĂ˝ vĂ˝kon sĂ­tÄ› L3",
       "address": 36039,
       "register_type": "int32",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "VA",
       "value_type": "integer",
       "source_address": 36039,
@@ -466,7 +468,7 @@
       "attributes": {
         "device_class": "frequency"
       },
-      "divisor": 100.0
+      "divisor": 100
     },
     {
       "entity_key": "smartmeter.odber_dnes",
@@ -480,7 +482,7 @@
       "attributes": {
         "state_class": "total"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "smartmeter.odber_celkem",
@@ -499,7 +501,7 @@
         35201
       ],
       "word_order": "big",
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "smartmeter.dodavka_dnes",
@@ -513,7 +515,7 @@
       "attributes": {
         "state_class": "total"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "smartmeter.dodavka_celkem",
@@ -532,7 +534,7 @@
         35196
       ],
       "word_order": "big",
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "backup.vykon_l1",
@@ -540,7 +542,7 @@
       "name": "Backup v?kon L1",
       "address": 35150,
       "register_type": "int16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "integer",
       "source_address": 35149,
@@ -555,7 +557,7 @@
       "name": "Backup v?kon L2",
       "address": 35156,
       "register_type": "int16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "integer",
       "source_address": 35155,
@@ -570,7 +572,7 @@
       "name": "Backup v?kon L3",
       "address": 35162,
       "register_type": "int16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "integer",
       "source_address": 35161,
@@ -585,7 +587,7 @@
       "name": "Backup v?kon celkem",
       "address": 35170,
       "register_type": "int16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "integer",
       "source_address": 35169,
@@ -606,7 +608,7 @@
       "attributes": {
         "device_class": "power_factor"
       },
-      "divisor": 100.0
+      "divisor": 100
     },
     {
       "entity_key": "spotreba.vykon_l1",
@@ -614,7 +616,7 @@
       "name": "Spotřeba L1",
       "address": 35164,
       "register_type": "int16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "integer",
       "source_address": null,
@@ -628,7 +630,7 @@
       "name": "Spotřeba L2",
       "address": 35166,
       "register_type": "int16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "integer",
       "source_address": null,
@@ -642,7 +644,7 @@
       "name": "Spotřeba L3",
       "address": 35168,
       "register_type": "int16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "integer",
       "source_address": null,
@@ -656,7 +658,7 @@
       "name": "Spotřeba celkem",
       "address": 35172,
       "register_type": "int16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "integer",
       "source_address": null,
@@ -676,7 +678,7 @@
       "attributes": {
         "state_class": "total"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "spotreba.energie_celkem",
@@ -695,7 +697,7 @@
         35204
       ],
       "word_order": "big",
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "baterie.napeti",
@@ -709,7 +711,7 @@
       "attributes": {
         "device_class": "voltage"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "baterie.proud",
@@ -724,7 +726,7 @@
         "device_class": "current",
         "sign_convention": "goodwe_raw"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "baterie.vykon",
@@ -732,7 +734,7 @@
       "name": "Výkon baterie",
       "address": 35183,
       "register_type": "int16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "W",
       "value_type": "integer",
       "source_address": 35182,
@@ -747,7 +749,7 @@
       "name": "Režim baterie",
       "address": 35184,
       "register_type": "uint16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": null,
       "value_type": "integer",
       "source_address": 35184,
@@ -759,7 +761,7 @@
       "name": "Stav nabití baterie",
       "address": 37007,
       "register_type": "uint16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "%",
       "value_type": "integer",
       "source_address": 37007,
@@ -773,7 +775,7 @@
       "name": "Zdraví baterie",
       "address": 37008,
       "register_type": "uint16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "%",
       "value_type": "integer",
       "source_address": 37008,
@@ -791,7 +793,7 @@
       "attributes": {
         "device_class": "temperature"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "baterie.limit_proudu_nabijeni",
@@ -799,7 +801,7 @@
       "name": "Limit proudu nabíjení",
       "address": 37004,
       "register_type": "uint16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "A",
       "value_type": "integer",
       "source_address": 37004,
@@ -811,7 +813,7 @@
       "name": "Limit proudu vybíjení",
       "address": 37005,
       "register_type": "uint16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": "A",
       "value_type": "integer",
       "source_address": 37005,
@@ -823,7 +825,7 @@
       "name": "Stav baterie",
       "address": 37002,
       "register_type": "uint16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": null,
       "value_type": "integer",
       "source_address": 37002,
@@ -835,7 +837,7 @@
       "name": "Varování baterie",
       "address": 37010,
       "register_type": "uint32",
-      "scale": 1.0,
+      "scale": 1,
       "unit": null,
       "value_type": "integer",
       "source_address": 37010,
@@ -852,7 +854,7 @@
       "name": "Chyba baterie",
       "address": 37006,
       "register_type": "uint32",
-      "scale": 1.0,
+      "scale": 1,
       "unit": null,
       "value_type": "integer",
       "source_address": 37006,
@@ -869,7 +871,7 @@
       "name": "Počet bateriových stringů",
       "address": 37009,
       "register_type": "uint16",
-      "scale": 1.0,
+      "scale": 1,
       "unit": null,
       "value_type": "integer",
       "source_address": 37009,
@@ -887,7 +889,7 @@
       "attributes": {
         "state_class": "total"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "baterie.energie_nabita_celkem",
@@ -906,7 +908,7 @@
         35207
       ],
       "word_order": "big",
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "baterie.energie_vybita_dnes",
@@ -920,7 +922,7 @@
       "attributes": {
         "state_class": "total"
       },
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "baterie.energie_vybita_celkem",
@@ -939,7 +941,7 @@
         35210
       ],
       "word_order": "big",
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "vyroba.energie_dnes",
@@ -958,7 +960,7 @@
         35194
       ],
       "word_order": "big",
-      "divisor": 10.0
+      "divisor": 10
     },
     {
       "entity_key": "vyroba.energie_celkem",
@@ -977,7 +979,7 @@
         35192
       ],
       "word_order": "big",
-      "divisor": 10.0
+      "divisor": 10
     }
   ],
   "main_breaker_protection": {

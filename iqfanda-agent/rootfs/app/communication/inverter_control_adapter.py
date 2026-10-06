@@ -380,6 +380,29 @@ def build_inverter_control_capability_state(
                 ]
             )
 
+        for numeric_key in (
+            "maximum_charge_power_w",
+            "maximum_discharge_power_w",
+        ):
+            if numeric_key not in capability_definition:
+                continue
+
+            raw_value = capability_definition.get(
+                numeric_key
+            )
+
+            try:
+                numeric_value = int(
+                    raw_value
+                )
+            except (TypeError, ValueError):
+                continue
+
+            if numeric_value > 0:
+                public_definition[
+                    numeric_key
+                ] = numeric_value
+
         verification_status = str(
             capability_definition.get(
                 "verification_status"
