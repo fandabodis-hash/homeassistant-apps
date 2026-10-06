@@ -1,4 +1,4 @@
-"""FoxESS H3 protocol-115 battery charge control driver."""
+"""FoxESS H3 protocol-115 bidirectional battery control driver."""
 
 from __future__ import annotations
 
@@ -37,10 +37,13 @@ WORK_MODE_BACK_UP = 2
 
 REMOTE_TIMEOUT_SECONDS = 180
 MAXIMUM_CHARGE_POWER_W = 5000
+MAXIMUM_DISCHARGE_POWER_W = 500
+MINIMUM_DISCHARGE_SOC_MARGIN_PERCENT = 2.0
 
 SUPPORTED_ACTIONS = {
     "auto",
     "charge_grid",
+    "discharge_grid",
 }
 
 OWNER_MARKER_PATH = Path(
@@ -403,7 +406,7 @@ def _validate_action(
 
     if normalized not in SUPPORTED_ACTIONS:
         raise ValueError(
-            "FoxESS H3 podporuje pouze auto a charge_grid."
+            "FoxESS H3 podporuje auto, charge_grid a discharge_grid."
         )
 
     return normalized
@@ -424,6 +427,26 @@ def _validate_charge_power(
     if power > MAXIMUM_CHARGE_POWER_W:
         raise ValueError(
             "FoxESS nabijeci vykon prekrocil 5000 W."
+        )
+
+    return power
+
+
+def _validate_discharge_power(
+    value: int,
+) -> int:
+    power = int(
+        value
+    )
+
+    if power < 0:
+        raise ValueError(
+            "FoxESS vybijeci vykon nesmi byt zaporny."
+        )
+
+    if power > MAXIMUM_DISCHARGE_POWER_W:
+        raise ValueError(
+            "FoxESS vybijeci vykon prekrocil candidate limit 500 W."
         )
 
     return power
@@ -535,6 +558,8 @@ def apply_foxess_h3_action(
     action: str,
     allowed_charge_power_w: int,
     target_soc_percent: float,
+    allowed_discharge_power_w: int = 0,
+    minimum_discharge_soc_percent: float = 20.0,
     marker_path: Path = OWNER_MARKER_PATH,
 ) -> FoxessH3ControlResult:
     if int(device_id) != EXPECTED_DEVICE_ID:
@@ -546,14 +571,18 @@ def apply_foxess_h3_action(
         action
     )
 
-    charge_power_w = (
-        _validate_charge_power(
-            allowed_charge_power_w
-        )
+    charge_power_w = _validate_charge_power(
+        allowed_charge_power_w
+    )
+    discharge_power_w = _validate_discharge_power(
+        allowed_discharge_power_w
     )
 
     target_soc = float(
         target_soc_percent
+    )
+    minimum_discharge_soc = float(
+        minimum_discharge_soc_percent
     )
 
     if (
@@ -563,6 +592,41 @@ def apply_foxess_h3_action(
         raise ValueError(
             "FoxESS target SOC je mimo 0 az 100 %."
         )
+
+    if (
+        minimum_discharge_soc < 0
+        or minimum_discharge_soc > 95
+    ):
+        raise ValueError(
+            "FoxESS minimum discharge SOC je mimo 0 az 95 %."
+        )
+
+    if action == "auto":
+        if (
+            charge_power_w != 0
+            or discharge_power_w != 0
+        ):
+            raise ValueError(
+                "FoxESS auto vyzaduje nulovy charge i discharge vykon."
+            )
+    elif action == "charge_grid":
+        if discharge_power_w != 0:
+            raise ValueError(
+                "FoxESS charge_grid nesmi obsahovat discharge vykon."
+            )
+        if charge_power_w <= 0:
+            raise ValueError(
+                "FoxESS charge_grid vyzaduje kladny vykon."
+            )
+    elif action == "discharge_grid":
+        if charge_power_w != 0:
+            raise ValueError(
+                "FoxESS discharge_grid nesmi obsahovat charge vykon."
+            )
+        if discharge_power_w <= 0:
+            raise ValueError(
+                "FoxESS discharge_grid vyzaduje kladny vykon."
+            )
 
     _validate_protocol(
         client=client,
@@ -604,11 +668,6 @@ def apply_foxess_h3_action(
             write_performed=writes,
         )
 
-    if charge_power_w <= 0:
-        raise ValueError(
-            "FoxESS charge_grid vyzaduje kladny vykon."
-        )
-
     if (
         remote_enable == 1
         and marker is None
@@ -638,29 +697,55 @@ def apply_foxess_h3_action(
             "FoxESS SOC readback je mimo rozsah."
         )
 
-    effective_target_soc = min(
-        target_soc,
-        float(max_soc),
-    )
+    if action == "charge_grid":
+        effective_target_soc = min(
+            target_soc,
+            float(max_soc),
+        )
 
-    if local_soc >= effective_target_soc:
-        if marker is not None:
-            _restore_auto(
-                client=client,
-                device_id=device_id,
-                marker_path=marker_path,
-                marker=marker,
+        if local_soc >= effective_target_soc:
+            if marker is not None:
+                _restore_auto(
+                    client=client,
+                    device_id=device_id,
+                    marker_path=marker_path,
+                    marker=marker,
+                )
+
+            return FoxessH3ControlResult(
+                action="auto",
+                requested_power_w=charge_power_w,
+                applied_power_w=0,
+                verified=True,
+                write_performed=(
+                    marker is not None
+                ),
             )
 
-        return FoxessH3ControlResult(
-            action="auto",
-            requested_power_w=charge_power_w,
-            applied_power_w=0,
-            verified=True,
-            write_performed=(
-                marker is not None
-            ),
+        selected_power_w = charge_power_w
+        desired_active_power = -charge_power_w
+
+    else:
+        minimum_with_margin = (
+            minimum_discharge_soc
+            + MINIMUM_DISCHARGE_SOC_MARGIN_PERCENT
         )
+
+        if local_soc <= minimum_with_margin:
+            if marker is not None:
+                _restore_auto(
+                    client=client,
+                    device_id=device_id,
+                    marker_path=marker_path,
+                    marker=marker,
+                )
+
+            raise RuntimeError(
+                "FoxESS discharge safety guard zablokoval rizeni."
+            )
+
+        selected_power_w = discharge_power_w
+        desired_active_power = discharge_power_w
 
     if marker is None:
         original_work_mode = _read_one(
@@ -747,10 +832,6 @@ def apply_foxess_h3_action(
                 value=1,
             )
 
-        desired_active_power = (
-            -charge_power_w
-        )
-
         current_active_power = _read_s32(
             client=client,
             device_id=device_id,
@@ -765,10 +846,14 @@ def apply_foxess_h3_action(
                 "FoxESS active power readback nema platny format."
             )
 
-        # Write the active-power command on every charge intent.
-        # FoxESS remote control is watchdog based; a repeated command
-        # must refresh the remote-control activity even when the
-        # requested setpoint did not change.
+        #
+        # Protocol-115 Remote Active Power is signed inverter AC power:
+        #   negative = force charge/import,
+        #   positive = force discharge/export.
+        #
+        # Write on every intent because the FoxESS remote-control
+        # watchdog is refreshed by the active-power command.
+        #
         _write_s32(
             client=client,
             device_id=device_id,
@@ -776,7 +861,6 @@ def apply_foxess_h3_action(
             value=desired_active_power,
         )
 
-        # Final mandatory readback.
         if (
             _read_one(
                 client=client,
@@ -814,13 +898,12 @@ def apply_foxess_h3_action(
         raise
 
     return FoxessH3ControlResult(
-        action="charge_grid",
-        requested_power_w=charge_power_w,
-        applied_power_w=charge_power_w,
+        action=action,
+        requested_power_w=selected_power_w,
+        applied_power_w=selected_power_w,
         verified=True,
         write_performed=True,
     )
-
 
 def _select_runtime(
     cloud_config: dict[str, Any],
@@ -966,6 +1049,8 @@ def execute_foxess_h3_from_cloud_config(
     action: str,
     allowed_charge_power_w: int,
     target_soc_percent: float,
+    allowed_discharge_power_w: int = 0,
+    minimum_discharge_soc_percent: float = 20.0,
 ) -> FoxessH3ControlResult:
     runtime = _select_runtime(
         cloud_config
@@ -1020,8 +1105,15 @@ def execute_foxess_h3_from_cloud_config(
                 target_soc_percent=(
                     target_soc_percent
                 ),
+                allowed_discharge_power_w=(
+                    allowed_discharge_power_w
+                ),
+                minimum_discharge_soc_percent=(
+                    minimum_discharge_soc_percent
+                ),
                 marker_path=OWNER_MARKER_PATH,
             )
 
         finally:
             client.close()
+
