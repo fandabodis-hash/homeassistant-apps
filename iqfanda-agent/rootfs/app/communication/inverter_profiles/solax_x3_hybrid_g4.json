@@ -457,11 +457,11 @@
       "name": "Výkon baterie",
       "address": 22,
       "register_type": "int16",
-      "scale": 1,
+      "scale": -1,
       "unit": "W",
       "value_type": "integer",
       "device_class": "power",
-      "sign_convention": "negative_discharging_positive_charging",
+      "sign_convention": "negative_charging_positive_discharging",
       "verification_status": "energy_balance_verified_00010"
     },
     {
