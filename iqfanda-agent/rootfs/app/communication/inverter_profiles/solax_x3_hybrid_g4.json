@@ -488,6 +488,19 @@
       "verification_status": "display_verified_00010_primary"
     },
     {
+      "entity_key": "vyroba.energie_dnes",
+      "category": "vyroba",
+      "name": "Dnešní výroba FVE",
+      "address": 150,
+      "register_type": "uint16",
+      "divisor": 10,
+      "unit": "kWh",
+      "value_type": "number",
+      "device_class": "energy",
+      "state_class": "total_increasing",
+      "verification_status": "protocol_documented_pending_live_00014"
+    },
+    {
       "entity_key": "stridac.energie_vystup_dnes",
       "category": "energie",
       "name": "Energie na výstupu střídače dnes",
