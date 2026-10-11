@@ -726,6 +726,33 @@
       "device_class": "energy",
       "state_class": "total_increasing",
       "verification_status": "energy_balance_derived_00010"
+    },
+    {
+      "entity_key": "smartmeter.feedin_power_0x46_diagnostic",
+      "category": "smartmeter",
+      "name": "Diagnostika SolaX Feed-in 0x46",
+      "address": 70,
+      "addresses": [
+        70,
+        71
+      ],
+      "register_type": "int32",
+      "word_order": "little",
+      "scale": 1,
+      "unit": "W",
+      "value_type": "integer",
+      "device_class": "power",
+      "sign_convention": "negative_import_positive_export",
+      "verification_status": "diagnostic_unverified_require_live_00014",
+      "optional": true
+    }
+  ],
+  "selector_read_blocks": [
+    {
+      "name": "diagnostic_meter_feed_in_0x46",
+      "address": 70,
+      "count": 2,
+      "required": false
     }
   ]
 }
