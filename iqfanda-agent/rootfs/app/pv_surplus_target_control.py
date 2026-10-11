@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from device_config import load_cached_cloud_config
+from weekly_relay_owner import is_verified_weekly_owner
 from pv_surplus_target_intent import (
     DEFAULT_PATH,
     SCHEMA_VERSION,
@@ -385,6 +386,15 @@ def apply_pv_surplus_target_intent(
             "Intent output_reference neodpovida adminem overenemu vystupu cile."
         )
 
+    # F43: legacy PV/SOC intents (including OFF) must never override
+    # an active verified cloud weekly thermostat.
+    if is_verified_weekly_owner(
+        cloud_config,
+        target_id=binding["target_id"],
+        output_reference=binding["output_reference"],
+    ):
+        raise ValueError("Verified weekly thermostat owns this output.")
+
     if action == "on" and binding["actuation_enabled"] is not True:
         raise ValueError("Zapnuti energetickeho cile neni povoleno.")
 
@@ -459,6 +469,23 @@ def reconcile_expired_pv_surplus_target_intents(
                 raise ValueError(
                     "Expirovany intent neodpovida aktualnimu admin output bindingu."
                 )
+
+            # F43: expiration of a legacy SOC intent is not an OFF order
+            # against an active verified cloud weekly thermostat.
+            if is_verified_weekly_owner(
+                cloud_config,
+                target_id=binding["target_id"],
+                output_reference=binding["output_reference"],
+            ):
+                raw_intents.pop(resource_key, None)
+                changed = True
+                results.append({
+                    "resource_key": resource_key,
+                    "target_id": binding["target_id"],
+                    "action": "obsolete_intent_cleared_no_relay_write",
+                    "reason": "verified_weekly_owner",
+                })
+                continue
 
             physical = _set_switch_state(
                 output_reference=binding["output_reference"],
