@@ -32,6 +32,7 @@ from spot_boiler_intent import (
 from pv_surplus_target_intent import (
     load_pv_surplus_target_intent,
 )
+from weekly_relay_owner import is_verified_weekly_owner
 
 from pv_surplus_decision import (
     STAV_ACTIVE,
@@ -1776,6 +1777,22 @@ def vyhodnotit_pv_surplus_control_jednou(
             continue
 
         used_outputs.add(output_reference)
+
+        # F43: verified active cloud weekly thermostat exclusively owns this relay.
+        # The local SOC control may report telemetry but must not drive it.
+        if (str(result.get("target_type") or "") == "generic_load"
+                and is_verified_weekly_owner(
+                    cloud_config,
+                    target_id=str(result.get("target_id") or ""),
+                    output_reference=output_reference,
+                )):
+            result["control_source"] = "cloud_weekly_exclusive"
+            result["local_actuation_suppressed"] = True
+            logging.info(
+                "F43 weekly exclusive: local SOC relay write skipped target=%s",
+                result.get("target_id"),
+            )
+            continue
 
         desired_on = bool(result.get("should_be_on"))
         target_type = str(
