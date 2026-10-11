@@ -1,0 +1,32 @@
+name: F43 weekly relay single-owner safety tests
+
+on:
+  pull_request:
+    paths:
+      - 'iqfanda-agent/rootfs/app/weekly_relay_owner.py'
+      - 'iqfanda-agent/rootfs/app/telemetrie_modulu.py'
+      - 'iqfanda-agent/rootfs/app/pv_surplus_target_control.py'
+      - 'iqfanda-agent/tests/test_f43_weekly_relay_owner.py'
+      - '.github/workflows/f43-weekly-safety-tests.yml'
+  push:
+    branches:
+      - 'fix/f43-weekly-soc-ownership-20261011'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile altered Agent files
+        run: |
+          python3 -B -m py_compile \
+            iqfanda-agent/rootfs/app/weekly_relay_owner.py \
+            iqfanda-agent/rootfs/app/telemetrie_modulu.py \
+            iqfanda-agent/rootfs/app/pv_surplus_target_control.py
+      - name: Pure weekly/SOC ownership regression tests
+        run: |
+          PYTHONPATH=iqfanda-agent/rootfs/app python3 -B -m unittest discover \
+            -s iqfanda-agent/tests -p test_f43_weekly_relay_owner.py -v
