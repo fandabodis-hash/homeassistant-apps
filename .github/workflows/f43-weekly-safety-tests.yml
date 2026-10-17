@@ -41,29 +41,29 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
-      - name: Verify version 0.1.145 before build
+      - name: Verify add-on version markers before build
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(cat iqfanda-agent/rootfs/app/VERSION)" = '0.1.145'
-          grep -Fx 'version: "0.1.145"' iqfanda-agent/config.yaml
-          grep -Fx '  software_version: "0.1.145"' iqfanda-agent/config.yaml
+          expected="$(cat iqfanda-agent/rootfs/app/VERSION)"
+          grep -Fx "version: \"$expected\"" iqfanda-agent/config.yaml
+          grep -Fx "  software_version: \"$expected\"" iqfanda-agent/config.yaml
           test -f iqfanda-agent/rootfs/app/weekly_relay_owner.py
       - name: Build isolated arm64 add-on image (never push)
         shell: bash
         run: |
           set -Eeuo pipefail
           docker buildx build --platform linux/arm64 --load \
-            --tag f43-agent-test:0.1.145 -f iqfanda-agent/Dockerfile iqfanda-agent
+            --tag f43-agent-test:release-candidate -f iqfanda-agent/Dockerfile iqfanda-agent
       - name: Verify built architecture and source version (never start)
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(docker image inspect f43-agent-test:0.1.145 --format '{{.Architecture}}')" = arm64
-          container=$(docker create --platform linux/arm64 f43-agent-test:0.1.145)
+          test "$(docker image inspect f43-agent-test:release-candidate --format '{{.Architecture}}')" = arm64
+          container=$(docker create --platform linux/arm64 f43-agent-test:release-candidate)
           trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
           docker cp "$container":/app/VERSION /tmp/f43-agent-version
           docker cp "$container":/app/weekly_relay_owner.py /tmp/f43-weekly-relay-owner.py
-          test "$(cat /tmp/f43-agent-version)" = '0.1.145'
+          test "$(cat /tmp/f43-agent-version)" = "$(cat iqfanda-agent/rootfs/app/VERSION)"
           cmp iqfanda-agent/rootfs/app/weekly_relay_owner.py /tmp/f43-weekly-relay-owner.py
           echo 'F43_ARM64_IMAGE=PASS_IMAGE_CREATED_NOT_STARTED_NOT_PUBLISHED'
