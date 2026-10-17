@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 import websocket
+
+from dual_channel_capabilities import mini_zb2gs_relay_channels
 from urllib import error, request
 
 
@@ -1159,6 +1161,7 @@ def normalize_zha_device(
         "area_id": device.get("area_id"),
         "entities": normalized_entities,
         "capabilities": device_capabilities,
+        "relay_channels": mini_zb2gs_relay_channels(model, normalized_entities),
         "entity_count": len(
             normalized_entities
         ),
