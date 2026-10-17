@@ -1,4 +1,4 @@
-name: Agent 0.1.126 universal Smart Control
+name: Agent universal Smart Control / version consistency
 
 on:
   push:
@@ -17,9 +17,9 @@ jobs:
 
       - name: Version contract
         run: |
-          test "$(cat iqfanda-agent/rootfs/app/VERSION)" = "0.1.126"
-          grep -Fx 'version: "0.1.126"' iqfanda-agent/config.yaml
-          grep -Fx '  software_version: "0.1.126"' iqfanda-agent/config.yaml
+          expected="$(cat iqfanda-agent/rootfs/app/VERSION)"
+          grep -Fx "version: \"$expected\"" iqfanda-agent/config.yaml
+          grep -Fx "  software_version: \"$expected\"" iqfanda-agent/config.yaml
 
       - name: Compile Smart Control runtime
         run: |
