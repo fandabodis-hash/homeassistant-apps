@@ -1,0 +1,34 @@
+name: F47 R18C MINI-ZB2GS add-on release gate
+on:
+  pull_request:
+    paths:
+      - 'iqfanda-agent/**'
+      - '.github/workflows/f47-r18c-duo-addon-release-gate.yml'
+  push:
+    branches:
+      - 'release/f47-r18c-addon-0-1-146'
+jobs:
+  duo-addon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify code compiles
+        run: |
+          python -m py_compile iqfanda-agent/rootfs/app/dual_channel_capabilities.py
+          python -m py_compile iqfanda-agent/rootfs/app/zigbee_manager.py
+      - name: Dual-output unit tests (no hardware required)
+        run: python -m unittest discover -s iqfanda-agent/tests -p test_dual_channel_capabilities.py -v
+      - name: Version consistency
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          cfg = Path('iqfanda-agent/config.yaml').read_text()
+          version = Path('iqfanda-agent/rootfs/app/VERSION').read_text().strip()
+          assert version == '0.1.146'
+          assert 'version: "0.1.146"' in cfg
+          assert 'software_version: "0.1.146"' in cfg
+          print('Add-on release candidate version markers consistent')
+          PY
