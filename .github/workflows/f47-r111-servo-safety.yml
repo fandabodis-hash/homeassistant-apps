@@ -37,4 +37,6 @@ jobs:
           python -m py_compile iqfanda-agent/rootfs/app/servo_atomic_timed_executor.py
           python -m py_compile iqfanda-agent/rootfs/app/servo_timed_bridge.py
           python -m py_compile iqfanda-agent/rootfs/app/servo_atomic_preflight.py
+          python -m py_compile iqfanda-agent/rootfs/app/servo_standard_pulse.py
+          python -m py_compile iqfanda-agent/rootfs/app/servo_standard_bridge.py
           PYTHONPATH=iqfanda-agent/rootfs/app python -m unittest discover -v -s iqfanda-agent/tests -p 'test_servo_*.py'
