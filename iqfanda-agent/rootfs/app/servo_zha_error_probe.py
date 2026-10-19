@@ -42,7 +42,7 @@ def summarize(text: str) -> dict:
         for key,token in ERROR_TAGS.items():
             if token in line: count[key]+=1
         for name in ALLOWED_EXCEPTION_TYPES:
-            if re.search(r"(?<![a-z])"+re.escape(name.lower())+r"(?=[:\\s]|$)",line):
+            if name.lower()+":" in line or line.endswith(name.lower()):
                 kinds.add(name)
     return {
         "lines_examined":len(lines),
