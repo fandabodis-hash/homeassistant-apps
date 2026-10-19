@@ -64,6 +64,44 @@ def write_commission()->None:
     os.chmod(tmp,0o600)
     os.replace(tmp,MARKER)
 
+def read_floor_fresh(*,identity:dict,require_direct:bool=False)->dict:
+    """Read fresh HA state or uncached physical ZHA attribute (never a switch)."""
+    from servo_floor_fresh import read
+    from zigbee_manager import home_assistant_websocket_request
+    return read(
+        identity=identity,
+        get_state=_read_entity,
+        get_registry=_read_registry,
+        get_devices=_read_devices,
+        read_cluster=lambda payload:home_assistant_websocket_request(
+            command_type="zha/devices/clusters/attributes/value",
+            payload=payload),
+        require_direct=require_direct,
+    )
+
+def floor_aware_state(*,identity:dict):
+    """Allow the preflight and the local step to use newly observed ZHA values."""
+    cache={}
+    def get(entity):
+        if entity!="sensor.owon_ths317_et_4":
+            return _read_entity(entity)
+        if "floor" not in cache:
+            result=read_floor_fresh(identity=identity)
+            from servo_floor_fresh import SensorNotFresh
+            if result.get("fresh") is not True:
+                raise SensorNotFresh(result.get("reason") or "floor_not_fresh")
+            previous=_read_entity(entity)
+            if not isinstance(previous,dict):
+                raise SensorNotFresh("floor_entity_missing")
+            adjusted=dict(previous)
+            adjusted["state"]=str(result["temperature_c"])
+            if result.get("direct_read") is True:
+                # The direct (allow_cache=False) Zigbee network read happened now.
+                adjusted["last_reported"]=datetime.now(timezone.utc).isoformat()
+            cache["floor"]=adjusted
+        return cache["floor"]
+    return get
+
 def execute(*,identity:dict,command_type:str,payload:dict[str,Any])->dict:
     if identity.get("device_uuid")!=UUID:
         raise PulseStopped("wrong_device")
@@ -79,7 +117,7 @@ def execute(*,identity:dict,command_type:str,payload:dict[str,Any])->dict:
     fields={**payload,"command_type":COMMAND,"source":SOURCE}
     result=local_pulse(
         identity=identity,payload=fields,
-        read_state=_read_entity,
+        read_state=floor_aware_state(identity=identity),
         get_registry=_read_registry,
         get_zha_devices=_read_devices,
         switch=_switch_entity,
