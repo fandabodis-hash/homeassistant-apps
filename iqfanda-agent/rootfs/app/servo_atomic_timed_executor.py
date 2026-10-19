@@ -21,7 +21,7 @@ TARGET_MIN=15.0
 TARGET_MAX=42.0
 FLOOR_HIGH=43.0
 HYSTERESIS=0.2
-FRESHNESS_SECONDS=60.0
+FRESHNESS_SECONDS=300.0
 COMMAND="zigbee_servo_timed_step_v2"
 SOURCE="f47_r120_00013_regulator"
 MAX_OFF_READBACK_WAIT_S=6.0
@@ -86,6 +86,19 @@ def execute(*, identity:dict,payload:dict,read_state:Callable[[str],dict],
     manufacturer=str((device.get("signature") or {}).get("manufacturer") or device.get("manufacturer") or "").upper()
     _fail_if(model!="MINI-ZB2GS" or manufacturer!="SONOFF","wrong_relay_model")
     _fail_if(device.get("available") is False,"relay_offline")
+    endpoints=(device.get("signature") or {}).get("endpoints") or {}
+    _fail_if(not isinstance(endpoints,dict),"zha_endpoints_missing")
+    for ep in (1,2):
+        definition=endpoints.get(ep,endpoints.get(str(ep)))
+        _fail_if(not isinstance(definition,dict),"zha_channel_missing")
+        raw_clusters=definition.get("input_clusters") or []
+        clusters=set()
+        for raw in raw_clusters:
+            try:
+                clusters.add(int(raw,0) if isinstance(raw,str) and raw.startswith("0x") else int(raw))
+            except (TypeError,ValueError):
+                continue
+        _fail_if(6 not in clusters,"onoff_endpoint_missing")
     _fail_if(not _both_off(read_state),"servo_relays_not_both_off")
     temp=floor_reading(read_state)
     move=direction(temp,target)
