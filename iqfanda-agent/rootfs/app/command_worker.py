@@ -3315,6 +3315,56 @@ def execute_zigbee_switch_set(
         readback_state,
     )
 
+# PHASE47_R118_MODEL_00013_ZHA_ERROR_DIAGNOSTICS_ONLY
+def execute_zigbee_servo_zha_error_probe_v1(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Sanitized read-only HA ZHA error signatures; no relay action."""
+    try:
+        from servo_zha_error_probe import inspect, local_error_log
+        from zigbee_manager import (
+            get_home_assistant_services,
+            get_supervisor_token,
+            SUPERVISOR_CORE_API_URL,
+        )
+        result=inspect(
+            identity=identity,
+            payload=command_payload,
+            read_zha_devices=get_zha_devices,
+            read_ha_services=get_home_assistant_services,
+            read_error_log=lambda: local_error_log(
+                api_base=SUPERVISOR_CORE_API_URL,
+                supervisor_token=get_supervisor_token(),
+            ),
+        )
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={"worker":"command_worker",
+                    "executor":"zigbee_servo_zha_error_probe_v1",
+                    "phase":"read_only_failure",
+                    "error_class":type(exc).__name__,
+                    "actuation":False},
+            error_message="ZHA diagnosis unavailable: "+type(exc).__name__,
+        )
+        return
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result={"worker":"command_worker",
+                "executor":"zigbee_servo_zha_error_probe_v1",
+                "phase":"read_only_complete",
+                "diagnostic":result,
+                "actuation":False},
+    )
+
+
 # PHASE47_R117_00013_NATIVE_INCHING_CONFIG_PREPARE_NO_MOTOR_ON
 def execute_zigbee_servo_inching_prepare_v1(
     *,
@@ -3541,6 +3591,14 @@ def execute_command(
 
     if command_type == "zigbee_servo_pulse_v1":
         execute_zigbee_servo_pulse_v1(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "zigbee_servo_zha_error_probe_v1":
+        execute_zigbee_servo_zha_error_probe_v1(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
