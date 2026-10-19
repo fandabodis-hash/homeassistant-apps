@@ -7,7 +7,9 @@ from servo_timed_command_definition import SERIAL, UUID, IEEE, OPEN, CLOSE
 class Fake:
     def __init__(self):
         self.state={OPEN:"off",CLOSE:"off",FLOOR:"35.5"}
-        self.actions=[]\n        self.timed_channel=None\n        self.timed_reads=0
+        self.actions=[]
+        self.timed_channel=None
+        self.timed_reads=0
     def read(self,entity):
         state=self.state[entity]
         if self.timed_channel==entity:
