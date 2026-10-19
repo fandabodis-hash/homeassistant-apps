@@ -93,7 +93,7 @@ def execute(*, identity:dict,payload:dict,read_state:Callable[[str],dict],
         return {"action":"hold","actual_c":temp,"target_c":target}
     pump_state=str(read_state(PUMP).get("state") or "").lower()
     _fail_if(pump_state not in ("on","off"),"pump_state_unavailable")
-    if pump_state=="off":
+    if pump_state=="off" and move=="open":
         return {"action":"hold_pump_off","actual_c":temp,"target_c":target}
     selected=1 if move=="open" else 2
     req=make_timed_request(device_uuid=UUID,ieee=IEEE,endpoint=selected,
