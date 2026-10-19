@@ -3315,6 +3315,57 @@ def execute_zigbee_switch_set(
         readback_state,
     )
 
+# PHASE47_R117_00013_NATIVE_INCHING_CONFIG_PREPARE_NO_MOTOR_ON
+def execute_zigbee_servo_inching_prepare_v1(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Prepare device-side 1s OFF timing; NOT evidence of physical protection."""
+    try:
+        from servo_inching_prepare import prepare
+        from zigbee_manager import get_home_assistant_services
+
+        result = prepare(
+            identity=identity,
+            payload=command_payload,
+            get_zha_devices=get_zha_devices,
+            get_entity_state=get_entity_state,
+            get_entity_device_id=get_entity_device_id,
+            get_ha_services=get_home_assistant_services,
+            call_ha_service=call_home_assistant_service,
+        )
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": "zigbee_servo_inching_prepare_v1",
+                "phase": "config_attempt_failed_no_actuation",
+                "actuation_allowed": False,
+                "native_auto_off_verified": False,
+                "interlock_verified": False,
+            },
+            error_message=str(exc),
+        )
+        return
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result={
+            "worker": "command_worker",
+            "executor": "zigbee_servo_inching_prepare_v1",
+            "phase": "configuration_requested_not_verified",
+            "device_report": result,
+            "actuation_allowed": False,
+        },
+    )
+
+
 # PHASE47_R112_READ_ONLY_ZHA_SERVO_CAPABILITY_PROBE_DRAFT
 def execute_zigbee_servo_capability_probe_v1(
     *,
@@ -3490,6 +3541,14 @@ def execute_command(
 
     if command_type == "zigbee_servo_pulse_v1":
         execute_zigbee_servo_pulse_v1(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "zigbee_servo_inching_prepare_v1":
+        execute_zigbee_servo_inching_prepare_v1(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
