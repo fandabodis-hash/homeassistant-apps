@@ -27,6 +27,8 @@ def classify_ha_read_error(exc: Exception) -> str:
     Home Assistant WebSocket errors may contain device and user information.
     This classifier emits no raw string, addresses or credentials.
     """
+    if isinstance(exc, TimeoutError):
+        return "zha_zigbee_timeout"
     normalized=str(exc).lower()[:8192]
     category="unknown_ha_error"
     rules=(
