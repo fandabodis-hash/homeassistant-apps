@@ -7,11 +7,19 @@ from servo_timed_command_definition import SERIAL, UUID, IEEE, OPEN, CLOSE
 class Fake:
     def __init__(self):
         self.state={OPEN:"off",CLOSE:"off",FLOOR:"35.5"}
-        self.actions=[]
+        self.actions=[]\n        self.timed_channel=None\n        self.timed_reads=0
     def read(self,entity):
-        return {"state":self.state[entity],"last_reported":datetime.now(timezone.utc).isoformat()}
+        state=self.state[entity]
+        if self.timed_channel==entity:
+            self.timed_reads+=1
+            if self.timed_reads>1:
+                state="off"
+                self.state[entity]="off"
+        return {"state":state,"last_reported":datetime.now(timezone.utc).isoformat()}
     def timed(self,request):
         self.actions.append(("timed",request["command"],request["endpoint_id"]))
+        self.timed_channel=OPEN if request["endpoint_id"]==1 else CLOSE
+        self.state[self.timed_channel]="on"
     def off(self,entity):
         self.actions.append(("off",entity))
         self.state[entity]="off"
@@ -34,7 +42,7 @@ class UnitTests(unittest.TestCase):
         self.assertEqual(x["direction"],"close")
         self.assertEqual(f.actions[0],("timed",66,2))
         self.assertIn(("off",CLOSE),f.actions)
-        self.assertFalse(x["native_timed_off_verified"])
+        self.assertTrue(x["native_timed_off_observed"])
     def test_uncommissioned_no_io(self):
         f=Fake();a=f.args();a["locally_commissioned"]=False
         with self.assertRaises(SafetyStop):execute(**a)
