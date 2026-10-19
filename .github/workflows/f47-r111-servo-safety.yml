@@ -7,14 +7,14 @@ on:
       - 'iqfanda-agent/rootfs/app/servo_pulse_guard.py'
       - 'iqfanda-agent/rootfs/app/servo_pulse_command.py'
       - 'iqfanda-agent/rootfs/app/command_worker.py'
-      - 'iqfanda-agent/tests/test_servo_pulse_*.py'
+      - 'iqfanda-agent/tests/test_servo_*.py'
       - '.github/workflows/f47-r111-servo-safety.yml'
   pull_request:
     paths:
       - 'iqfanda-agent/rootfs/app/servo_pulse_guard.py'
       - 'iqfanda-agent/rootfs/app/servo_pulse_command.py'
       - 'iqfanda-agent/rootfs/app/command_worker.py'
-      - 'iqfanda-agent/tests/test_servo_pulse_*.py'
+      - 'iqfanda-agent/tests/test_servo_*.py'
       - '.github/workflows/f47-r111-servo-safety.yml'
 
 jobs:
@@ -32,4 +32,5 @@ jobs:
           python -m py_compile iqfanda-agent/rootfs/app/servo_pulse_guard.py
           python -m py_compile iqfanda-agent/rootfs/app/servo_pulse_command.py
           python -m py_compile iqfanda-agent/rootfs/app/command_worker.py
-          PYTHONPATH=iqfanda-agent/rootfs/app python -m unittest discover -v -s iqfanda-agent/tests -p 'test_servo_pulse_*.py'
+          python -m py_compile iqfanda-agent/rootfs/app/servo_zha_inching_probe.py
+          PYTHONPATH=iqfanda-agent/rootfs/app python -m unittest discover -v -s iqfanda-agent/tests -p 'test_servo_*.py'
