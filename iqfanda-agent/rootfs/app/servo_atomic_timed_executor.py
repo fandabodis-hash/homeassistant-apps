@@ -105,12 +105,35 @@ def execute(*, identity:dict,payload:dict,read_state:Callable[[str],dict],
     worker=threading.Thread(target=backup_off,daemon=True,name="00013-servo-backup-off")
     worker.start()
     failure=None
+    seen_on=False
+    self_off_seen=False
     try:
         send_timed(req)
-        wait(1.3)
+        # Before ANY explicit OFF, witness the relay ON and then OFF.
+        # If it never visibly switches, or stays ON, fail closed.
+        witness_deadline=time.monotonic()+2.5
+        while time.monotonic()<witness_deadline:
+            try:
+                states={e:str(read_state(e).get("state") or "").lower()
+                        for e in (OPEN,CLOSE)}
+                selected_entity=OPEN if move=="open" else CLOSE
+                other_entity=CLOSE if move=="open" else OPEN
+                if states[other_entity]!="off":
+                    raise SafetyStop("opposite_output_energized")
+                if states[selected_entity]=="on":
+                    seen_on=True
+                if seen_on and states[selected_entity]=="off":
+                    self_off_seen=True
+                    break
+            except SafetyStop:
+                raise
+            except Exception:
+                pass
+            wait(0.15)
     except BaseException as exc:
         failure=exc
     finally:
+        # Best-effort redundant OFF, even if timed ON/OFF worked.
         for e in (OPEN,CLOSE):
             try:send_off(e)
             except Exception as exc:errors.append(type(exc).__name__)
@@ -130,7 +153,8 @@ def execute(*, identity:dict,payload:dict,read_state:Callable[[str],dict],
         raise SafetyStop("timed_command_failed") from failure
     _fail_if(bool(errors),"backup_off_failure")
     _fail_if(not confirmed,"off_readback_not_confirmed")
+    _fail_if(not seen_on or not self_off_seen,"native_timed_off_not_observed")
     return {"action":"timed_pulse","direction":move,"actual_c":temp,
             "target_c":target,"requested_on_time_s":1.0,
             "both_off_confirmed":True,
-            "native_timed_off_verified":False}
+            "native_timed_off_observed":True}
