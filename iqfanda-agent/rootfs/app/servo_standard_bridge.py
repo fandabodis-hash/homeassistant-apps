@@ -115,9 +115,36 @@ def execute(*,identity:dict,command_type:str,payload:dict[str,Any])->dict:
     if not isinstance(payload,dict) or set(payload)!=required:
         raise PulseStopped("payload_invalid")
     fields={**payload,"command_type":COMMAND,"source":SOURCE}
+    state_reader=floor_aware_state(identity=identity)
+    # Only stale/absent sensor evidence may be skipped. This guard executes
+    # BEFORE the motor control function is invoked, so no relay ON is possible.
+    # Failed OFF/readback, Zigbee control, or any other error still locks out.
+    from servo_floor_fresh import SensorNotFresh, FLOOR
+    from servo_timed_command_definition import OPEN, CLOSE
+    try:
+        state_reader(FLOOR)
+    except SensorNotFresh:
+        if command_type!=RUN_COMMAND:
+            raise
+        reg_open=_read_registry(OPEN)
+        reg_close=_read_registry(CLOSE)
+        if not reg_open or reg_open!=reg_close or payload["device_reg_id"]!=reg_open:
+            raise PulseStopped("stale_sensor_registry_unconfirmed")
+        open_state=_read_entity(OPEN)
+        close_state=_read_entity(CLOSE)
+        if not isinstance(open_state,dict) or not isinstance(close_state,dict) or (
+            str(open_state.get("state") or "").lower()!="off" or
+            str(close_state.get("state") or "").lower()!="off"
+        ):
+            raise PulseStopped("stale_sensor_relay_off_unconfirmed")
+        return {"action":"hold_sensor_stale",
+                "reason":"no_fresh_temperature_no_motor_command",
+                "relays_after":"off_off","actuation":False,
+                "native_off_verified":False,"sensor_fresh":False,
+                "model":SERIAL}
     result=local_pulse(
         identity=identity,payload=fields,
-        read_state=floor_aware_state(identity=identity),
+        read_state=state_reader,
         get_registry=_read_registry,
         get_zha_devices=_read_devices,
         switch=_switch_entity,
