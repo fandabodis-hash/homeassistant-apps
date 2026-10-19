@@ -1,0 +1,35 @@
+name: F47 R111 Servo Safety Tests
+on:
+  push:
+    branches:
+      - f47-r110-00013-servo-local-guard
+    paths:
+      - 'iqfanda-agent/rootfs/app/servo_pulse_guard.py'
+      - 'iqfanda-agent/rootfs/app/servo_pulse_command.py'
+      - 'iqfanda-agent/rootfs/app/command_worker.py'
+      - 'iqfanda-agent/tests/test_servo_pulse_*.py'
+      - '.github/workflows/f47-r111-servo-safety.yml'
+  pull_request:
+    paths:
+      - 'iqfanda-agent/rootfs/app/servo_pulse_guard.py'
+      - 'iqfanda-agent/rootfs/app/servo_pulse_command.py'
+      - 'iqfanda-agent/rootfs/app/command_worker.py'
+      - 'iqfanda-agent/tests/test_servo_pulse_*.py'
+      - '.github/workflows/f47-r111-servo-safety.yml'
+
+jobs:
+  servo-guard-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile and test servo-only modules
+        run: |
+          python -m py_compile iqfanda-agent/rootfs/app/servo_pulse_guard.py
+          python -m py_compile iqfanda-agent/rootfs/app/servo_pulse_command.py
+          python -m py_compile iqfanda-agent/rootfs/app/command_worker.py
+          PYTHONPATH=iqfanda-agent/rootfs/app python -m unittest discover -v -s iqfanda-agent/tests -p 'test_servo_pulse_*.py'
