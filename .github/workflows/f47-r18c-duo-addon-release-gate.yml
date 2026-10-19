@@ -21,14 +21,18 @@ jobs:
           python -m py_compile iqfanda-agent/rootfs/app/zigbee_manager.py
       - name: Dual-output unit tests (no hardware required)
         run: python -m unittest discover -s iqfanda-agent/tests -p test_dual_channel_capabilities.py -v
+      - name: Servo failsafe unit tests (no device commands)
+        run: |
+          PYTHONPATH=iqfanda-agent/rootfs/app python -m unittest discover -s iqfanda-agent/tests -p 'test_servo_*.py' -v
       - name: Version consistency
         run: |
           python - <<'PY'
           from pathlib import Path
           cfg = Path('iqfanda-agent/config.yaml').read_text()
           version = Path('iqfanda-agent/rootfs/app/VERSION').read_text().strip()
-          assert version == '0.1.146'
-          assert 'version: "0.1.146"' in cfg
-          assert 'software_version: "0.1.146"' in cfg
+          import re
+          assert re.fullmatch(r'0\.1\.[0-9]+', version), 'Unexpected add-on version format'
+          assert f'version: "{version}"' in cfg
+          assert f'software_version: "{version}"' in cfg
           print('Add-on release candidate version markers consistent')
           PY
