@@ -3315,6 +3315,54 @@ def execute_zigbee_switch_set(
         readback_state,
     )
 
+# PHASE47_R126_MODEL_00013_STANDARD_ON_OFF_LOCAL_SERVO_PULSE
+def execute_zigbee_servo_standard_step_v1(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+    command_type: str,
+) -> None:
+    """Ordinary local HA ON/OFF, never cloud-timed Zigbee cluster commands."""
+    try:
+        from servo_standard_bridge import execute
+        report=execute(
+            identity=identity,
+            command_type=command_type,
+            payload=command_payload,
+        )
+    except Exception as exc:
+        from servo_standard_pulse import PulseStopped
+        code=str(exc)
+        if not isinstance(exc,PulseStopped) or len(code)>90 or not code or any(
+            c not in "abcdefghijklmnopqrstuvwxyz0123456789_" for c in code
+        ):
+            code="unclassified_local_error"
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={"worker":"command_worker",
+                    "executor":"zigbee_servo_standard_step_v1",
+                    "phase":"local_fail_closed",
+                    "reason":code,
+                    "exception_type":type(exc).__name__,
+                    "actuation_verified":False},
+            error_message="Servo local pulse stopped: "+code,
+        )
+        return
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result={"worker":"command_worker",
+                "executor":"zigbee_servo_standard_step_v1",
+                "phase":"local_standard_pulse_complete",
+                "details":report,
+                "actuation_verified":report.get("relays_after")=="off_off"},
+    )
+
+
 # PHASE47_R122_00013_READ_ONLY_SERVO_PREFLIGHT
 def execute_zigbee_servo_preflight_v1(
     *,
@@ -3668,6 +3716,15 @@ def execute_command(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
+        )
+        return
+
+    if command_type in ("zigbee_servo_standard_commission_v1", "zigbee_servo_standard_pulse_v1"):
+        execute_zigbee_servo_standard_step_v1(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+            command_type=command_type,
         )
         return
 
