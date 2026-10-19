@@ -41,7 +41,7 @@ class SafetyTests(unittest.TestCase):
         self.assertFalse(result["directional_interlock_verified"])
         self.assertFalse(result["actuation_enabled"])
         self.assertEqual([x["payload"]["endpoint_id"] for x in calls], [1, 2])
-        self.assertEqual([x["payload"]["command"] for x in calls], [0, 0])
+        self.assertEqual([x["payload"]["command"] for x in calls], [1, 1])
         self.assertEqual([x["payload"]["manufacturer"] for x in calls], [0x1286, 0x1286])
         self.assertFalse(any("switch" in str(x) for x in calls))
     def test_wrong_identity_no_commands(self):
