@@ -3315,6 +3315,117 @@ def execute_zigbee_switch_set(
         readback_state,
     )
 
+# PHASE47_R112_READ_ONLY_ZHA_SERVO_CAPABILITY_PROBE_DRAFT
+def execute_zigbee_servo_capability_probe_v1(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Read-only ZHA signature; NEVER changes a cluster or switch."""
+    try:
+        if str(command_payload.get("serial") or "") != "F800711-TNG-00013":
+            raise RuntimeError("SERVO_PROBE_WRONG_SERIAL")
+        from servo_zha_inching_probe import probe
+        report = probe(identity, get_zha_devices)
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={"worker": "command_worker", "executor": "zigbee_servo_capability_probe_v1",
+                    "phase": "read_only_failed", "actuation": False},
+            error_message=str(exc),
+        )
+        return
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result={"worker": "command_worker", "executor": "zigbee_servo_capability_probe_v1",
+                "phase": "read_only_complete", "actuation": False,
+                "probe": report},
+    )
+
+
+# PHASE47_R111_LOCAL_SERVO_PULSE_COMMAND_DRAFT
+def execute_zigbee_servo_pulse_v1(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Model-isolated servo command. Fail-closed until local OFF is proven.
+
+    No fabricated hardware attestation and no cloud-managed pulse timer.
+    The live HA Agent has no proven native device auto-off adapter yet.
+    """
+    try:
+        from servo_pulse_command import execute as safe_execute, UnsafeServo
+
+        def _freshness_seconds(entity_id: str) -> float:
+            # HA last_updated may mean last *change*, not last report.
+            # Require explicit last_reported until proven for the real Agent.
+            record = get_entity_state(entity_id)
+            stamp = record.get("last_reported") if isinstance(record, dict) else None
+            if not stamp:
+                return float("inf")
+            parsed = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return (datetime.now(timezone.utc) - parsed).total_seconds()
+
+        def _set_servo_output(entity_id: str, desired_on: bool) -> None:
+            if entity_id not in {
+                "switch.sonoff_mini_zb2gs_spinac_3",
+                "switch.sonoff_mini_zb2gs_spinac_4",
+            }:
+                raise RuntimeError("SERVO_OUTPUT_NOT_ALLOWED")
+            call_binary_power_output_service(
+                entity_id=entity_id,
+                desired_on=desired_on,
+            )
+
+        # IMPORTANT: no arm_device_auto_off argument is deliberately provided.
+        # servo_pulse_command.execute MUST reject before any ON until a trusted
+        # actual HA-local device-side OFF mechanism and interlock are verified.
+        result = safe_execute(
+            identity=identity,
+            payload={**command_payload, "command_type": "zigbee_servo_pulse_v1"},
+            get_entity_state=get_entity_state,
+            get_entity_device_id=get_entity_device_id,
+            freshness_seconds=_freshness_seconds,
+            set_output=_set_servo_output,
+        )
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={
+                "worker": "command_worker",
+                "executor": "zigbee_servo_pulse_v1",
+                "phase": "fail_closed",
+                "source": "F47_R111_00013_DRAFT",
+                "actuation": False,
+            },
+            error_message=str(exc),
+        )
+        return
+
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result={
+            "worker": "command_worker",
+            "executor": "zigbee_servo_pulse_v1",
+            "source": "F47_R111_00013_DRAFT",
+            "result": result,
+        },
+    )
+
+
 def execute_command(
     *,
     identity: dict[str, Any],
@@ -3371,6 +3482,22 @@ def execute_command(
 
     if command_type == "zigbee_switch_set":
         execute_zigbee_switch_set(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "zigbee_servo_pulse_v1":
+        execute_zigbee_servo_pulse_v1(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "zigbee_servo_capability_probe_v1":
+        execute_zigbee_servo_capability_probe_v1(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
