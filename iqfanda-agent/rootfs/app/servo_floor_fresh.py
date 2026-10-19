@@ -21,6 +21,43 @@ ZCL_MEASURED_VALUE=0x0000
 class SensorNotFresh(RuntimeError):
     pass
 
+def classify_ha_read_error(exc: Exception) -> str:
+    """Only stable public error categories; NEVER forward exception messages.
+
+    Home Assistant WebSocket errors may contain device and user information.
+    This classifier emits no raw string, addresses or credentials.
+    """
+    normalized=str(exc).lower()[:8192]
+    category="unknown_ha_error"
+    rules=(
+        ("ws_command_unknown",("unknown_command","unknown command",
+                               "unknown websocket command","not a registered command")),
+        ("ws_not_authorized",("unauthorized","not authorized",
+                             "requires admin","permission denied","forbidden")),
+        ("zha_integration_unavailable",("zha integration is not loaded",
+                                        "zha integration not found","gateway not found")),
+        ("zha_device_unavailable",("device not found","device is not available",
+                                   "device unavailable","unknown device")),
+        ("zha_cluster_missing",("cluster 1026 not found","cluster 0x0402 not found",
+                                "cluster not found","unknown cluster")),
+        ("zha_attribute_unsupported",("unsupported_attribute","unsupported attribute",
+                                      "unsup_attribute","attribute not supported")),
+        ("zha_zigbee_no_reply",("deliveryerror","failed to deliver",
+                               "delivery failed","no route")),
+        ("zha_zigbee_timeout",("timed out","timeout","deadline exceeded")),
+        ("zha_read_failed",("failed to read attribute","failed to read from",
+                            "readattributesresponse","read_attribute")),
+        ("ws_internal_error",("internal_error","internal server error","server got itself")),
+        ("ws_connection_failure",("websocket neni dostupny","connection closed",
+                                   "connection refused","broken pipe")),
+    )
+    for name,patterns in rules:
+        if any(p in normalized for p in patterns):
+            category=name
+            break
+    return category
+
+
 def _stop(reason:str):
     raise SensorNotFresh(reason)
 
@@ -113,7 +150,7 @@ def read(*,identity:dict,get_state:Callable[[str],dict],
     try:
         raw=read_cluster(payload)
     except Exception as exc:
-        raise SensorNotFresh("floor_zha_direct_read_"+type(exc).__name__) from exc
+        raise SensorNotFresh("floor_zha_direct_read_"+type(exc).__name__+"_"+classify_ha_read_error(exc)) from exc
     if type(raw) not in (str,int):
         _stop("floor_zha_direct_read_invalid_response")
     try:centidegrees=int(str(raw).strip())
