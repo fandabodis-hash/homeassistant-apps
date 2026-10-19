@@ -41,6 +41,7 @@ class BridgeTests(unittest.TestCase):
             self.assertEqual(args["payload"]["command_type"],RUN_COMMAND)
     def test_no_marker_without_off(self):
         with patch("servo_standard_bridge.read_commission",return_value=False), \
+             patch("servo_standard_bridge.floor_aware_state",return_value=lambda _:{"state":"35.0"}), \
              patch("servo_standard_bridge.local_pulse",
                    return_value={"action":"ordinary_local_pulse","relays_after":"on_off"}), \
              patch("servo_standard_bridge.write_commission") as marker:
