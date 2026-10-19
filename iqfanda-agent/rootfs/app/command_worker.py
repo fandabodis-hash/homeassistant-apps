@@ -3315,6 +3315,50 @@ def execute_zigbee_switch_set(
         readback_state,
     )
 
+# PHASE47_R125_00013_LOCAL_HA_LOG_ROOTCAUSE_READ_ONLY
+def execute_zigbee_servo_log_rootcause_v1(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Read bounded HA logfile signatures; never touch ZHA relay services."""
+    try:
+        from servo_zha_log_rootcause import (
+            run as get_rootcause, read_file_tails, read_supervisor_core_log,
+        )
+        from zigbee_manager import get_supervisor_token
+        report=get_rootcause(
+            identity=identity,
+            payload=command_payload,
+            local_files=read_file_tails,
+            supervisor_logs=lambda: read_supervisor_core_log(get_supervisor_token()),
+        )
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={"worker":"command_worker",
+                    "executor":"zigbee_servo_log_rootcause_v1",
+                    "phase":"read_only_error",
+                    "error_type":type(exc).__name__,
+                    "actuation":False},
+            error_message="00013 read-only ZHA log unavailable: "+type(exc).__name__,
+        )
+        return
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result={"worker":"command_worker",
+                "executor":"zigbee_servo_log_rootcause_v1",
+                "phase":"read_only_log_summary",
+                "rootcause":report,
+                "actuation":False},
+    )
+
+
 # PHASE47_R122_00013_READ_ONLY_SERVO_PREFLIGHT
 def execute_zigbee_servo_preflight_v1(
     *,
@@ -3665,6 +3709,14 @@ def execute_command(
 
     if command_type == "zigbee_servo_pulse_v1":
         execute_zigbee_servo_pulse_v1(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "zigbee_servo_log_rootcause_v1":
+        execute_zigbee_servo_log_rootcause_v1(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
