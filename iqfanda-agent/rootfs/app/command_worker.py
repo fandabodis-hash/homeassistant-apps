@@ -3315,6 +3315,38 @@ def execute_zigbee_switch_set(
         readback_state,
     )
 
+# PHASE47_R122_00013_READ_ONLY_SERVO_PREFLIGHT
+def execute_zigbee_servo_preflight_v1(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Inspect local ZHA/HA before physical commissioning; no relay writes."""
+    from servo_atomic_preflight import safe_preflight
+    summary=safe_preflight(
+        identity=identity,
+        payload=command_payload,
+        read_state=get_entity_state,
+        get_registry=get_entity_device_id,
+        get_zha_devices=get_zha_devices,
+    )
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded" if summary.get("ready") else "failed",
+        result={
+            "worker":"command_worker",
+            "executor":"zigbee_servo_preflight_v1",
+            "phase":"read_only_preconditions",
+            "preflight":summary,
+            "actuation":False,
+        },
+        error_message=(None if summary.get("ready") else
+            "Servo preflight blocked: "+summary.get("reason","unknown")),
+    )
+
+
 # PHASE47_R120_00013_SUPERVISED_ATOMIC_TIMED_PULSE
 def execute_zigbee_servo_timed_step(
     *,
@@ -3328,14 +3360,23 @@ def execute_zigbee_servo_timed_step(
         from servo_timed_bridge import run
         result=run(identity=identity,command_type=command_type,payload=command_payload)
     except Exception as exc:
+        from servo_timed_command_definition import SafetyStop
+        # Only static machine-readable guard names; never leak HA credentials.
+        reason=str(exc)
+        if not isinstance(exc,SafetyStop) or not reason or len(reason)>80 or any(
+            ch not in "abcdefghijklmnopqrstuvwxyz0123456789_" for ch in reason
+        ):
+            reason="unclassified"
         submit_command_result(
             identity=identity,
             command_id=command_id,
             status="failed",
             result={"worker":"command_worker","executor":"zigbee_servo_timed_step_v2",
                     "phase":"fail_closed","error_type":type(exc).__name__,
+                    "safety_reason":reason,
+                    "cause_type":type(exc.__cause__).__name__ if exc.__cause__ else None,
                     "actuation_verified":False},
-            error_message=("Servo 00013 timed step failed: "+type(exc).__name__),
+            error_message=("Servo 00013 timed step failed: "+reason),
         )
         return
     submit_command_result(
@@ -3624,6 +3665,14 @@ def execute_command(
 
     if command_type == "zigbee_servo_pulse_v1":
         execute_zigbee_servo_pulse_v1(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "zigbee_servo_preflight_v1":
+        execute_zigbee_servo_preflight_v1(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
