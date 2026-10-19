@@ -1,3 +1,7 @@
+# OBSOLETE — DO NOT DEPLOY 0.1.148
+
+Corrected protocolData command ID is included in 0.1.149; use that version only.
+
 # F47 R117 / Agent 0.1.148 — guarded native SONOFF inching preparation
 
 Only intended for F800711-TNG-00013. There is **no HA UI login required**. This release adds a dedicated cloud-command handler that uses the Agent's already working local HA Core API.
