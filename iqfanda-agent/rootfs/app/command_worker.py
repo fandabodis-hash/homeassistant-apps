@@ -3315,6 +3315,32 @@ def execute_zigbee_switch_set(
         readback_state,
     )
 
+# PHASE47_R131_00013_HA_SENSOR_REPORT_TIMESTAMPS_READ_ONLY
+def execute_zigbee_servo_sensor_timestamps_v1(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """No actuator command. Diagnose HA state timestamp vs changing value."""
+    from servo_ha_sensor_timestamp_probe import inspect
+    report=inspect(identity=identity,
+                   payload=command_payload,
+                   get_state=get_entity_state)
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded" if report.get("ok") else "failed",
+        result={"worker":"command_worker",
+                "executor":"zigbee_servo_sensor_timestamps_v1",
+                "phase":"ha_state_timestamps_read_only",
+                "sensor":report,
+                "actuation":False},
+        error_message=None if report.get("ok") else
+            "Sensor state timestamp read failed: "+report.get("reason","unknown"),
+    )
+
+
 # PHASE47_R127_00013_DIRECT_FLOOR_TEMPERATURE_READ_ONLY
 def execute_zigbee_servo_floor_refresh_v1(
     *,
@@ -3754,6 +3780,14 @@ def execute_command(
 
     if command_type == "zigbee_servo_pulse_v1":
         execute_zigbee_servo_pulse_v1(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "zigbee_servo_sensor_timestamps_v1":
+        execute_zigbee_servo_sensor_timestamps_v1(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,

@@ -1,7 +1,7 @@
 """F47 R127: pure mock tests; ZHA uncached temperature read only."""
 import unittest
 from datetime import datetime,timedelta,timezone
-from servo_floor_fresh import read,safe_read,locate_sensor,MODEL_UUID,FLOOR,SensorNotFresh
+from servo_floor_fresh import read,safe_read,locate_sensor,MODEL_UUID,FLOOR,SensorNotFresh,classify_ha_read_error
 
 REG="sensor-device-reg"
 IEEE="aa:bb:cc:dd:ee:ff:00:11"
@@ -69,7 +69,7 @@ class SensorReadTests(unittest.TestCase):
         a["read_cluster"]=fail
         r=safe_read(**a)
         self.assertFalse(r["fresh"])
-        self.assertEqual(r["reason"],"floor_zha_direct_read_TimeoutError")
+        self.assertEqual(r["reason"],"floor_zha_direct_read_TimeoutError_zha_zigbee_timeout")
     def test_wrong_sensor_unit(self):
         f=Fixture();f.raw="371000";r=safe_read(**f.args())
         self.assertEqual(r["reason"],"floor_zha_direct_read_out_of_range")
@@ -82,6 +82,27 @@ class SensorReadTests(unittest.TestCase):
                                    "signature":{"endpoints":{"1":{"input_clusters":[6]}}}}]
         r=safe_read(**a)
         self.assertEqual(r["reason"],"floor_zha_temperature_endpoint_not_unique")
+
+    def test_websocket_unsupported_sanitized(self):
+        f=Fixture();a=f.args()
+        def fail(payload):
+            raise RuntimeError("Home Assistant WebSocket prikaz selhal: {'code': 'unknown_command', 'message': 'Unknown command 1 for user private@example.cz, token=abc123'}")
+        a["read_cluster"]=fail
+        result=safe_read(**a)
+        self.assertEqual(result["reason"],"floor_zha_direct_read_RuntimeError_ws_command_unknown")
+        self.assertNotIn("abc123",str(result))
+        self.assertNotIn("private@",str(result))
+    def test_unreachable_zha_device_category(self):
+        self.assertEqual(classify_ha_read_error(RuntimeError("DeliveryError: failed to deliver packet")), "zha_zigbee_no_reply")
+    def test_authorization_category(self):
+        self.assertEqual(classify_ha_read_error(RuntimeError("not authorized as HA administrator")), "ws_not_authorized")
+    def test_unsupported_attribute_category(self):
+        self.assertEqual(classify_ha_read_error(RuntimeError("Unsupported attribute 0x0000")), "zha_attribute_unsupported")
+    def test_unknown_error_does_not_copy_raw(self):
+        phrase="username=testuser PRIVATE=SECRET!" 
+        result=classify_ha_read_error(RuntimeError(phrase))
+        self.assertEqual(result,"unknown_ha_error")
+        self.assertNotIn("SECRET",result)
 
 if __name__=="__main__":
     unittest.main()
