@@ -3315,6 +3315,46 @@ def execute_zigbee_switch_set(
         readback_state,
     )
 
+# PHASE47_R127_00013_DIRECT_FLOOR_TEMPERATURE_READ_ONLY
+def execute_zigbee_servo_floor_refresh_v1(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Get fresh temperature from exact physical floor ZHA sensor if stale."""
+    try:
+        if command_payload != {"serial":"F800711-TNG-00013","mode":"read_only"}:
+            raise RuntimeError("floor_probe_payload_invalid")
+        from servo_standard_bridge import read_floor_fresh
+        from servo_floor_fresh import safe_read
+        detail=safe_read(
+            identity=identity,
+            get_state=get_entity_state,
+            get_registry=get_entity_device_id,
+            get_devices=get_zha_devices,
+            read_cluster=lambda payload: __import__("zigbee_manager").home_assistant_websocket_request(
+                command_type="zha/devices/clusters/attributes/value",
+                payload=payload,
+            ),
+        )
+    except Exception as exc:
+        detail={"fresh":False,"reason":"floor_probe_"+type(exc).__name__,
+                "direct_read":False}
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded" if detail.get("fresh") else "failed",
+        result={"worker":"command_worker",
+                "executor":"zigbee_servo_floor_refresh_v1",
+                "phase":"read_only_direct_temperature",
+                "detail":detail,
+                "actuation":False,
+                "relay_commands":0},
+        error_message=None if detail.get("fresh") else "floor_sensor_"+detail.get("reason","unknown"),
+    )
+
+
 # PHASE47_R126_MODEL_00013_STANDARD_ON_OFF_LOCAL_SERVO_PULSE
 def execute_zigbee_servo_standard_step_v1(
     *,
@@ -3372,10 +3412,11 @@ def execute_zigbee_servo_preflight_v1(
 ) -> None:
     """Inspect local ZHA/HA before physical commissioning; no relay writes."""
     from servo_atomic_preflight import safe_preflight
+    from servo_standard_bridge import floor_aware_state
     summary=safe_preflight(
         identity=identity,
         payload=command_payload,
-        read_state=get_entity_state,
+        read_state=floor_aware_state(identity=identity),
         get_registry=get_entity_device_id,
         get_zha_devices=get_zha_devices,
     )
@@ -3713,6 +3754,14 @@ def execute_command(
 
     if command_type == "zigbee_servo_pulse_v1":
         execute_zigbee_servo_pulse_v1(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "zigbee_servo_floor_refresh_v1":
+        execute_zigbee_servo_floor_refresh_v1(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
