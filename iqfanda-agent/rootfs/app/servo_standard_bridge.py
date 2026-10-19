@@ -16,10 +16,24 @@ from servo_standard_pulse import (
     run as local_pulse, PulseStopped, COMMAND, SOURCE,
 )
 from servo_timed_command_definition import UUID, IEEE, SERIAL
-from zigbee_manager import (
-    get_entity_state, get_entity_device_id, get_zha_devices,
-    call_binary_power_output_service,
-)
+# Defer HA dependencies until a real callback is invoked. This leaves pure
+# safety-contract tests completely isolated from customer HA libraries.
+def _read_entity(entity):
+    from zigbee_manager import get_entity_state
+    return get_entity_state(entity)
+
+def _read_registry(entity):
+    from zigbee_manager import get_entity_device_id
+    return get_entity_device_id(entity)
+
+def _read_devices():
+    from zigbee_manager import get_zha_devices
+    return get_zha_devices()
+
+def _switch_entity(entity,on):
+    from zigbee_manager import call_binary_power_output_service
+    return call_binary_power_output_service(entity_id=entity,desired_on=on)
+
 
 MARKER=Path("/config/f47_00013_standard_pulse_commission.json")
 COMMISSION_COMMAND="zigbee_servo_standard_commission_v1"
@@ -65,11 +79,10 @@ def execute(*,identity:dict,command_type:str,payload:dict[str,Any])->dict:
     fields={**payload,"command_type":COMMAND,"source":SOURCE}
     result=local_pulse(
         identity=identity,payload=fields,
-        read_state=get_entity_state,
-        get_registry=get_entity_device_id,
-        get_zha_devices=get_zha_devices,
-        switch=lambda entity,on:call_binary_power_output_service(
-            entity_id=entity,desired_on=on),
+        read_state=_read_entity,
+        get_registry=_read_registry,
+        get_zha_devices=_read_devices,
+        switch=_switch_entity,
         physical_protections_confirmed=True,
     )
     if command_type==COMMISSION_COMMAND:
