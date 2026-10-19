@@ -80,9 +80,10 @@ def execute(*,identity:dict,payload:dict,get_state:Callable[[str],dict],
             "command_identity_mismatch")
     require(payload.get("ieee")==IEEE,"command_ieee_mismatch")
     require(payload.get("command_type")==COMMAND,"command_type_invalid")
-    require(set(payload)<=set(("serial","device_uuid","ieee","command_type","target_c","seconds","device_reg_id")),
+    require(set(payload)<=set(("serial","device_uuid","ieee","command_type","target_c","seconds","device_reg_id","source")),
             "unexpected_command_fields")
-    require(payload.get("seconds")==1 or payload.get("seconds")==1.0,"only_one_second")
+    require(type(payload.get("seconds")) in (int,float) and payload["seconds"]==1.0,"only_one_second")
+    require(payload.get("source")=="f47_r119_00013_local_regulator","wrong_regulation_owner")
     require(physical_protection_confirmed is True,"physical_protection_confirmation_missing")
     target=payload.get("target_c")
     require(type(target) in (int,float) and math.isfinite(target),"target_invalid")
@@ -119,7 +120,6 @@ def execute(*,identity:dict,payload:dict,get_state:Callable[[str],dict],
     # physical disconnect when HA/Zigbee is unavailable. Motor end switches
     # and the independent thermostat remain necessary physical protections.
     errors=[]
-    enabled=False
     stop=threading.Event()
     def emergency_off():
         if not stop.wait(3.0):
@@ -130,16 +130,17 @@ def execute(*,identity:dict,payload:dict,get_state:Callable[[str],dict],
     try:
         thread.start()
         switch(entity,True)
-        enabled=True
         wait(PULSE_S)
     finally:
         for name in (OPEN,CLOSE):
             try:switch(name,False)
             except Exception as exc:errors.append(type(exc).__name__)
-        stop.set()
-        thread.join(timeout=0.5)
+        # Watchdog continues if OFF cannot be proven; wait for its attempt.
+        confirmed_off=wait_for_both_off(get_state,wait)
+        if confirmed_off:stop.set()
+        thread.join(timeout=5.0)
     require(not errors,"off_command_failure")
-    require(wait_for_both_off(get_state,wait),"off_readback_failed")
+    require(confirmed_off,"off_readback_failed")
     actual_after,_=read_sensor(get_state)
     return {"action":"pulse","direction":direction,"pulse_seconds":PULSE_S,
             "actual_c":actual,"actual_after_c":actual_after,
