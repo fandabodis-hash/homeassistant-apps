@@ -1,12 +1,12 @@
 """F47 R120: mock-only checks; NO Zigbee, HA, or actuator I/O."""
 import unittest
 from datetime import datetime, timezone
-from servo_atomic_timed_executor import execute, SafetyStop, COMMAND, SOURCE, FLOOR
+from servo_atomic_timed_executor import execute, SafetyStop, COMMAND, SOURCE, FLOOR, PUMP
 from servo_timed_command_definition import SERIAL, UUID, IEEE, OPEN, CLOSE
 
 class Fake:
     def __init__(self):
-        self.state={OPEN:"off",CLOSE:"off",FLOOR:"35.5"}
+        self.state={OPEN:"off",CLOSE:"off",FLOOR:"35.5",PUMP:"on"}
         self.actions=[]
         self.timed_channel=None
         self.timed_reads=0
