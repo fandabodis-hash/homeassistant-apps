@@ -3315,6 +3315,39 @@ def execute_zigbee_switch_set(
         readback_state,
     )
 
+# PHASE47_R120_00013_SUPERVISED_ATOMIC_TIMED_PULSE
+def execute_zigbee_servo_timed_step(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+    command_type: str,
+) -> None:
+    """Commission exact 00013 timed OFF, or execute only after commissioning."""
+    try:
+        from servo_timed_bridge import run
+        result=run(identity=identity,command_type=command_type,payload=command_payload)
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={"worker":"command_worker","executor":"zigbee_servo_timed_step_v2",
+                    "phase":"fail_closed","error_type":type(exc).__name__,
+                    "actuation_verified":False},
+            error_message=("Servo 00013 timed step failed: "+type(exc).__name__),
+        )
+        return
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result={"worker":"command_worker","executor":"zigbee_servo_timed_step_v2",
+                "phase":"local_timed_pulse_complete","details":result,
+                "actuation_verified":result.get("native_timed_off_observed",False)},
+    )
+
+
 # PHASE47_R118_MODEL_00013_ZHA_ERROR_DIAGNOSTICS_ONLY
 def execute_zigbee_servo_zha_error_probe_v1(
     *,
@@ -3594,6 +3627,15 @@ def execute_command(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
+        )
+        return
+
+    if command_type in ("zigbee_servo_commission_v1", "zigbee_servo_timed_step_v2"):
+        execute_zigbee_servo_timed_step(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+            command_type=command_type,
         )
         return
 
