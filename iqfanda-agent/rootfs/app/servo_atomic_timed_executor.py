@@ -16,6 +16,7 @@ from servo_timed_command_definition import (
 )
 
 FLOOR="sensor.owon_ths317_et_4"
+PUMP="switch.sonoff_mini_zb2gs_spinac_5"
 TARGET_MIN=15.0
 TARGET_MAX=42.0
 FLOOR_HIGH=43.0
@@ -90,6 +91,10 @@ def execute(*, identity:dict,payload:dict,read_state:Callable[[str],dict],
     move=direction(temp,target)
     if move=="hold":
         return {"action":"hold","actual_c":temp,"target_c":target}
+    pump_state=str(read_state(PUMP).get("state") or "").lower()
+    _fail_if(pump_state not in ("on","off"),"pump_state_unavailable")
+    if pump_state=="off":
+        return {"action":"hold_pump_off","actual_c":temp,"target_c":target}
     selected=1 if move=="open" else 2
     req=make_timed_request(device_uuid=UUID,ieee=IEEE,endpoint=selected,
                            relay_open_state="off",relay_close_state="off")
@@ -97,8 +102,10 @@ def execute(*, identity:dict,payload:dict,read_state:Callable[[str],dict],
     # It is NOT a guarantee during HA/Zigbee communication failure.
     errors=[]
     backup_stop=threading.Event()
+    backup_fired=threading.Event()
     def backup_off():
         if not backup_stop.wait(3.0):
+            backup_fired.set()
             for e in (OPEN,CLOSE):
                 try:send_off(e)
                 except Exception as exc:errors.append(type(exc).__name__)
@@ -122,7 +129,7 @@ def execute(*, identity:dict,payload:dict,read_state:Callable[[str],dict],
                     raise SafetyStop("opposite_output_energized")
                 if states[selected_entity]=="on":
                     seen_on=True
-                if seen_on and states[selected_entity]=="off":
+                if seen_on and states[selected_entity]=="off" and not backup_fired.is_set():
                     self_off_seen=True
                     break
             except SafetyStop:
@@ -153,7 +160,7 @@ def execute(*, identity:dict,payload:dict,read_state:Callable[[str],dict],
         raise SafetyStop("timed_command_failed") from failure
     _fail_if(bool(errors),"backup_off_failure")
     _fail_if(not confirmed,"off_readback_not_confirmed")
-    _fail_if(not seen_on or not self_off_seen,"native_timed_off_not_observed")
+    _fail_if(backup_fired.is_set() or not seen_on or not self_off_seen,"native_timed_off_not_observed")
     return {"action":"timed_pulse","direction":move,"actual_c":temp,
             "target_c":target,"requested_on_time_s":1.0,
             "both_off_confirmed":True,
