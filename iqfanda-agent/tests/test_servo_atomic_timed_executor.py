@@ -32,7 +32,7 @@ class Fake:
                    "command_type":COMMAND,"device_reg_id":"same","source":SOURCE,
                    "target_c":25.0,"seconds":1.0},
           read_state=self.read,get_registry=lambda e:"same",
-          get_zha_devices=lambda:[{"ieee":IEEE,"manufacturer":"SONOFF","model":"MINI-ZB2GS"}],
+          get_zha_devices=lambda:[{"ieee":IEEE,"manufacturer":"SONOFF","model":"MINI-ZB2GS","signature":{"endpoints":{"1":{"input_clusters":[0,6,0xFC11]},"2":{"input_clusters":[0,6,0xFC11]}}}}],
           send_timed=self.timed,send_off=self.off,
           wait=lambda n:None,locally_commissioned=True,
         )
