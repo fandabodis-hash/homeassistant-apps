@@ -3315,6 +3315,39 @@ def execute_zigbee_switch_set(
         readback_state,
     )
 
+# PHASE47_R112_READ_ONLY_ZHA_SERVO_CAPABILITY_PROBE_DRAFT
+def execute_zigbee_servo_capability_probe_v1(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Read-only ZHA signature; NEVER changes a cluster or switch."""
+    try:
+        if str(command_payload.get("serial") or "") != "F800711-TNG-00013":
+            raise RuntimeError("SERVO_PROBE_WRONG_SERIAL")
+        from servo_zha_inching_probe import probe
+        report = probe(identity, get_zha_devices)
+    except Exception as exc:
+        submit_command_result(
+            identity=identity,
+            command_id=command_id,
+            status="failed",
+            result={"worker": "command_worker", "executor": "zigbee_servo_capability_probe_v1",
+                    "phase": "read_only_failed", "actuation": False},
+            error_message=str(exc),
+        )
+        return
+    submit_command_result(
+        identity=identity,
+        command_id=command_id,
+        status="succeeded",
+        result={"worker": "command_worker", "executor": "zigbee_servo_capability_probe_v1",
+                "phase": "read_only_complete", "actuation": False,
+                "probe": report},
+    )
+
+
 # PHASE47_R111_LOCAL_SERVO_PULSE_COMMAND_DRAFT
 def execute_zigbee_servo_pulse_v1(
     *,
@@ -3457,6 +3490,14 @@ def execute_command(
 
     if command_type == "zigbee_servo_pulse_v1":
         execute_zigbee_servo_pulse_v1(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "zigbee_servo_capability_probe_v1":
+        execute_zigbee_servo_capability_probe_v1(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
