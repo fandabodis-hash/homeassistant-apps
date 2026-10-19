@@ -16,7 +16,7 @@ OPEN = "switch.sonoff_mini_zb2gs_spinac_3"
 CLOSE = "switch.sonoff_mini_zb2gs_spinac_4"
 CLUSTER = 0xFC11
 MANUFACTURER = 0x1286
-COMMAND_ID = 0
+COMMAND_ID = 1
 
 
 class UnsafeConfiguration(RuntimeError):
