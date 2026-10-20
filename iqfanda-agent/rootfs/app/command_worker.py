@@ -3528,6 +3528,37 @@ def execute_zigbee_servo_supervised_full_open_120_v1(
     )
 
 
+# PHASE47_R163_00013_LOCAL_TARGET_CONFIG_ONLY
+def execute_zigbee_servo_local_setpoint_v1(
+    *, identity: dict[str, Any], command_id: str, command_payload: dict[str, Any],
+) -> None:
+    """Only changes persisted local target; never creates a motor command."""
+    from f47_local_mixer_00013 import set_local_target,LocalSafetyStop
+    try:
+        result=set_local_target(identity=identity,payload=command_payload)
+    except Exception as exc:
+        code=str(exc)
+        if (not isinstance(exc,LocalSafetyStop) or len(code)>90 or not code or
+            any(c not in "abcdefghijklmnopqrstuvwxyz0123456789_" for c in code)):
+            code="local_target_preflight_failed"
+        submit_command_result(
+            identity=identity,command_id=command_id,status="failed",
+            result={"worker":"command_worker",
+                    "executor":"zigbee_servo_local_setpoint_v1",
+                    "phase":"local_target_rejected",
+                    "reason":code,"actuation":False},
+            error_message="00013 local target update refused: "+code,
+        )
+        return
+    submit_command_result(
+        identity=identity,command_id=command_id,status="succeeded",
+        result={"worker":"command_worker",
+                "executor":"zigbee_servo_local_setpoint_v1",
+                "phase":"local_target_saved_no_motor",
+                "details":result,"actuation":False},
+    )
+
+
 # PHASE47_R161_00013_ONE_TIME_LOCAL_CONTROL_ARM
 def execute_zigbee_servo_local_enable_v1(
     *, identity: dict[str, Any], command_id: str,
@@ -4048,6 +4079,13 @@ def execute_command(
         return
 
     # Installer provisioning only. Runtime loop does NOT request cloud commands.
+    if command_type == "zigbee_servo_local_setpoint_v1":
+        execute_zigbee_servo_local_setpoint_v1(
+            identity=identity,command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
     if command_type == "zigbee_servo_local_enable_v1":
         execute_zigbee_servo_local_enable_v1(
             identity=identity,command_id=command_id,
