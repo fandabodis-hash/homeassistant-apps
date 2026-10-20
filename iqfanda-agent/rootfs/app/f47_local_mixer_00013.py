@@ -25,6 +25,7 @@ PUMP = "switch.sonoff_mini_zb2gs_spinac_5"
 FLOOR = "sensor.owon_ths317_et_4"
 CONFIG_PATH = Path("/config/f47_00013_local_mixing_3s15s.json")
 STATUS_PATH = Path("/config/f47_00013_local_mixing_status.json")
+LAST_PULSE_PATH = Path("/config/f47_00013_local_mixing_last_pulse.json")
 PULSE_SECONDS = 3.0
 PAUSE_SECONDS = 15.0
 TARGET_C = 30.0
@@ -105,7 +106,7 @@ def _floor(read):
         raise LocalSafetyStop("floor_invalid")
     require(stamp.tzinfo is not None and 0<=age<=MAX_AGE_SECONDS,"floor_stale")
     require(math.isfinite(value) and 0<=value<MAX_FLOOR_C,"floor_overheat_or_invalid")
-    return value,round(age,1)
+    return value,round(age,1),stamp.timestamp()
 
 def _confirm_hardware(registry,devices):
     left=registry(OPEN)
@@ -144,7 +145,7 @@ def enable(*,identity:dict,payload:dict,read=None,registry=None,devices=None) ->
         read,registry,devices,_=_ha()
     _confirm_hardware(registry,devices)
     require(_off_verified(read),"relays_not_both_off")
-    temp,age=_floor(read)
+    temp,age,_=_floor(read)
     require(_relay(read,PUMP)=="on","floor_pump_not_running")
     _status("armed",floor_c=temp,sensor_age_seconds=age,
             note="read_only_preflight_complete_no_relay_command")
@@ -205,14 +206,22 @@ def cycle(*,identity:dict,read,registry,devices,switch,wait=time.sleep) -> dict:
     require(is_armed(identity),"not_armed")
     _confirm_hardware(registry,devices)
     require(_off_verified(read),"relays_not_both_off")
-    temp,age=_floor(read)
+    temp,age,reported_epoch=_floor(read)
     if _relay(read,PUMP)!="on":
         return {"action":"hold_pump_off","temperature_c":temp,"sensor_age_seconds":age}
     delta=temp-TARGET_C
     if abs(delta)<=DEADBAND_C:
         return {"action":"hold_in_band","temperature_c":temp,"sensor_age_seconds":age}
+    # No repeated command on the same last_reported measurement.
+    last=_load(LAST_PULSE_PATH)
+    previous=last.get("last_report_epoch")
+    if isinstance(previous,(int,float)) and reported_epoch<=previous:
+        return {"action":"hold_wait_new_owon_report","temperature_c":temp,
+                "sensor_age_seconds":age}
     entity=CLOSE if delta>0 else OPEN
     _pulse(read,switch,entity,wait=wait)
+    _atomic(LAST_PULSE_PATH,{"last_report_epoch":reported_epoch,
+            "direction":"close" if delta>0 else "open"})
     return {"action":"close" if delta>0 else "open",
             "temperature_c":temp,"sensor_age_seconds":age,
             "seconds":PULSE_SECONDS}
@@ -255,8 +264,14 @@ def run_forever(*,read=None,registry=None,devices=None,switch=None,
                 if reason in ("floor_stale","floor_invalid","floor_overheat_or_invalid",
                               "floor_pump_not_running"):
                     # Sensor and pump gating are holds only when BOTH outputs OFF.
-                    require(_off_verified(read),"relay_off_unconfirmed_sensor_hold")
-                    _status("hold",reason=reason)
+                    try:
+                        require(_off_verified(read),"relay_off_unconfirmed_sensor_hold")
+                        _status("hold",reason=reason)
+                    except Exception:
+                        errors=[]
+                        _off_both(switch,errors)
+                        _status("locked",reason="relay_off_unconfirmed_sensor_hold",
+                                off_commands_ok=not errors)
                 else:
                     errors=[]
                     _off_both(switch,errors)
