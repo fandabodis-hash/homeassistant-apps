@@ -1,0 +1,23 @@
+name: F43 Solax optional feed-in 0x46 diagnostic regression
+
+on:
+  push:
+    branches: ['candidate/f43-solax-feedin-0x46-read-only']
+  pull_request:
+    paths:
+      - 'iqfanda-agent/rootfs/app/communication/inverter_adapter.py'
+      - 'iqfanda-agent/rootfs/app/communication/inverter_profiles/solax_x3_hybrid_g4.json'
+      - 'iqfanda-agent/tests/test_f43_solax_feedin_register_0x46.py'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-solax-diagnostic-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile unchanged runtime and diagnostics
+        run: python3 -B -m py_compile iqfanda-agent/rootfs/app/communication/inverter_adapter.py iqfanda-agent/tests/test_f43_solax_feedin_register_0x46.py
+      - name: Regression tests (no Modbus device, no network, no deploy)
+        run: PYTHONPATH=iqfanda-agent/rootfs/app python3 -B -m unittest discover -s iqfanda-agent/tests -p 'test_f43_solax_feedin_register_0x46.py' -v
