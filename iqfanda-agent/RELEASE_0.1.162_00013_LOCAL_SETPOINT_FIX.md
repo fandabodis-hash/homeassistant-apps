@@ -1,0 +1,9 @@
+# F47 R163 — urgent 00013 local setpoint mismatch correction
+
+Observed portal on 2026-10-20 requested 38 C with actual floor temperature 29.9 C and accumulator 39.1 C. Installed Agent 0.1.161 has hard-coded TARGET_C=30.0 and exact configuration equality that prevents using changed portal setting. Local loop consequently holds 30 C independently of portal 38 C. Previous manual tests confirm CLOSE reduces and OPEN increases floor temperature; no evidence reversed direction.
+
+Agent 0.1.162 allows local target 15–42 C, stored persistently on HA for exact model 00013. New zigbee_servo_local_setpoint_v1 modifies only desired setting; no relay ON/OFF or motor command is produced by setting update. Local loop retains 3 s pulses, >=15 s OFF pause, new OWON report gating, both-relay OFF proof, model-only binding checks, and cloud-independence of feedback loop. Update checks serial, UUID, expected old target (CAS), range, both relays OFF; serialized with local movement lock. A locked servo is never unlocked by setting change.
+
+The backend portal must relay a saved setpoint to local Agent via a one-shot configuration transport when internet is available. This is NOT cloud-based actuation; the 3s/15s loop only interacts with HA. During internet outage control continues with last acknowledged local target. A portal setting changed offline cannot take effect until delivery.
+
+IMPORTANT: This Agent release does NOT automatically integrate future portal saves until the model-scoped backend propagation is separately installed. A guarded PC1 installer can transmit one current verified portal target as configuration, and must show both local target and portal target afterward.
