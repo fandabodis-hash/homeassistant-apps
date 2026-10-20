@@ -200,7 +200,7 @@ def _pulse(read,switch,entity,wait=time.sleep,monotonic=time.monotonic) -> None:
     watchdog_used=threading.Event()
     off_errors=[]
     def watchdog():
-        if not stopped.wait(4.5):
+        if not stopped.wait(PULSE_SECONDS + 1.5):
             watchdog_used.set()
             _off_both(switch,off_errors)
     guard=threading.Thread(target=watchdog,name="00013-local-servo-off-guard",daemon=True)
