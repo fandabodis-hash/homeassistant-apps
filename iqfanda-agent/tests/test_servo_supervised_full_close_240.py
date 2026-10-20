@@ -35,7 +35,7 @@ class SupervisedFullClose240(unittest.TestCase):
         f=Rig()
         result=run(**f.args())
         self.assertEqual(result["direction"],"close")
-        self.assertEqual(result["seconds_requested"],120)
+        self.assertEqual(result["seconds_requested"],240)
         self.assertEqual(result["relays_after"],"off_off")
         self.assertIn((CLOSE,True),f.calls)
         self.assertIn(("wait",240.0),f.calls)
