@@ -59,14 +59,31 @@ def _load(path: Path) -> dict:
     except (OSError,ValueError,TypeError):
         return {}
 
+def _valid_target(raw) -> bool:
+    return type(raw) in (float,int) and math.isfinite(raw) and 15.0<=raw<=42.0
+
+def _local_target(identity:dict) -> float:
+    config=_load(CONFIG_PATH)
+    require(_valid_config(config,identity),"not_armed")
+    return float(config["target_c"])
+
 def _status(kind: str, **data) -> None:
+    config=_load(CONFIG_PATH)
+    target=(float(config["target_c"]) if _valid_config(config,{"device_uuid":UUID})
+            else TARGET_C)
     _atomic(STATUS_PATH,{"mode":"local_ha_only","status":kind,
         "updated_utc":datetime.now(timezone.utc).isoformat(),
         "pulse_seconds":PULSE_SECONDS,"pause_seconds":PAUSE_SECONDS,
-        "target_c":TARGET_C,**data})
+        "target_c":target,**data})
 
 def _valid_config(data:dict, identity:dict) -> bool:
-    return identity.get("device_uuid")==UUID and data == {
+    if identity.get("device_uuid")!=UUID or not isinstance(data,dict):
+        return False
+    if not _valid_target(data.get("target_c")):
+        return False
+    copy=dict(data)
+    copy["target_c"]=TARGET_C
+    return copy == {
         "serial":SERIAL,"device_uuid":UUID,"enabled":True,
         "target_c":TARGET_C,"pulse_seconds":PULSE_SECONDS,
         "pause_seconds":PAUSE_SECONDS,"source":"local_agent_ha_only_v1",
@@ -202,14 +219,14 @@ def _pulse(read,switch,entity,wait=time.sleep,monotonic=time.monotonic) -> None:
     require(not off_errors,"off_command_failed")
     require(not watchdog_used.is_set(),"off_watchdog_required")
 
-def cycle(*,identity:dict,read,registry,devices,switch,wait=time.sleep) -> dict:
-    require(is_armed(identity),"not_armed")
+def _cycle_unlocked(*,identity:dict,read,registry,devices,switch,wait=time.sleep) -> dict:
+    target=_local_target(identity)
     _confirm_hardware(registry,devices)
     require(_off_verified(read),"relays_not_both_off")
     temp,age,reported_epoch=_floor(read)
     if _relay(read,PUMP)!="on":
         return {"action":"hold_pump_off","temperature_c":temp,"sensor_age_seconds":age}
-    delta=temp-TARGET_C
+    delta=temp-target
     if abs(delta)<=DEADBAND_C:
         return {"action":"hold_in_band","temperature_c":temp,"sensor_age_seconds":age}
     # No repeated command on the same last_reported measurement.
@@ -225,6 +242,48 @@ def cycle(*,identity:dict,read,registry,devices,switch,wait=time.sleep) -> dict:
     return {"action":"close" if delta>0 else "open",
             "temperature_c":temp,"sensor_age_seconds":age,
             "seconds":PULSE_SECONDS}
+
+def cycle(*,identity:dict,read,registry,devices,switch,wait=time.sleep) -> dict:
+    with MODEL_LOCK:
+        return _cycle_unlocked(identity=identity,read=read,registry=registry,
+                               devices=devices,switch=switch,wait=wait)
+
+def set_local_target(*,identity:dict,payload:dict,read=None) -> dict:
+    """One-off configuration transport. NO relay command, NO cloud control loop.
+
+    A separate VPS-side installer must compare the requested target against
+    the exact 00013 portal setting before dispatching this command.
+    """
+    require(identity.get("device_uuid")==UUID,"wrong_device")
+    require(isinstance(payload,dict) and
+            set(payload)=={"serial","old_target_c","target_c","mode"},
+            "target_payload_invalid")
+    require(payload["serial"]==SERIAL and payload["mode"]=="local_setpoint_only",
+            "target_scope_invalid")
+    require(_valid_target(payload["target_c"]),"target_value_invalid")
+    require(_valid_target(payload["old_target_c"]),"previous_target_invalid")
+    if read is None:
+        read,*_=_ha()
+    with MODEL_LOCK:
+        config=_load(CONFIG_PATH)
+        require(_valid_config(config,identity),"not_armed")
+        current=float(config["target_c"])
+        require(current==float(payload["old_target_c"]),"target_revision_mismatch")
+        require(_off_verified(read),"setpoint_relays_not_both_off")
+        if current != float(payload["target_c"]):
+            config["target_c"]=float(payload["target_c"])
+            _atomic(CONFIG_PATH,config)
+        previous=_load(STATUS_PATH)
+        if previous.get("status")=="locked":
+            # Setpoint updates must never unlock a motor failure.
+            previous.update({"target_c":float(payload["target_c"]),
+                             "updated_utc":datetime.now(timezone.utc).isoformat()})
+            _atomic(STATUS_PATH,previous)
+        else:
+            _status("hold",reason="local_setpoint_updated_wait_owon")
+        return {"action":"local_setpoint_saved","target_c":float(payload["target_c"]),
+                "old_target_c":current,"actuation":False,
+                "runtime":"local_ha_only","motor_commands_sent":0}
 
 def run_forever(*,read=None,registry=None,devices=None,switch=None,
                 sleep=time.sleep,load_identity=None) -> None:
