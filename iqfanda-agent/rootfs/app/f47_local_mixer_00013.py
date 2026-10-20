@@ -1,4 +1,4 @@
-"""F47 R161: 00013 local-only 3 s pulse / 15 s OFF interval mixing.
+"""F47 R171 candidate: 00013 local-only 5 s pulse / 15 s OFF interval mixing.
 
 NO cloud call in the control loop. The one-time installer enable action is
 distinct from regulation. HA REST/WebSocket calls address the local HA core.
@@ -26,7 +26,7 @@ FLOOR = "sensor.owon_ths317_et_4"
 CONFIG_PATH = Path("/config/f47_00013_local_mixing_3s15s.json")
 STATUS_PATH = Path("/config/f47_00013_local_mixing_status.json")
 LAST_PULSE_PATH = Path("/config/f47_00013_local_mixing_last_pulse.json")
-PULSE_SECONDS = 3.0
+PULSE_SECONDS = 5.0
 PAUSE_SECONDS = 15.0
 TARGET_C = 30.0
 DEADBAND_C = 0.3
@@ -38,7 +38,7 @@ MAX_AGE_SECONDS = 300.0
 # A single sample can authorize at most 60 s (half of the 120 s stroke).
 # This guard is deliberately conservative until physical position feedback
 # and an independently verified actuator calibration are available.
-MAX_PULSES_PER_READING = 20
+MAX_PULSES_PER_READING = 12
 MAX_SAMPLE_AGE_FOR_PULSE_SECONDS = 180.0
 MAX_FLOOR_C = 43.0
 MODEL_LOCK = threading.Lock()
@@ -379,7 +379,7 @@ def run_forever(*,read=None,registry=None,devices=None,switch=None,
                 _off_both(switch,errors)
                 _status("locked",reason="unclassified_"+type(exc).__name__,
                         off_commands_ok=not errors)
-            # 15 s OFF minimum after every 3 s actuation; on HOLD same pacing.
+            # 15 s OFF minimum after every 5 s actuation; on HOLD same pacing.
             sleep(PAUSE_SECONDS)
         except Exception:
             logging.exception("F47 00013 LOCAL MIXING supervisor failure; no blind motion")
