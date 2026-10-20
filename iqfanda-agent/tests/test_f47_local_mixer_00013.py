@@ -83,29 +83,29 @@ class LocalMixerTests(unittest.TestCase):
         self.assertNotIn((m.OPEN,True),rig.writes)
         self.assertEqual(rig.states[m.CLOSE],"off")
         self.assertEqual(rig.states[m.OPEN],"off")
-    def test_four_pulses_each_three_seconds_before_sample_budget(self):
+    def test_twenty_pulses_each_three_seconds_before_sample_budget(self):
         rig=self.activate()
-        for count in range(1,5):
+        for count in range(1,21):
             event=m.cycle(**rig.kwargs())
             self.assertEqual(event["action"],"close")
             self.assertEqual(event["completed_pulses_on_sample"],count)
             self.assertEqual(rig.states[m.OPEN],"off")
             self.assertEqual(rig.states[m.CLOSE],"off")
-        self.assertEqual(rig.sleeps.count(3.0),4)
-        self.assertEqual(rig.writes.count((m.CLOSE,True)),4)
+        self.assertEqual(rig.sleeps.count(3.0),20)
+        self.assertEqual(rig.writes.count((m.CLOSE,True)),20)
         hold=m.cycle(**rig.kwargs())
         self.assertEqual(hold["action"],"hold_sample_motion_budget")
-        self.assertEqual(hold["completed_pulses_on_sample"],4)
+        self.assertEqual(hold["completed_pulses_on_sample"],20)
         self.assertEqual(rig.writes.count((m.CLOSE,True)),4)
     def test_new_owon_report_renews_movement_budget(self):
         rig=self.activate()
-        for _ in range(4):m.cycle(**rig.kwargs())
+        for _ in range(20):m.cycle(**rig.kwargs())
         self.assertEqual(m.cycle(**rig.kwargs())["action"],"hold_sample_motion_budget")
         rig.reported_at=datetime.now(timezone.utc)
         result=m.cycle(**rig.kwargs())
         self.assertEqual(result["action"],"close")
         self.assertEqual(result["completed_pulses_on_sample"],1)
-        self.assertEqual(rig.writes.count((m.CLOSE,True)),5)
+        self.assertEqual(rig.writes.count((m.CLOSE,True)),21)
     def test_sensor_age_over_180_holds_and_does_not_actuate(self):
         rig=self.activate(Rig(temp=35.0,age=200))
         report=m.cycle(**rig.kwargs())
