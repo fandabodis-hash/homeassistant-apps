@@ -63,6 +63,27 @@ class LocalMixerTests(unittest.TestCase):
         cfg=json.loads(m.CONFIG_PATH.read_text())
         self.assertEqual(cfg["pulse_seconds"],5)
         self.assertEqual(cfg["pause_seconds"],15)
+    def test_existing_3_second_config_works_after_upgrade(self):
+        rig=self.activate(Rig(temp=30.4))
+        cfg=m._load(m.CONFIG_PATH)
+        cfg["pulse_seconds"]=3.0
+        cfg["target_c"]=38.0
+        m._atomic(m.CONFIG_PATH,cfg)
+        self.assertTrue(m.is_armed({"device_uuid":m.UUID}))
+        self.assertFalse(m.is_armed({"device_uuid":"00012"}))
+        result=m.cycle(**rig.kwargs())
+        self.assertEqual(result["action"],"open")
+        self.assertEqual(result["seconds"],5.0)
+        self.assertIn(5.0,rig.sleeps)
+        self.assertEqual(m._load(m.CONFIG_PATH)["pulse_seconds"],3.0)
+        self.assertEqual(m._load(m.CONFIG_PATH)["target_c"],38.0)
+    def test_reject_other_legacy_pulse_config(self):
+        rig=self.activate()
+        cfg=m._load(m.CONFIG_PATH)
+        cfg["pulse_seconds"]=4.0
+        m._atomic(m.CONFIG_PATH,cfg)
+        self.assertFalse(m.is_armed({"device_uuid":m.UUID}))
+        self.assertEqual(rig.writes,[])
     def test_wrong_model_never_arms(self):
         rig=Rig()
         with self.assertRaises(m.LocalSafetyStop):
