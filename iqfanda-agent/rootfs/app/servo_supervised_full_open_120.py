@@ -15,7 +15,7 @@ import time
 from typing import Any, Callable
 
 from servo_standard_pulse import PulseStopped, require
-from servo_timed_command_definition import UUID, IEEE, SERIAL, OPEN, OPEN
+from servo_timed_command_definition import UUID, IEEE, SERIAL, OPEN, CLOSE
 
 COMMAND="zigbee_servo_supervised_full_open_120_v1"
 PURPOSE="installer_supervised_open_120s"
@@ -29,7 +29,7 @@ def _state(read_state, entity):
     return state
 
 def _verify_off(read_state):
-    return _state(read_state,OPEN)=="off" and _state(read_state,OPEN)=="off"
+    return _state(read_state,OPEN)=="off" and _state(read_state,CLOSE)=="off"
 
 def run(*, identity:dict, payload:dict,
         read_state:Callable[[str],dict],
@@ -48,7 +48,7 @@ def run(*, identity:dict, payload:dict,
             "identity_or_purpose_mismatch")
     require(type(payload["seconds"]) in (int,float) and payload["seconds"]==120.0,
             "only_120_seconds")
-    reg1=get_registry(OPEN);reg2=get_registry(OPEN)
+    reg1=get_registry(OPEN);reg2=get_registry(CLOSE)
     require(bool(reg1) and reg1==reg2 and payload["device_reg_id"]==reg1,
             "servo_registry_mismatch")
     devices=get_zha_devices()
@@ -109,7 +109,7 @@ def run(*, identity:dict, payload:dict,
     watchdog_invoked=threading.Event()
     errors=[]
     def off_both():
-        for e in (OPEN,OPEN):
+        for e in (OPEN,CLOSE):
             try:
                 switch(e,False)
             except Exception as exc:
