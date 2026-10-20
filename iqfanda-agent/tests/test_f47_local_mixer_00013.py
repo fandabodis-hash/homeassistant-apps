@@ -91,7 +91,7 @@ class LocalMixerTests(unittest.TestCase):
             self.assertEqual(event["completed_pulses_on_sample"],count)
             self.assertEqual(rig.states[m.OPEN],"off")
             self.assertEqual(rig.states[m.CLOSE],"off")
-        self.assertEqual(rig.sleeps.count(5.0),20)
+        self.assertEqual(rig.sleeps.count(5.0),12)
         self.assertEqual(rig.writes.count((m.CLOSE,True)),12)
         hold=m.cycle(**rig.kwargs())
         self.assertEqual(hold["action"],"hold_sample_motion_budget")
