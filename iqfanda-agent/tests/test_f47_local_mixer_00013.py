@@ -83,14 +83,61 @@ class LocalMixerTests(unittest.TestCase):
         self.assertNotIn((m.OPEN,True),rig.writes)
         self.assertEqual(rig.states[m.CLOSE],"off")
         self.assertEqual(rig.states[m.OPEN],"off")
-    def test_next_pulse_requires_new_owon_report(self):
+    def test_four_pulses_each_three_seconds_before_sample_budget(self):
         rig=self.activate()
-        first=m.cycle(**rig.kwargs())
-        self.assertEqual(first["action"],"close")
-        original_on=sum(1 for e in rig.writes if e==(m.CLOSE,True))
-        again=m.cycle(**rig.kwargs())
-        self.assertEqual(again["action"],"hold_wait_new_owon_report")
-        self.assertEqual(sum(1 for e in rig.writes if e==(m.CLOSE,True)),original_on)
+        for count in range(1,5):
+            event=m.cycle(**rig.kwargs())
+            self.assertEqual(event["action"],"close")
+            self.assertEqual(event["completed_pulses_on_sample"],count)
+            self.assertEqual(rig.states[m.OPEN],"off")
+            self.assertEqual(rig.states[m.CLOSE],"off")
+        self.assertEqual(rig.sleeps.count(3.0),4)
+        self.assertEqual(rig.writes.count((m.CLOSE,True)),4)
+        hold=m.cycle(**rig.kwargs())
+        self.assertEqual(hold["action"],"hold_sample_motion_budget")
+        self.assertEqual(hold["completed_pulses_on_sample"],4)
+        self.assertEqual(rig.writes.count((m.CLOSE,True)),4)
+    def test_new_owon_report_renews_movement_budget(self):
+        rig=self.activate()
+        for _ in range(4):m.cycle(**rig.kwargs())
+        self.assertEqual(m.cycle(**rig.kwargs())["action"],"hold_sample_motion_budget")
+        rig.reported_at=datetime.now(timezone.utc)
+        result=m.cycle(**rig.kwargs())
+        self.assertEqual(result["action"],"close")
+        self.assertEqual(result["completed_pulses_on_sample"],1)
+        self.assertEqual(rig.writes.count((m.CLOSE,True)),5)
+    def test_sensor_age_over_180_holds_and_does_not_actuate(self):
+        rig=self.activate(Rig(temp=35.0,age=200))
+        report=m.cycle(**rig.kwargs())
+        self.assertEqual(report["action"],"hold_sensor_too_old_for_pulse")
+        self.assertEqual(rig.writes,[])
+    def test_change_direction_requires_new_owon_report(self):
+        rig=self.activate(Rig(temp=32.0))
+        self.assertEqual(m.cycle(**rig.kwargs())["action"],"close")
+        rig.temp=28.0  # Must not reverse on an unchanged timestamp
+        report=m.cycle(**rig.kwargs())
+        self.assertEqual(report["action"],"hold_direction_changed_wait_new_owon")
+        self.assertNotIn((m.OPEN,True),rig.writes)
+    def test_legacy_last_report_record_counts_first_pulse(self):
+        rig=self.activate()
+        m._atomic(m.LAST_PULSE_PATH,{
+            "last_report_epoch":rig.reported_at.timestamp(),
+            "direction":"close"})
+        result=m.cycle(**rig.kwargs())
+        self.assertEqual(result["completed_pulses_on_sample"],2)
+        self.assertEqual(m._load(m.LAST_PULSE_PATH)["pulse_count"],2)
+    def test_corrupt_ledger_never_resets_budget_to_zero(self):
+        rig=self.activate()
+        m.LAST_PULSE_PATH.write_text('{"last_report_epoch":"bad"}')
+        with self.assertRaisesRegex(m.LocalSafetyStop,"pulse_ledger_corrupt"):
+            m.cycle(**rig.kwargs())
+        self.assertEqual(rig.writes,[])
+    def test_owon_time_regression_no_motion(self):
+        rig=self.activate()
+        self.assertEqual(m.cycle(**rig.kwargs())["action"],"close")
+        rig.reported_at=rig.reported_at-timedelta(seconds=2)
+        self.assertEqual(m.cycle(**rig.kwargs())["action"],"hold_owon_report_regressed")
+        self.assertEqual(rig.writes.count((m.CLOSE,True)),1)
     def test_floor_stale_is_safe_hold_in_main_loop(self):
         rig=self.activate(Rig(age=600))
         seen=[]
