@@ -43,8 +43,10 @@ class LocalMixerTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.config=patch.object(m,"CONFIG_PATH",Path(self.tmp.name)/"cfg.json")
         self.status=patch.object(m,"STATUS_PATH",Path(self.tmp.name)/"state.json")
-        self.config.start();self.status.start()
+        self.pulse=patch.object(m,"LAST_PULSE_PATH",Path(self.tmp.name)/"last.json")
+        self.config.start();self.status.start();self.pulse.start()
         self.addCleanup(self.config.stop);self.addCleanup(self.status.stop)
+        self.addCleanup(self.pulse.stop)
     def activate(self,rig=None):
         rig=rig or Rig()
         m.enable(identity={"device_uuid":m.UUID},
@@ -80,6 +82,27 @@ class LocalMixerTests(unittest.TestCase):
         self.assertNotIn((m.OPEN,True),rig.writes)
         self.assertEqual(rig.states[m.CLOSE],"off")
         self.assertEqual(rig.states[m.OPEN],"off")
+    def test_next_pulse_requires_new_owon_report(self):
+        rig=self.activate()
+        first=m.cycle(**rig.kwargs())
+        self.assertEqual(first["action"],"close")
+        original_on=sum(1 for e in rig.writes if e==(m.CLOSE,True))
+        again=m.cycle(**rig.kwargs())
+        self.assertEqual(again["action"],"hold_wait_new_owon_report")
+        self.assertEqual(sum(1 for e in rig.writes if e==(m.CLOSE,True)),original_on)
+    def test_floor_stale_is_safe_hold_in_main_loop(self):
+        rig=self.activate(Rig(age=600))
+        seen=[]
+        def sleep(seconds):
+            seen.append(seconds)
+            raise KeyboardInterrupt
+        with self.assertRaises(KeyboardInterrupt):
+            m.run_forever(read=rig.read,registry=rig.registry,devices=rig.devices,
+                switch=rig.switch,sleep=sleep,
+                load_identity=lambda:{"device_uuid":m.UUID})
+        self.assertEqual(m._load(m.STATUS_PATH)["status"],"hold")
+        self.assertNotIn((m.CLOSE,True),rig.writes)
+        self.assertEqual(seen,[15.0])
     def test_open_when_too_cold(self):
         rig=self.activate(Rig(temp=28.0))
         result=m.cycle(**rig.kwargs())
