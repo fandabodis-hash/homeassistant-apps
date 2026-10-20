@@ -3381,6 +3381,55 @@ def execute_zigbee_servo_floor_refresh_v1(
     )
 
 
+# PHASE47_R139_00013_ONE_TIME_SUPERVISED_FULL_CLOSE_120_SECONDS
+def execute_zigbee_servo_supervised_full_close_120_v1(
+    *,
+    identity: dict[str, Any],
+    command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """Exact 00013 local CLOSE 120 s then OFF both, never OPEN."""
+    from servo_standard_bridge import (
+        _read_entity, _read_registry, _read_devices, _switch_entity,
+    )
+    from servo_supervised_full_close import run
+    try:
+        result=run(
+            identity=identity,
+            payload=command_payload,
+            read_state=_read_entity,
+            get_registry=_read_registry,
+            get_zha_devices=_read_devices,
+            switch=_switch_entity,
+            physical_endstops_confirmed=True,
+        )
+    except Exception as exc:
+        from servo_standard_pulse import PulseStopped
+        code=str(exc)
+        if (not isinstance(exc,PulseStopped) or len(code)>90 or not code or
+            any(c not in "abcdefghijklmnopqrstuvwxyz0123456789_" for c in code)):
+            code="unclassified_local_error"
+        submit_command_result(
+            identity=identity,command_id=command_id,status="failed",
+            result={"worker":"command_worker",
+                    "executor":"zigbee_servo_supervised_full_close_120_v1",
+                    "phase":"motor_close_failed_or_off_unproven",
+                    "reason":code,
+                    "exception_type":type(exc).__name__,
+                    "motor_off_verified":False},
+            error_message="Servo supervised close: "+code,
+        )
+        return
+    submit_command_result(
+        identity=identity,command_id=command_id,status="succeeded",
+        result={"worker":"command_worker",
+                "executor":"zigbee_servo_supervised_full_close_120_v1",
+                "phase":"supervised_full_close_complete",
+                "details":result,
+                "motor_off_verified":result.get("relays_after")=="off_off"},
+    )
+
+
 # PHASE47_R126_MODEL_00013_STANDARD_ON_OFF_LOCAL_SERVO_PULSE
 def execute_zigbee_servo_standard_step_v1(
     *,
@@ -3780,6 +3829,14 @@ def execute_command(
 
     if command_type == "zigbee_servo_pulse_v1":
         execute_zigbee_servo_pulse_v1(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    if command_type == "zigbee_servo_supervised_full_close_120_v1":
+        execute_zigbee_servo_supervised_full_close_120_v1(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
