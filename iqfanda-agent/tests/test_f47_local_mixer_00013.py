@@ -11,6 +11,7 @@ class Rig:
     def __init__(self,temp=36.8,age=3):
         self.temp=temp
         self.age=age
+        self.reported_at=datetime.now(timezone.utc)-timedelta(seconds=age)
         self.pump="on"
         self.states={m.OPEN:"off",m.CLOSE:"off"}
         self.writes=[]
@@ -18,7 +19,7 @@ class Rig:
     def read(self,e):
         if e==m.FLOOR:
             return {"state":str(self.temp),"last_reported":
-                (datetime.now(timezone.utc)-timedelta(seconds=self.age)).isoformat()}
+                self.reported_at.isoformat()}
         if e==m.PUMP:
             return {"state":self.pump}
         return {"state":self.states[e]}
