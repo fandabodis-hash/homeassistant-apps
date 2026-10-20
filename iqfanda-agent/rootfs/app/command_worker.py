@@ -3528,6 +3528,37 @@ def execute_zigbee_servo_supervised_full_open_120_v1(
     )
 
 
+# PHASE47_R161_00013_ONE_TIME_LOCAL_CONTROL_ARM
+def execute_zigbee_servo_local_enable_v1(
+    *, identity: dict[str, Any], command_id: str,
+    command_payload: dict[str, Any],
+) -> None:
+    """One-time local configuration. All future servo pulses are HA-local."""
+    from f47_local_mixer_00013 import enable
+    try:
+        result=enable(identity=identity,payload=command_payload)
+    except Exception as exc:
+        code=str(exc)
+        from f47_local_mixer_00013 import LocalSafetyStop
+        if not isinstance(exc,LocalSafetyStop) or len(code)>90 or any(
+            c not in "abcdefghijklmnopqrstuvwxyz0123456789_" for c in code
+        ):
+            code="local_preflight_failed"
+        submit_command_result(
+            identity=identity,command_id=command_id,status="failed",
+            result={"worker":"command_worker","executor":"zigbee_servo_local_enable_v1",
+                    "phase":"local_enable_rejected","reason":code,
+                    "actuation":False},
+            error_message="00013 local enable blocked: "+code,
+        )
+        return
+    submit_command_result(
+        identity=identity,command_id=command_id,status="succeeded",
+        result={"worker":"command_worker","executor":"zigbee_servo_local_enable_v1",
+                "phase":"local_3s15s_enabled","actuation":False,"details":result},
+    )
+
+
 # PHASE47_R150_00013_FEEDBACK_CLOSE_10S
 def execute_zigbee_servo_feedback_close_10_v1(
     *,
@@ -3943,6 +3974,38 @@ def execute_command(
         },
     )
 
+    # F47 R161: Cloud becomes observation-only for this model's servo when
+    # local owner has been armed. Even authenticated manual cloud ON/OFF is
+    # refused to avoid conflicting with the 3s/15s HA-local motor loop.
+    from f47_local_mixer_00013 import (
+        is_armed as local_servo_armed, OPEN as local_servo_open,
+        CLOSE as local_servo_close, UUID as local_servo_uuid,
+    )
+    servo_commands = {
+        "zigbee_servo_pulse_v1",
+        "zigbee_servo_standard_pulse_v1",
+        "zigbee_servo_standard_commission_v1",
+        "zigbee_servo_timed_step_v2",
+        "zigbee_servo_commission_v1",
+        "zigbee_servo_supervised_full_close_120_v1",
+        "zigbee_servo_supervised_full_close_240_v1",
+        "zigbee_servo_supervised_full_open_120_v1",
+        "zigbee_servo_feedback_close_10_v1",
+    }
+    if (identity.get("device_uuid")==local_servo_uuid
+        and local_servo_armed(identity)
+        and (command_type in servo_commands or
+             (command_type=="zigbee_switch_set" and
+              command_payload.get("entity_id") in
+                  (local_servo_open,local_servo_close)))):
+        submit_command_result(
+            identity=identity,command_id=command_id,status="failed",
+            result={"worker":"command_worker","phase":"local_servo_owns_outputs",
+                    "actuation":False,"reason":"local_ha_only_cloud_read_only"},
+            error_message="Servo model 00013 je rizeno lokalne. Cloud je pouze pro zobrazeni.",
+        )
+        return
+
     if command_type == "zigbee_topology_refresh":
         execute_zigbee_topology_refresh(
             identity=identity,
@@ -3979,6 +4042,14 @@ def execute_command(
         execute_zigbee_servo_supervised_full_close_240_v1(
             identity=identity,
             command_id=command_id,
+            command_payload=command_payload,
+        )
+        return
+
+    # Installer provisioning only. Runtime loop does NOT request cloud commands.
+    if command_type == "zigbee_servo_local_enable_v1":
+        execute_zigbee_servo_local_enable_v1(
+            identity=identity,command_id=command_id,
             command_payload=command_payload,
         )
         return
