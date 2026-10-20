@@ -31,6 +31,10 @@ PAUSE_SECONDS = 15.0
 TARGET_C = 30.0
 DEADBAND_C = 0.3
 MAX_AGE_SECONDS = 300.0
+# Do not require a new OWON report after every 3 s movement. Limit travel
+# while using one valid sample to 4 x 3 s = 12 s (10% of 120 s stroke).
+MAX_PULSES_PER_READING = 4
+MAX_SAMPLE_AGE_FOR_PULSE_SECONDS = 180.0
 MAX_FLOOR_C = 43.0
 MODEL_LOCK = threading.Lock()
 
@@ -229,19 +233,49 @@ def _cycle_unlocked(*,identity:dict,read,registry,devices,switch,wait=time.sleep
     delta=temp-target
     if abs(delta)<=DEADBAND_C:
         return {"action":"hold_in_band","temperature_c":temp,"sensor_age_seconds":age}
-    # No repeated command on the same last_reported measurement.
+    # Use the latest actually reported OWON sample on the 3s/15s cadence.
+    # Limit movement when HA/Zigbee temperature updates are slow. Never
+    # repeatedly advance blindly for the full servo stroke on old data.
+    if age>MAX_SAMPLE_AGE_FOR_PULSE_SECONDS:
+        return {"action":"hold_sensor_too_old_for_pulse",
+                "temperature_c":temp,"sensor_age_seconds":age,
+                "max_pulse_sample_age_s":MAX_SAMPLE_AGE_FOR_PULSE_SECONDS}
+    direction="close" if delta>0 else "open"
     last=_load(LAST_PULSE_PATH)
-    previous=last.get("last_report_epoch")
-    if isinstance(previous,(int,float)) and reported_epoch<=previous:
-        return {"action":"hold_wait_new_owon_report","temperature_c":temp,
-                "sensor_age_seconds":age}
+    if LAST_PULSE_PATH.exists():
+        previous=last.get("last_report_epoch")
+        require(type(previous) in (float,int) and math.isfinite(previous),
+                "pulse_ledger_corrupt")
+        if reported_epoch<previous:
+            return {"action":"hold_owon_report_regressed",
+                    "temperature_c":temp,"sensor_age_seconds":age}
+        if reported_epoch==previous:
+            count=last.get("pulse_count",1)  # 0.1.162 legacy record = 1 pulse
+            require(type(count) is int and 0<=count<=MAX_PULSES_PER_READING,
+                    "pulse_ledger_count_invalid")
+            if last.get("direction")!=direction:
+                return {"action":"hold_direction_changed_wait_new_owon",
+                        "temperature_c":temp,"sensor_age_seconds":age}
+        else:
+            count=0
+    else:
+        count=0
+    if count>=MAX_PULSES_PER_READING:
+        return {"action":"hold_sample_motion_budget",
+                "temperature_c":temp,"sensor_age_seconds":age,
+                "completed_pulses_on_sample":count,
+                "max_pulses_per_report":MAX_PULSES_PER_READING}
     entity=CLOSE if delta>0 else OPEN
     _pulse(read,switch,entity,wait=wait)
+    new_count=count+1
     _atomic(LAST_PULSE_PATH,{"last_report_epoch":reported_epoch,
-            "direction":"close" if delta>0 else "open"})
-    return {"action":"close" if delta>0 else "open",
+            "direction":direction,"pulse_count":new_count,
+            "last_target_c":target})
+    return {"action":direction,
             "temperature_c":temp,"sensor_age_seconds":age,
-            "seconds":PULSE_SECONDS}
+            "seconds":PULSE_SECONDS,
+            "completed_pulses_on_sample":new_count,
+            "max_pulses_per_report":MAX_PULSES_PER_READING}
 
 def cycle(*,identity:dict,read,registry,devices,switch,wait=time.sleep) -> dict:
     with MODEL_LOCK:
