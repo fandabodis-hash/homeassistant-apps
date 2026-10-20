@@ -260,6 +260,23 @@ class LocalMixerTests(unittest.TestCase):
         with self.assertRaisesRegex(m.LocalSafetyStop,"off_command_failed"):
             m.cycle(**args)
         self.assertNotIn((m.OPEN,True),rig.writes)
+    def test_runtime_repeats_three_second_pulses_with_fifteen_second_pause(self):
+        rig=self.activate(Rig(temp=36.8,age=2))
+        pauses=[]
+        def wait(seconds):
+            pauses.append(seconds)
+            if len(pauses)==3:
+                raise KeyboardInterrupt
+        with self.assertRaises(KeyboardInterrupt):
+            m.run_forever(read=rig.read,registry=rig.registry,
+                devices=rig.devices,switch=rig.switch,sleep=wait,
+                load_identity=lambda:{"device_uuid":m.UUID})
+        self.assertEqual(pauses,[15.0,15.0,15.0])
+        self.assertEqual(rig.sleeps.count(3.0),3)
+        self.assertEqual(rig.writes.count((m.CLOSE,True)),3)
+        self.assertNotIn((m.OPEN,True),rig.writes)
+        self.assertEqual(rig.states[m.OPEN],"off")
+        self.assertEqual(rig.states[m.CLOSE],"off")
     def test_startup_uses_only_local_ha_and_15s_pause(self):
         rig=self.activate()
         sleeps=[]
