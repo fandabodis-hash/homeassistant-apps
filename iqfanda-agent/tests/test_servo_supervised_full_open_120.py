@@ -110,7 +110,9 @@ class SupervisedOpen(unittest.TestCase):
         f=Rig()
         def bad_write(e,on):
             f.calls.append((e,on))
-            if not on:raise OSError("HA failure")
+            if not on:
+                f.states[e]="off"
+                raise OSError("HA failure")
             f.states[e]="on"
         a=f.args();a["switch"]=bad_write
         with self.assertRaises(PulseStopped):f.run(a)
