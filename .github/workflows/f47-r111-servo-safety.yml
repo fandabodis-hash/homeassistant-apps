@@ -8,6 +8,8 @@ on:
       - 'iqfanda-agent/rootfs/app/servo_pulse_command.py'
       - 'iqfanda-agent/rootfs/app/command_worker.py'
       - 'iqfanda-agent/tests/test_servo_*.py'
+      - 'iqfanda-agent/tests/test_f47_local_mixer_00013.py'
+      - 'iqfanda-agent/rootfs/app/f47_local_mixer_00013.py'
       - '.github/workflows/f47-r111-servo-safety.yml'
   pull_request:
     paths:
@@ -15,6 +17,8 @@ on:
       - 'iqfanda-agent/rootfs/app/servo_pulse_command.py'
       - 'iqfanda-agent/rootfs/app/command_worker.py'
       - 'iqfanda-agent/tests/test_servo_*.py'
+      - 'iqfanda-agent/tests/test_f47_local_mixer_00013.py'
+      - 'iqfanda-agent/rootfs/app/f47_local_mixer_00013.py'
       - '.github/workflows/f47-r111-servo-safety.yml'
 
 jobs:
@@ -41,4 +45,8 @@ jobs:
           python -m py_compile iqfanda-agent/rootfs/app/servo_standard_bridge.py
           python -m py_compile iqfanda-agent/rootfs/app/servo_floor_fresh.py
           python -m py_compile iqfanda-agent/rootfs/app/servo_ha_sensor_timestamp_probe.py
+          python -m py_compile iqfanda-agent/rootfs/app/f47_local_mixer_00013.py
+          python -m py_compile iqfanda-agent/rootfs/app/startup.py
+          python -m py_compile iqfanda-agent/rootfs/app/heartbeat.py
           PYTHONPATH=iqfanda-agent/rootfs/app python -m unittest discover -v -s iqfanda-agent/tests -p 'test_servo_*.py'
+          PYTHONPATH=iqfanda-agent/rootfs/app python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f47_local_mixer_00013.py'
