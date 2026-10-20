@@ -332,7 +332,8 @@ def send_heartbeat(config: dict) -> dict:
                 allowed=("mode","status","updated_utc","pulse_seconds",
                          "pause_seconds","target_c","action","direction",
                          "temperature_c","sensor_age_seconds","reason",
-                         "off_commands_ok")
+                         "off_commands_ok","completed_pulses_on_sample",
+                         "max_pulses_per_report","max_pulse_sample_age_s")
                 communication_state["f47_local_mixing_00013"]={
                     key:local_status[key]
                     for key in allowed if key in local_status
