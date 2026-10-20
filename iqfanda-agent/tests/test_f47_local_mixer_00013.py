@@ -104,6 +104,67 @@ class LocalMixerTests(unittest.TestCase):
         self.assertEqual(m._load(m.STATUS_PATH)["status"],"hold")
         self.assertNotIn((m.CLOSE,True),rig.writes)
         self.assertEqual(seen,[15.0])
+    def test_dynamic_target_38_opens_at_29_9(self):
+        rig=self.activate(Rig(temp=29.9))
+        self.assertEqual(m.cycle(**rig.kwargs())["action"],"hold_in_band")
+        target=m.set_local_target(identity={"device_uuid":m.UUID},
+            payload={"serial":m.SERIAL,"mode":"local_setpoint_only",
+                     "old_target_c":30.0,"target_c":38.0},read=rig.read)
+        self.assertEqual(target["action"],"local_setpoint_saved")
+        self.assertFalse(target["actuation"])
+        self.assertEqual(rig.writes,[])
+        report=m.cycle(**rig.kwargs())
+        self.assertEqual(report["action"],"open")
+        self.assertIn((m.OPEN,True),rig.writes)
+        self.assertNotIn((m.CLOSE,True),rig.writes)
+        self.assertEqual(m._load(m.CONFIG_PATH)["target_c"],38)
+        self.assertEqual(m._load(m.STATUS_PATH)["target_c"],38)
+    def test_portal_value_cannot_change_target_without_config_command(self):
+        rig=self.activate(Rig(temp=29.9))
+        self.assertEqual(m._local_target({"device_uuid":m.UUID}),30)
+        self.assertEqual(m.cycle(**rig.kwargs())["action"],"hold_in_band")
+        self.assertEqual(rig.writes,[])
+    def test_setpoint_update_preserves_locked_status(self):
+        rig=self.activate()
+        m._status("locked",reason="off_readback_unproven")
+        change=m.set_local_target(identity={"device_uuid":m.UUID},
+            payload={"serial":m.SERIAL,"mode":"local_setpoint_only",
+                     "old_target_c":30.0,"target_c":38.0},read=rig.read)
+        self.assertFalse(change["actuation"])
+        state=m._load(m.STATUS_PATH)
+        self.assertEqual(state["status"],"locked")
+        self.assertEqual(state["reason"],"off_readback_unproven")
+        self.assertEqual(state["target_c"],38)
+    def test_setpoint_revision_mismatch_blocks(self):
+        rig=self.activate()
+        with self.assertRaisesRegex(m.LocalSafetyStop,"target_revision_mismatch"):
+            m.set_local_target(identity={"device_uuid":m.UUID},
+                payload={"serial":m.SERIAL,"mode":"local_setpoint_only",
+                         "old_target_c":29.0,"target_c":38.0},read=rig.read)
+        self.assertEqual(m._load(m.CONFIG_PATH)["target_c"],30)
+    def test_setpoint_both_relays_off_required(self):
+        rig=self.activate()
+        rig.states[m.CLOSE]="on"
+        with self.assertRaisesRegex(m.LocalSafetyStop,"setpoint_relays_not_both_off"):
+            m.set_local_target(identity={"device_uuid":m.UUID},
+                payload={"serial":m.SERIAL,"mode":"local_setpoint_only",
+                         "old_target_c":30.0,"target_c":38.0},read=rig.read)
+        self.assertEqual(m._load(m.CONFIG_PATH)["target_c"],30)
+    def test_setpoint_wrong_model_never_writes(self):
+        rig=self.activate()
+        with self.assertRaisesRegex(m.LocalSafetyStop,"wrong_device"):
+            m.set_local_target(identity={"device_uuid":"00012"},
+                payload={"serial":m.SERIAL,"mode":"local_setpoint_only",
+                         "old_target_c":30.0,"target_c":38.0},read=rig.read)
+        self.assertEqual(m._load(m.CONFIG_PATH)["target_c"],30)
+    def test_out_of_bounds_or_unknown_config_is_not_armed(self):
+        rig=self.activate()
+        conf=m._load(m.CONFIG_PATH)
+        for invalid in (float("nan"),43,-5,False,"38"):
+            conf["target_c"]=invalid
+            m._atomic(m.CONFIG_PATH,conf)
+            self.assertFalse(m.is_armed({"device_uuid":m.UUID}))
+            self.assertEqual(rig.writes,[])
     def test_open_when_too_cold(self):
         rig=self.activate(Rig(temp=28.0))
         result=m.cycle(**rig.kwargs())
