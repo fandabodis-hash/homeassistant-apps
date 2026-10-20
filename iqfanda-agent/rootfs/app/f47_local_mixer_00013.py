@@ -33,7 +33,12 @@ DEADBAND_C = 0.3
 MAX_AGE_SECONDS = 300.0
 # Do not require a new OWON report after every 3 s movement. Limit travel
 # while using one valid sample to 4 x 3 s = 12 s (10% of 120 s stroke).
-MAX_PULSES_PER_READING = 4
+# R170: allow timed movement without a fresh temperature report after
+# four strokes, but NEVER permit unbounded travel from stale feedback.
+# A single sample can authorize at most 60 s (half of the 120 s stroke).
+# This guard is deliberately conservative until physical position feedback
+# and an independently verified actuator calibration are available.
+MAX_PULSES_PER_READING = 20
 MAX_SAMPLE_AGE_FOR_PULSE_SECONDS = 180.0
 MAX_FLOOR_C = 43.0
 MODEL_LOCK = threading.Lock()
