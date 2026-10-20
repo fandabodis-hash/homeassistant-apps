@@ -320,7 +320,7 @@ def set_local_target(*,identity:dict,payload:dict,read=None) -> dict:
                 "runtime":"local_ha_only","motor_commands_sent":0}
 
 def run_forever(*,read=None,registry=None,devices=None,switch=None,
-                sleep=time.sleep,load_identity=None) -> None:
+                sleep=time.sleep,load_identity=None,pulse_wait=time.sleep) -> None:
     """Always-on local thread. No cloud import/call anywhere in this loop."""
     if load_identity is None:
         from device_config import load_device_identity
@@ -350,7 +350,7 @@ def run_forever(*,read=None,registry=None,devices=None,switch=None,
                 active=True
             try:
                 detail=cycle(identity=identity,read=read,registry=registry,
-                             devices=devices,switch=switch)
+                             devices=devices,switch=switch,wait=pulse_wait)
                 _status("local_running",**detail)
             except LocalSafetyStop as exc:
                 reason=str(exc)
