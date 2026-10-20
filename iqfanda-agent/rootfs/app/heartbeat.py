@@ -322,6 +322,25 @@ def send_heartbeat(config: dict) -> dict:
 
     communication_state = build_communication_state()
 
+    # F47 R161: outbound status ONLY. The regulation thread never reads this
+    # cloud response or sends any motor commands through the internet.
+    if config.get("device_uuid")=="014a0d23-d440-4131-abb4-28a860595043":
+        try:
+            from f47_local_mixer_00013 import STATUS_PATH, _load
+            local_status=_load(STATUS_PATH)
+            if local_status:
+                allowed=("mode","status","updated_utc","pulse_seconds",
+                         "pause_seconds","target_c","action","direction",
+                         "temperature_c","sensor_age_seconds","reason",
+                         "off_commands_ok")
+                communication_state["f47_local_mixing_00013"]={
+                    key:local_status[key]
+                    for key in allowed if key in local_status
+                }
+        except Exception as exc:
+            logging.warning("F47 read-only local mixing status not available: %s",
+                            type(exc).__name__)
+
     network_state = network_telemetry.get(
         "network_state"
     )
