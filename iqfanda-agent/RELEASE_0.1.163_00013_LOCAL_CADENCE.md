@@ -1,0 +1,13 @@
+# F47 R169: Model 00013 local 3s/15s motor cadence even when OWON reporting is slow
+
+Root cause from user-supplied F47 R168 eight-minute audit: R87 floor pump was ON in all 42 observed worker cycles; Agent 0.1.162 reported hold_wait_new_owon_report repeatedly, floor temp stayed at 29.7C, target was 38C, no open event in the observed 8-minute window. OWON last_reported eventually aged >300s; loop safely held.
+
+Version 0.1.163 **removes the requirement for a new OWON timestamp after every servo pulse**. With local floor state valid and sufficiently recent, a single unchanged OWON report can authorize up to FOUR 3-second strokes on 15-second minimum OFF cadence. Total maximum under one report is 12 motor-on seconds (10% of known 120-second full travel). This is a bounded commissioning control policy, not unrestricted dead-reckoning.
+
+Each step rechecks exact model + SONOFF IEEE/ZHA signature/relay registry, both channels OFF, the locally read 38C setpoint (or any accepted 15-42C local target), floor pump ON, numeric floor temperature, and floor age. No new impulse when floor last_reported age exceeds 180 seconds; existing global 300s sensor-stale stop unchanged. Last report pulse-budget ledger is persisted on the Agent; an interrupted pulse is an irreversible lockout until supervised recovery. Previous 0.1.162 ledger with just timestamp/direction counts as one pulse for that timestamp.
+
+When the same temperature report has been used for 4 impulses, the loop stops requesting motion until a newer sample is observed. It never reverses direction based on the same timestamp and refuses regressed sensor timestamps. Outbound heartbeat adds completed_pulses_on_sample and max_pulses_per_report; portal remains read-only as to motor control, and all actual pulse decisions happen on Home Assistant Agent without internet.
+
+Hardware and software limitations: OFF is requested via HA/Zigbee; it is not an independent hardware cutoff. Independent floor high-temperature pipe thermostat and actuator endstops must remain working. Do not mistake software ON/OFF verified state for mechanical position proof. Existing R127 VPS automatic servo timer must remain disabled. Model 00012 and R87 pump service unchanged.
+
+Installation scope: exact F800711-TNG-00013 from 0.1.162 to 0.1.163 only. A guarded one-click PC1 script should verify 38C saved on both portal and local Agent, exact current agent version, no lockout, and both relays OFF before invoking standard Agent update. After version update, supervise actual 3s motor steps and report pulse-budget counters.
