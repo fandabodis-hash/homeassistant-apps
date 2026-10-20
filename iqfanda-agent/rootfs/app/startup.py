@@ -200,6 +200,12 @@ def spustit_telemetrii_modulu() -> None:
     telemetrie_modulu_main()
 
 
+def spustit_lokalni_smesovani_00013() -> None:
+    """3s ON/15s OFF local HA loop; no cloud decision or polling."""
+    from f47_local_mixer_00013 import run_forever
+    run_forever()
+
+
 def spustit_zha_bootstrap() -> None:
     """Spusti automatickou inicializaci ZHA."""
 
@@ -412,6 +418,11 @@ def main() -> None:
         nazev="zha-bootstrap",
     )
 
+    local_mixing_thread = vytvorit_vlakno(
+        cil=spustit_lokalni_smesovani_00013,
+        nazev="f47-00013-local-mixing",
+    )
+
     device_config_thread.start()
     heartbeat_thread.start()
     command_worker_thread.start()
@@ -419,6 +430,7 @@ def main() -> None:
     communication_manager_thread.start()
     module_telemetry_thread.start()
     zha_bootstrap_thread.start()
+    local_mixing_thread.start()
 
     kontrolovat_sluzby(
         {
@@ -432,6 +444,7 @@ def main() -> None:
             "communication-manager": communication_manager_thread,
             "module-telemetry": module_telemetry_thread,
             "zha-bootstrap": zha_bootstrap_thread,
+            "f47-00013-local-mixing": local_mixing_thread,
         }
     )
 
