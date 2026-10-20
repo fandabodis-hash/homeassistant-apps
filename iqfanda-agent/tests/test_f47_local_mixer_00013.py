@@ -139,7 +139,8 @@ class LocalMixerTests(unittest.TestCase):
         self.assertEqual(m.cycle(**rig.kwargs())["action"],"hold_owon_report_regressed")
         self.assertEqual(rig.writes.count((m.CLOSE,True)),1)
     def test_floor_stale_is_safe_hold_in_main_loop(self):
-        rig=self.activate(Rig(age=600))
+        rig=self.activate(Rig(age=1))
+        rig.reported_at=datetime.now(timezone.utc)-timedelta(seconds=600)
         seen=[]
         def sleep(seconds):
             seen.append(seconds)
@@ -223,12 +224,14 @@ class LocalMixerTests(unittest.TestCase):
         self.assertEqual(m.cycle(**rig.kwargs())["action"],"hold_in_band")
         self.assertEqual(rig.writes,[])
     def test_stale_owon_blocks_actuation(self):
-        rig=self.activate(Rig(temp=34,age=600))
+        rig=self.activate(Rig(temp=34,age=1))
+        rig.reported_at=datetime.now(timezone.utc)-timedelta(seconds=600)
         with self.assertRaisesRegex(m.LocalSafetyStop,"floor_stale"):
             m.cycle(**rig.kwargs())
         self.assertEqual(rig.writes,[])
     def test_high_temp_stops(self):
-        rig=self.activate(Rig(temp=43))
+        rig=self.activate(Rig(temp=35))
+        rig.temp=43
         with self.assertRaises(m.LocalSafetyStop):
             m.cycle(**rig.kwargs())
         self.assertEqual(rig.writes,[])
@@ -270,6 +273,7 @@ class LocalMixerTests(unittest.TestCase):
         with self.assertRaises(KeyboardInterrupt):
             m.run_forever(read=rig.read,registry=rig.registry,
                 devices=rig.devices,switch=rig.switch,sleep=wait,
+                pulse_wait=rig.sleep,
                 load_identity=lambda:{"device_uuid":m.UUID})
         self.assertEqual(pauses,[15.0,15.0,15.0])
         self.assertEqual(rig.sleeps.count(3.0),3)
