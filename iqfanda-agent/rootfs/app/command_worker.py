@@ -3980,6 +3980,7 @@ def execute_command(
     from f47_local_mixer_00013 import (
         is_armed as local_servo_armed, OPEN as local_servo_open,
         CLOSE as local_servo_close, UUID as local_servo_uuid,
+        CONFIG_PATH as local_servo_config_path,
     )
     servo_commands = {
         "zigbee_servo_pulse_v1",
@@ -3993,7 +3994,7 @@ def execute_command(
         "zigbee_servo_feedback_close_10_v1",
     }
     if (identity.get("device_uuid")==local_servo_uuid
-        and local_servo_armed(identity)
+        and (local_servo_armed(identity) or local_servo_config_path.exists())
         and (command_type in servo_commands or
              (command_type=="zigbee_switch_set" and
               command_payload.get("entity_id") in
