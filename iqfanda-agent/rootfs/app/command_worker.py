@@ -3486,7 +3486,7 @@ def execute_zigbee_servo_supervised_full_open_120_v1(
     command_id: str,
     command_payload: dict[str, Any],
 ) -> None:
-    """Exact 00013 local OPEN 120 s then OFF both, never OPEN."""
+    """Exact 00013 local OPEN 120 s then OFF both, never CLOSE."""
     from servo_standard_bridge import (
         _read_entity, _read_registry, _read_devices, _switch_entity,
     )
@@ -3522,55 +3522,6 @@ def execute_zigbee_servo_supervised_full_open_120_v1(
         identity=identity,command_id=command_id,status="succeeded",
         result={"worker":"command_worker",
                 "executor":"zigbee_servo_supervised_full_open_120_v1",
-                "phase":"supervised_full_open_complete",
-                "details":result,
-                "motor_off_verified":result.get("relays_after")=="off_off"},
-    )
-
-
-# PHASE47_R144_SUPERVISED_EXACT_00013_240S_OPEN
-def execute_zigbee_servo_supervised_full_open_240_v1(
-    *,
-    identity: dict[str, Any],
-    command_id: str,
-    command_payload: dict[str, Any],
-) -> None:
-    """Exact 00013 local OPEN 240 s then OFF both, never OPEN."""
-    from servo_standard_bridge import (
-        _read_entity, _read_registry, _read_devices, _switch_entity,
-    )
-    from servo_supervised_full_open_240 import run
-    try:
-        result=run(
-            identity=identity,
-            payload=command_payload,
-            read_state=_read_entity,
-            get_registry=_read_registry,
-            get_zha_devices=_read_devices,
-            switch=_switch_entity,
-            physical_endstops_confirmed=True,
-        )
-    except Exception as exc:
-        from servo_standard_pulse import PulseStopped
-        code=str(exc)
-        if (not isinstance(exc,PulseStopped) or len(code)>90 or not code or
-            any(c not in "abcdefghijklmnopqrstuvwxyz0123456789_" for c in code)):
-            code="unclassified_local_error"
-        submit_command_result(
-            identity=identity,command_id=command_id,status="failed",
-            result={"worker":"command_worker",
-                    "executor":"zigbee_servo_supervised_full_open_240_v1",
-                    "phase":"motor_open_failed_or_off_unproven",
-                    "reason":code,
-                    "exception_type":type(exc).__name__,
-                    "motor_off_verified":False},
-            error_message="Servo supervised open: "+code,
-        )
-        return
-    submit_command_result(
-        identity=identity,command_id=command_id,status="succeeded",
-        result={"worker":"command_worker",
-                "executor":"zigbee_servo_supervised_full_open_240_v1",
                 "phase":"supervised_full_open_complete",
                 "details":result,
                 "motor_off_verified":result.get("relays_after")=="off_off"},
