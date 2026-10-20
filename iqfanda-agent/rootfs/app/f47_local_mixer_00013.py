@@ -92,6 +92,10 @@ def _valid_config(data:dict, identity:dict) -> bool:
         return False
     copy=dict(data)
     copy["target_c"]=TARGET_C
+    # Accept existing 00013 3-second config; runtime always applies the
+    # guarded 5-second pulse after an upgrade. No config write or re-arming.
+    if copy.get("pulse_seconds")==3.0 and copy.get("pause_seconds")==15.0:
+        copy["pulse_seconds"]=PULSE_SECONDS
     return copy == {
         "serial":SERIAL,"device_uuid":UUID,"enabled":True,
         "target_c":TARGET_C,"pulse_seconds":PULSE_SECONDS,
