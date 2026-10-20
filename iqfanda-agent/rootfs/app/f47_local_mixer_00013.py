@@ -1,4 +1,4 @@
-"""F47 R161: 00013 local-only 3 s pulse / 15 s OFF interval mixing.
+"""F47 R171 candidate: 00013 local-only 5 s pulse / 15 s OFF interval mixing.
 
 NO cloud call in the control loop. The one-time installer enable action is
 distinct from regulation. HA REST/WebSocket calls address the local HA core.
@@ -26,14 +26,19 @@ FLOOR = "sensor.owon_ths317_et_4"
 CONFIG_PATH = Path("/config/f47_00013_local_mixing_3s15s.json")
 STATUS_PATH = Path("/config/f47_00013_local_mixing_status.json")
 LAST_PULSE_PATH = Path("/config/f47_00013_local_mixing_last_pulse.json")
-PULSE_SECONDS = 3.0
+PULSE_SECONDS = 5.0
 PAUSE_SECONDS = 15.0
 TARGET_C = 30.0
 DEADBAND_C = 0.3
 MAX_AGE_SECONDS = 300.0
 # Do not require a new OWON report after every 3 s movement. Limit travel
 # while using one valid sample to 4 x 3 s = 12 s (10% of 120 s stroke).
-MAX_PULSES_PER_READING = 4
+# R170: allow timed movement without a fresh temperature report after
+# four strokes, but NEVER permit unbounded travel from stale feedback.
+# A single sample can authorize at most 60 s (half of the 120 s stroke).
+# This guard is deliberately conservative until physical position feedback
+# and an independently verified actuator calibration are available.
+MAX_PULSES_PER_READING = 12
 MAX_SAMPLE_AGE_FOR_PULSE_SECONDS = 180.0
 MAX_FLOOR_C = 43.0
 MODEL_LOCK = threading.Lock()
@@ -87,6 +92,10 @@ def _valid_config(data:dict, identity:dict) -> bool:
         return False
     copy=dict(data)
     copy["target_c"]=TARGET_C
+    # Accept existing 00013 3-second config; runtime always applies the
+    # guarded 5-second pulse after an upgrade. No config write or re-arming.
+    if copy.get("pulse_seconds")==3.0 and copy.get("pause_seconds")==15.0:
+        copy["pulse_seconds"]=PULSE_SECONDS
     return copy == {
         "serial":SERIAL,"device_uuid":UUID,"enabled":True,
         "target_c":TARGET_C,"pulse_seconds":PULSE_SECONDS,
@@ -191,7 +200,7 @@ def _pulse(read,switch,entity,wait=time.sleep,monotonic=time.monotonic) -> None:
     watchdog_used=threading.Event()
     off_errors=[]
     def watchdog():
-        if not stopped.wait(4.5):
+        if not stopped.wait(PULSE_SECONDS + 1.5):
             watchdog_used.set()
             _off_both(switch,off_errors)
     guard=threading.Thread(target=watchdog,name="00013-local-servo-off-guard",daemon=True)
@@ -374,7 +383,7 @@ def run_forever(*,read=None,registry=None,devices=None,switch=None,
                 _off_both(switch,errors)
                 _status("locked",reason="unclassified_"+type(exc).__name__,
                         off_commands_ok=not errors)
-            # 15 s OFF minimum after every 3 s actuation; on HOLD same pacing.
+            # 15 s OFF minimum after every 5 s actuation; on HOLD same pacing.
             sleep(PAUSE_SECONDS)
         except Exception:
             logging.exception("F47 00013 LOCAL MIXING supervisor failure; no blind motion")

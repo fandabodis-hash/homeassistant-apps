@@ -52,7 +52,7 @@ class LocalMixerTests(unittest.TestCase):
         rig=rig or Rig()
         m.enable(identity={"device_uuid":m.UUID},
             payload={"serial":m.SERIAL,"mode":"local_ha_only_v1",
-                "target_c":30.0,"pulse_seconds":3.0,"pause_seconds":15.0},
+                "target_c":30.0,"pulse_seconds":5.0,"pause_seconds":15.0},
             read=rig.read,registry=rig.registry,devices=rig.devices)
         return rig
     def test_enable_is_read_only_and_exact(self):
@@ -61,51 +61,72 @@ class LocalMixerTests(unittest.TestCase):
         self.assertTrue(m.is_armed({"device_uuid":m.UUID}))
         self.assertFalse(m.is_armed({"device_uuid":"00012"}))
         cfg=json.loads(m.CONFIG_PATH.read_text())
-        self.assertEqual(cfg["pulse_seconds"],3)
+        self.assertEqual(cfg["pulse_seconds"],5)
         self.assertEqual(cfg["pause_seconds"],15)
+    def test_existing_3_second_config_works_after_upgrade(self):
+        rig=self.activate(Rig(temp=30.4))
+        cfg=m._load(m.CONFIG_PATH)
+        cfg["pulse_seconds"]=3.0
+        cfg["target_c"]=38.0
+        m._atomic(m.CONFIG_PATH,cfg)
+        self.assertTrue(m.is_armed({"device_uuid":m.UUID}))
+        self.assertFalse(m.is_armed({"device_uuid":"00012"}))
+        result=m.cycle(**rig.kwargs())
+        self.assertEqual(result["action"],"open")
+        self.assertEqual(result["seconds"],5.0)
+        self.assertIn(5.0,rig.sleeps)
+        self.assertEqual(m._load(m.CONFIG_PATH)["pulse_seconds"],3.0)
+        self.assertEqual(m._load(m.CONFIG_PATH)["target_c"],38.0)
+    def test_reject_other_legacy_pulse_config(self):
+        rig=self.activate()
+        cfg=m._load(m.CONFIG_PATH)
+        cfg["pulse_seconds"]=4.0
+        m._atomic(m.CONFIG_PATH,cfg)
+        self.assertFalse(m.is_armed({"device_uuid":m.UUID}))
+        self.assertEqual(rig.writes,[])
     def test_wrong_model_never_arms(self):
         rig=Rig()
         with self.assertRaises(m.LocalSafetyStop):
             m.enable(identity={"device_uuid":"00012"},
                 payload={"serial":m.SERIAL,"mode":"local_ha_only_v1",
-                    "target_c":30.0,"pulse_seconds":3.0,"pause_seconds":15.0},
+                    "target_c":30.0,"pulse_seconds":5.0,"pause_seconds":15.0},
                 read=rig.read,registry=rig.registry,devices=rig.devices)
         self.assertEqual(rig.writes,[])
-    def test_close_three_seconds_and_verify_off(self):
+    def test_close_five_seconds_and_verify_off(self):
         rig=self.activate()
         result=m.cycle(**rig.kwargs())
         self.assertEqual(result["action"],"close")
-        self.assertEqual(result["seconds"],3)
-        self.assertIn(3.0,rig.sleeps)
+        self.assertEqual(result["seconds"],5)
+        self.assertIn(5.0,rig.sleeps)
         self.assertIn((m.CLOSE,True),rig.writes)
         self.assertIn((m.OPEN,False),rig.writes)
         self.assertIn((m.CLOSE,False),rig.writes)
         self.assertNotIn((m.OPEN,True),rig.writes)
         self.assertEqual(rig.states[m.CLOSE],"off")
         self.assertEqual(rig.states[m.OPEN],"off")
-    def test_four_pulses_each_three_seconds_before_sample_budget(self):
+    def test_twelve_pulses_each_five_seconds_before_sample_budget(self):
         rig=self.activate()
-        for count in range(1,5):
+        for count in range(1,13):
             event=m.cycle(**rig.kwargs())
             self.assertEqual(event["action"],"close")
             self.assertEqual(event["completed_pulses_on_sample"],count)
             self.assertEqual(rig.states[m.OPEN],"off")
             self.assertEqual(rig.states[m.CLOSE],"off")
-        self.assertEqual(rig.sleeps.count(3.0),4)
-        self.assertEqual(rig.writes.count((m.CLOSE,True)),4)
+        self.assertEqual(rig.sleeps.count(5.0),12)
+        self.assertEqual(rig.writes.count((m.CLOSE,True)),12)
         hold=m.cycle(**rig.kwargs())
         self.assertEqual(hold["action"],"hold_sample_motion_budget")
-        self.assertEqual(hold["completed_pulses_on_sample"],4)
-        self.assertEqual(rig.writes.count((m.CLOSE,True)),4)
+        self.assertEqual(hold["completed_pulses_on_sample"],12)
+        self.assertEqual(rig.writes.count((m.CLOSE,True)),12)
     def test_new_owon_report_renews_movement_budget(self):
         rig=self.activate()
-        for _ in range(4):m.cycle(**rig.kwargs())
+        for _ in range(12):m.cycle(**rig.kwargs())
         self.assertEqual(m.cycle(**rig.kwargs())["action"],"hold_sample_motion_budget")
         rig.reported_at=datetime.now(timezone.utc)
         result=m.cycle(**rig.kwargs())
         self.assertEqual(result["action"],"close")
         self.assertEqual(result["completed_pulses_on_sample"],1)
-        self.assertEqual(rig.writes.count((m.CLOSE,True)),5)
+        self.assertEqual(rig.writes.count((m.CLOSE,True)),13)
     def test_sensor_age_over_180_holds_and_does_not_actuate(self):
         rig=self.activate(Rig(temp=35.0,age=200))
         report=m.cycle(**rig.kwargs())
@@ -263,7 +284,7 @@ class LocalMixerTests(unittest.TestCase):
         with self.assertRaisesRegex(m.LocalSafetyStop,"off_command_failed"):
             m.cycle(**args)
         self.assertNotIn((m.OPEN,True),rig.writes)
-    def test_runtime_repeats_three_second_pulses_with_fifteen_second_pause(self):
+    def test_runtime_repeats_five_second_pulses_with_fifteen_second_pause(self):
         rig=self.activate(Rig(temp=36.8,age=2))
         pauses=[]
         def wait(seconds):
@@ -276,7 +297,7 @@ class LocalMixerTests(unittest.TestCase):
                 pulse_wait=rig.sleep,
                 load_identity=lambda:{"device_uuid":m.UUID})
         self.assertEqual(pauses,[15.0,15.0,15.0])
-        self.assertEqual(rig.sleeps.count(3.0),3)
+        self.assertEqual(rig.sleeps.count(5.0),3)
         self.assertEqual(rig.writes.count((m.CLOSE,True)),3)
         self.assertNotIn((m.OPEN,True),rig.writes)
         self.assertEqual(rig.states[m.OPEN],"off")
