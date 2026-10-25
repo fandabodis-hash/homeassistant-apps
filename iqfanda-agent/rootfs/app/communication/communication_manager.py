@@ -103,6 +103,11 @@ def vytvor_komunikacni_stav() -> dict[str, Any]:
     )
 
     stav["generated_at"] = aktualni_cas_iso()
+    # R8: Capability je aktivni jen v Agent buildu s read-only ROTEK workerem.
+    # Zapisuje se v komunikacnim stavu, ktery je soucasti heartbeat telemetrie.
+    stav["agent_capabilities"] = {
+        "generator_modbus_probe_v1": True,
+    }
     stav["source_status"] = "available"
     stav["source_status_name"] = (
         "USB inventář je dostupný"
