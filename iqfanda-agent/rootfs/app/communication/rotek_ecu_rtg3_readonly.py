@@ -20,7 +20,7 @@ from typing import Any, Callable
 from communication.modbus_bus_lock import ziskej_zamek_modbus_sbernice
 
 
-PROFILE_ID = 'rotek_ecu_rtg3_readonly_v1'
+PROFILE_ID = 'rotek_ecu_rtg3_modbus_rtu_readonly_v1'
 COMMUNICATION_STATE = Path(os.getenv('IQF_COMMUNICATION_STATE_PATH','/config/communication.json'))
 ALLOWED_REGISTER_ADDRESSES = (23, 24, 25, 26)
 SERIAL_PATH_PATTERN = re.compile(r'^/dev/serial/by-id/[A-Za-z0-9_.+-]{8,180}$')
