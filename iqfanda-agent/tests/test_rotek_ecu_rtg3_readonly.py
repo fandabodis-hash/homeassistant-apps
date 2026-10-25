@@ -37,8 +37,8 @@ COMM={
 }
 HUB={
     'communicator_id':'hub-mirror','serial_number':None,'preferred_path':PATH,
-    'manufacturer':'Generic','status':'ready','connected':True,
-    'stable_paths':[PATH],'capabilities':['serial'],'type':'usb_device',
+    'manufacturer':'Generic','product':'USB2.1 Hub','vid':'0BDA','pid':'5411','status':'ready','connected':True,
+    'stable_paths':[PATH],'capabilities':['serial','rs485_or_rs232'],'type':'usb_serial',
 }
 class Response:
     def __init__(self,value):self.registers=[value]
