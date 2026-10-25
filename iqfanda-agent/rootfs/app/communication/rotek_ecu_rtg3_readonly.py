@@ -81,7 +81,17 @@ def validate_probe_input(payload: dict[str, Any], inventory: list[dict[str, Any]
     physical=[x for x in inventory if isinstance(x,dict) and _str(x.get('preferred_path'))==path]
     # Neblokovat historicky chybne prirazenou cestu Generic USB Hub,
     # ale nesmi existovat vice skutecnych serialnich portu se stejnou cestou.
-    serial_ports=[x for x in physical if _str(x.get('type')) in {'usb_serial','usb_rs485'}]
+    # R8R1: Generic USB Hub byl v inventari 00011 chybne oznacen jako usb_serial
+    # a sdili /dev/serial/by-id/ cestu s FTDI. Neni fyzicky seriovy port.
+    def je_skutecny_port(x: dict[str, Any]) -> bool:
+        typ=_str(x.get('type'))
+        vid=_str(x.get('vid')).upper()
+        pid=_str(x.get('pid')).upper()
+        produkt=_str(x.get('product')).lower()
+        return (typ in {'usb_serial','usb_rs485'}
+                and bool(_str(x.get('serial_number')))
+                and not ('hub' in produkt or (vid=='0BDA' and pid in {'5411','0411'})))
+    serial_ports=[x for x in physical if je_skutecny_port(x)]
     if len(serial_ports)!=1 or _str(serial_ports[0].get('communicator_id'))!=identity:
         raise RotekProbeError('Fyzicky seriovy port neni jednoznacny.')
     return {'communicator_id':identity,'serial_number':serial,'preferred_path':path}
