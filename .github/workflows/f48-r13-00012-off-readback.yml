@@ -7,7 +7,7 @@ on:
       - '.github/workflows/f48-r13-00012-off-readback.yml'
   push:
     branches:
-      - 'release/f48-r13-00012-off-readback-0-1-165'
+      - 'release/f48-r14-00012-all-tuv-off-0-1-166'
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -19,16 +19,18 @@ jobs:
       - name: Version contract
         shell: bash
         run: |
-          test "$(cat iqfanda-agent/rootfs/app/VERSION)" = "0.1.165"
-          grep -Fx 'version: "0.1.165"' iqfanda-agent/config.yaml
-          grep -Fx '  software_version: "0.1.165"' iqfanda-agent/config.yaml
+          test "$(cat iqfanda-agent/rootfs/app/VERSION)" = "0.1.166"
+          grep -Fx 'version: "0.1.166"' iqfanda-agent/config.yaml
+          grep -Fx '  software_version: "0.1.166"' iqfanda-agent/config.yaml
       - name: Python syntax
         run: |
           python -m py_compile iqfanda-agent/rootfs/app/command_worker.py
           python -m py_compile iqfanda-agent/rootfs/app/zigbee_manager.py
           python -m py_compile iqfanda-agent/rootfs/app/f48_r10_00012_off_readback.py
       - name: F48 00012 guard tests - 24 independent checks
-        run: python iqfanda-agent/tests/test_f48_r10_00012_off_readback.py
+        run: |
+          python iqfanda-agent/tests/test_f48_r10_00012_off_readback.py
+          python iqfanda-agent/tests/test_f48_r14_00012_tuv_off_all.py
       - name: Relay driver regression tests
         run: |
           PYTHONPATH=iqfanda-agent/rootfs/app python -m unittest discover -s iqfanda-agent/tests -p 'test_dual_channel_capabilities.py' -v
