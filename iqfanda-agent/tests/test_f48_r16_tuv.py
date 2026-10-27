@@ -27,7 +27,7 @@ class SimulaceHA:
         self.modifikator = None
         self.config_stav = 'RUNNING'
         self.radky = {e: {'entity_id': e, 'device_reg_id': 'reg-' + str(i),
-                         'identifiers': [['zha', ieee]], 'state': 'off',
+                         'identifiers': [['zha', ieee]], 'state': 'off', 'restored': False,
                          'last_changed': (self.cas0 - timedelta(minutes=15)).isoformat()}
                       for i, (e, (ieee, _)) in enumerate(m.VYSTUPY.items())}
         self.radky[entita]['state'] = 'off' if cil == 'on' else 'on'
@@ -284,7 +284,8 @@ class TestR16(unittest.TestCase):
             def __call__(self,e):return ha.radky[e]['state']
         env=jinja2.Environment()
         out=env.from_string(m.SABLONA).render(states=States(), device_id=lambda e:ha.radky[e]['device_reg_id'],
-                 device_attr=lambda d,a:next(r for r in ha.radky.values() if r['device_reg_id']==d)[a], now=ha.ted)
+                 device_attr=lambda d,a:next(r for r in ha.radky.values() if r['device_reg_id']==d)[a],
+                 state_attr=lambda e,a:ha.radky[e].get(a), now=ha.ted)
         data=json.loads(out)
         self.assertEqual(len(data['radky']),3)
         self.assertEqual(data['radky'][0]['identifiers'],[['zha',m.VYSTUPY[m.BIVALENCE][0]]])
@@ -298,6 +299,43 @@ class TestR16(unittest.TestCase):
         calls=[]
         m.vytvor_vykonavac(lambda **k:calls.append(k),lambda **k:calls.append(k))
         self.assertEqual(calls,[])
+
+    def test_31_obnoveny_stav_nepouzivat(self):
+        ha=SimulaceHA();ha.radky[m.TC1]['restored']=True
+        with self.assertRaisesRegex(m.ChybaTuv,'OBNOVENY_STAV'):m.proved(ha.payload(),ha,{})
+        self.assertEqual(ha.posty,0)
+
+    def test_32_obnoveny_stav_po_POST_nepotvrdit(self):
+        ha=SimulaceHA();ha.post_timeout=True
+        def zmena(data,h):
+            if h.akcni:data['radky'][0]['restored']=True
+        ha.modifikator=zmena
+        with self.assertRaisesRegex(m.ChybaTuv,'OBNOVENY_STAV'):m.proved(ha.payload(),ha,{})
+        self.assertEqual(ha.posty,1)
+
+    def test_33_setup_po_POST_nevydavat_za_potvrzeni(self):
+        ha=SimulaceHA();puvodni=ha.pozadavek
+        def api(cesta,metoda,telo,limit):
+            r=puvodni(cesta,metoda,telo,limit)
+            if cesta.startswith('/services/'):ha.setup_cteni=1
+            return r
+        ha.pozadavek=api
+        with self.assertRaisesRegex(m.ChybaTuv,'SETUP_PO_NEJISTEM'):m.proved(ha.payload(),ha,{})
+        self.assertEqual(ha.posty,1)
+
+    def test_34_startup_registrace_pred_vlakny(self):
+        import sys
+        import types
+        calls=[]
+        old=lambda **kw:calls.append(kw)
+        worker=types.SimpleNamespace(execute_zigbee_switch_set=old,submit_command_result=lambda **kw:None)
+        startup=types.SimpleNamespace(main=lambda:calls.append('startup'))
+        with patch.dict(sys.modules,{'command_worker':worker,'startup':startup}):
+            m.spustit()
+        self.assertEqual(calls,['startup'])
+        self.assertIsNot(worker.execute_zigbee_switch_set,old)
+        worker.execute_zigbee_switch_set(identity={'device_uuid':'00013'},command_id='x',command_payload={})
+        self.assertEqual(calls[1]['command_id'],'x')
 
 if __name__=='__main__':
     unittest.main(verbosity=2)
