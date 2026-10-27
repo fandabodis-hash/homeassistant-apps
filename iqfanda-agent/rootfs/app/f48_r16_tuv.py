@@ -36,7 +36,7 @@ SABLONA = """{% set ns = namespace(radky=[]) %}
 {% set ns.radky = ns.radky + [{
 'entity_id': e, 'device_reg_id': d,
 'identifiers': (device_attr(d, 'identifiers') or []) | list,
-'state': states(e),
+'state': states(e), 'restored': state_attr(e, 'restored'),
 'last_changed': s.last_changed.isoformat() if s is not none and s is defined else none
 }] %}
 {% endfor %}
@@ -143,7 +143,11 @@ def proved(prikaz: dict, ha: Any, stopa: dict) -> dict:
             try:
                 stopa['cteni'] += 1
                 return ha.pozadavek(cesta, 'GET' if telo is None else 'POST', telo, limit())
-            except (HaStartuje, TransportNejisty):
+            except HaStartuje as exc:
+                if str(stopa.get('faze', '')).startswith('overeni_'):
+                    raise ChybaTuv('F48_R16_HA_SETUP_PO_NEJISTEM_POVELU') from exc
+                pauza()
+            except TransportNejisty:
                 pauza()
 
     def snapshot() -> dict:
@@ -159,6 +163,7 @@ def proved(prikaz: dict, ha: Any, stopa: dict) -> dict:
             kontrolovat = e == entita or (cil == 'on' and (entita == BIVALENCE or e == BIVALENCE))
             if not kontrolovat:
                 continue
+            over(r.get('restored') is not True, 'F48_R16_OBNOVENY_STAV_NENI_DUKAZ')
             identifikatory = r.get('identifiers')
             over(isinstance(identifikatory, list), 'F48_R16_REGISTR_IEEE_CHYBI')
             shody = [i for i in identifikatory if isinstance(i, (list, tuple)) and len(i) == 2
