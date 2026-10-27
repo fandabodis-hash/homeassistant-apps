@@ -3140,9 +3140,11 @@ def execute_zigbee_switch_set(
 
         service_called = False
         service_name = None
+        f48_r10_povel_pokus = False
 
         if before_state != target_state:
 
+            f48_r10_povel_pokus = True
             service_result = (
                 call_binary_power_output_service(
                     entity_id=entity_id,
@@ -3191,6 +3193,51 @@ def execute_zigbee_switch_set(
             )
 
     except Exception as exc:
+        # F48 R10: presne 00012 bivalence OFF; po timeoutu POUZE cteni HA.
+        # Pokud nove OFF nelze overit, zustava puvodni fail-closed vetev.
+        if locals().get('f48_r10_povel_pokus') is True:
+            try:
+                from f48_r10_00012_off_readback import overit_off_po_timeoutu
+                f48_r10_dokaz = overit_off_po_timeoutu(
+                    identita=identity,
+                    prikaz=command_payload,
+                    pred_stavem=locals().get('before') or {},
+                    chyba=exc,
+                    registr_id=expected_device_id,
+                    lokalni_id=locals().get('actual_device_id'),
+                    pokus_o_povel=True,
+                    nacti_stav=get_entity_state,
+                )
+                if f48_r10_dokaz is not None:
+                    submit_command_result(
+                        identity=identity,
+                        command_id=command_id,
+                        status='succeeded',
+                        result={
+                            'worker': 'command_worker',
+                            'executor': 'zigbee_switch_set',
+                            'phase': 'f48_r10_off_verified_after_timeout',
+                            'capability': 'binary_power_output',
+                            'entity_id': entity_id,
+                            'ieee': ieee,
+                            'device_reg_id': expected_device_id,
+                            'source': source,
+                            'requested_state': 'off',
+                            'previous_state': 'on',
+                            'readback_state': 'off',
+                            'readback_verified': True,
+                            'service_called': True,
+                            'service': 'switch.turn_off',
+                            'verification': f48_r10_dokaz['verification'],
+                            'manual_override': False,
+                            'fanda_has_priority': True,
+                        },
+                        error_message=None,
+                    )
+                    logging.info('F48 R10 00012: bivalence OFF potvrzeno po timeoutu, bez opakovani povelu')
+                    return
+            except Exception:
+                logging.warning('F48 R10 00012: dodatecny readback neni spolehlivy, zachovana chyba OFF', exc_info=True)
 
         submit_command_result(
             identity=identity,
