@@ -1,7 +1,10 @@
 from datetime import datetime, timezone, timedelta
 import importlib.util
 from pathlib import Path
-spec=importlib.util.spec_from_file_location('f48r10', '/mnt/data/f48_r10_00012_off_readback.py')
+module_file = Path(__file__).resolve().parents[1] / 'rootfs' / 'app' / 'f48_r10_00012_off_readback.py'
+if not module_file.is_file():
+    module_file = Path(__file__).with_name('f48_r10_00012_off_readback.py')
+spec=importlib.util.spec_from_file_location('f48r10', str(module_file))
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 now=datetime(2026,10,27,10,0,0,tzinfo=timezone.utc)
 before={'entity_id':m.CIL_ENTITY,'state':'on','last_changed':(now-timedelta(minutes=23)).isoformat()}
