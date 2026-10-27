@@ -3216,7 +3216,7 @@ def execute_zigbee_switch_set(
                         result={
                             'worker': 'command_worker',
                             'executor': 'zigbee_switch_set',
-                            'phase': 'f48_r10_off_verified_after_timeout',
+                            'phase': 'f48_r14_tuv_off_verified_after_timeout',
                             'capability': 'binary_power_output',
                             'entity_id': entity_id,
                             'ieee': ieee,
@@ -3227,7 +3227,7 @@ def execute_zigbee_switch_set(
                             'readback_state': 'off',
                             'readback_verified': True,
                             'service_called': True,
-                            'service': 'switch.turn_off',
+                            'service': f48_r10_dokaz['service'],
                             'verification': f48_r10_dokaz['verification'],
                             'manual_override': False,
                             'fanda_has_priority': True,

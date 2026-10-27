@@ -1,8 +1,7 @@
-"""F48 R10 kandidat: dodatecne cteni HA stavu po timeoutu OFF, jen klient 00012.
+"""F48 R14: HA readback after timeout of 3 exact TUV outputs, device 00012 only.
 
-Tato knihovna neodesila zadny povel rele ani sama neupravuje DB.
-Musi byt vlozena do lokalniho Agenta a nasazena pouze pro 00012.
-NENI urcena k primemu spusteni na VPS a NENI produkcne overena.
+Never sends another relay command or rearms a fault. All ambiguous observations
+retain the original failed result. No other client identity is permitted.
 """
 from __future__ import annotations
 
@@ -14,6 +13,16 @@ CIL_UUID = '28fb44c3-4f8d-4ea4-90ab-f7e6a3b509fc'
 CIL_ENTITY = 'switch.sonoff_zbminil2_3'
 CIL_IEEE = 'b0:e8:e8:ff:fe:66:2f:fd'
 CIL_ZDROJ = 'phase32_dhw_thermostat'
+# Single device: exact HA entities, Zigbee IEEE and allowed TUV modes.
+CIL_VYSTUPY = {
+    CIL_ENTITY: (CIL_IEEE, frozenset({'all_sources', 'bivalence'}), 'switch'),
+    'light.tz3000_kqvb5akv_ts0001': (
+        'a4:c1:38:90:9a:42:09:7f',
+        frozenset({'all_sources', 'heat_pump'}), 'light'),
+    'light.tz3000_kqvb5akv_ts0001_2': (
+        'a4:c1:38:b5:45:cf:8a:c8',
+        frozenset({'all_sources', 'heat_pump'}), 'light'),
+}
 
 
 def _utc(value: object) -> datetime | None:
@@ -51,13 +60,16 @@ def overit_off_po_timeoutu(
         return None
     if str(prikaz.get('source') or '').strip() != CIL_ZDROJ:
         return None
-    if str(prikaz.get('entity_id') or '').strip() != CIL_ENTITY:
+    entita = str(prikaz.get('entity_id') or '').strip()
+    cil = CIL_VYSTUPY.get(entita)
+    if cil is None:
         return None
-    if str(prikaz.get('ieee') or '').strip().lower() != CIL_IEEE:
+    ieee, platne_zdroje, domena = cil
+    if str(prikaz.get('ieee') or '').strip().lower() != ieee:
         return None
     if str(prikaz.get('target_state') or '').strip().lower() != 'off':
         return None
-    if str(prikaz.get('dhw_source') or '').strip() not in ('all_sources', 'bivalence'):
+    if str(prikaz.get('dhw_source') or '').strip() not in platne_zdroje:
         return None
     if not registr_id or str(registr_id) != str(lokalni_id):
         return None
@@ -79,12 +91,12 @@ def overit_off_po_timeoutu(
         if n:
             spi(0.6)
         try:
-            zpet = nacti_stav(CIL_ENTITY)
+            zpet = nacti_stav(entita)
         except Exception:
             continue
         if not isinstance(zpet, dict):
             continue
-        if str(zpet.get('entity_id') or '') != CIL_ENTITY:
+        if str(zpet.get('entity_id') or '') != entita:
             continue
         if str(zpet.get('state') or '').strip().lower() != 'off':
             continue
@@ -103,8 +115,9 @@ def overit_off_po_timeoutu(
             'requested_state': 'off',
             'previous_state': 'on',
             'service_called': True,
-            'service': 'switch.turn_off',
-            'verification': 'f48_r10_fresh_ha_readback_after_timeout',
+            'service': f'{domena}.turn_off',
+            'verification': 'f48_r14_00012_tuv_fresh_off_readback',
+            'readback_entity_id': entita,
             'readback_changed_at': cas_zpet.isoformat(),
         }
     return None
