@@ -1,0 +1,40 @@
+name: F48 R13 isolated 00012 bivalence OFF confirmation
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'iqfanda-agent/**'
+      - '.github/workflows/f48-r13-00012-off-readback.yml'
+  push:
+    branches:
+      - 'release/f48-r13-00012-off-readback-0-1-165'
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Version contract
+        shell: bash
+        run: |
+          test "$(cat iqfanda-agent/rootfs/app/VERSION)" = "0.1.165"
+          grep -Fx 'version: "0.1.165"' iqfanda-agent/config.yaml
+          grep -Fx '  software_version: "0.1.165"' iqfanda-agent/config.yaml
+      - name: Python syntax
+        run: |
+          python -m py_compile iqfanda-agent/rootfs/app/command_worker.py
+          python -m py_compile iqfanda-agent/rootfs/app/zigbee_manager.py
+          python -m py_compile iqfanda-agent/rootfs/app/f48_r10_00012_off_readback.py
+      - name: F48 00012 guard tests - 24 independent checks
+        run: python iqfanda-agent/tests/test_f48_r10_00012_off_readback.py
+      - name: Relay driver regression tests
+        run: |
+          PYTHONPATH=iqfanda-agent/rootfs/app python -m unittest discover -s iqfanda-agent/tests -p 'test_dual_channel_capabilities.py' -v
+          PYTHONPATH=iqfanda-agent/rootfs/app python -m unittest discover -s iqfanda-agent/tests -p 'test_servo_*.py' -v
+      - name: Other installations remain fail closed
+        run: |
+          grep -Fq "CIL_UUID = '28fb44c3-4f8d-4ea4-90ab-f7e6a3b509fc'" iqfanda-agent/rootfs/app/f48_r10_00012_off_readback.py
+          grep -Fq "CIL_ENTITY = 'switch.sonoff_zbminil2_3'" iqfanda-agent/rootfs/app/f48_r10_00012_off_readback.py
+          grep -Fq "CIL_IEEE = 'b0:e8:e8:ff:fe:66:2f:fd'" iqfanda-agent/rootfs/app/f48_r10_00012_off_readback.py
