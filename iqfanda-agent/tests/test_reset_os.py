@@ -116,7 +116,7 @@ class ResetOsSafetyTests(TestCase):
                 reset_os.execute_reset_os(
                     identity={"device_uuid": UUID},
                     command_id=COMMAND_ID,
-                    command_payload=payload(),
+                    command_payload=payload(expires_at=datetime.now(timezone.utc) + timedelta(seconds=90)),
                     submit_result=lambda **kwargs: results.append(kwargs),
                 )
                 self.assertTrue((Path(tmp) / "state.json").exists())
@@ -146,7 +146,7 @@ class ResetOsSafetyTests(TestCase):
                     reset_os.execute_reset_os(
                         identity={"device_uuid": UUID},
                         command_id=COMMAND_ID,
-                        command_payload=payload(),
+                        command_payload=payload(expires_at=datetime.now(timezone.utc) + timedelta(seconds=90)),
                         submit_result=lambda **kwargs: results.append(kwargs),
                     )
             self.assertEqual(
