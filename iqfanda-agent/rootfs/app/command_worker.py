@@ -4085,6 +4085,18 @@ def execute_command(
         )
         return
 
+    # F51: only verified 00011 may request a single HA Core restart.
+    # No host reboot, no command shell and no effects on 00012/00013.
+    if command_type == "home_assistant_core_restart_00011":
+        from ha_core_restart_00011 import execute_ha_core_restart_00011
+        execute_ha_core_restart_00011(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+            submit_result=submit_command_result,
+        )
+        return
+
     if command_type == "zigbee_topology_refresh":
         execute_zigbee_topology_refresh(
             identity=identity,
