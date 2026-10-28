@@ -1,0 +1,41 @@
+name: F52 Reset OS - isolated agent safety
+on:
+  push:
+    branches:
+      - feature/f52-reset-os-universal-agent
+    paths:
+      - 'iqfanda-agent/**'
+      - '.github/workflows/f52-reset-os-tests.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'iqfanda-agent/**'
+      - '.github/workflows/f52-reset-os-tests.yml'
+
+jobs:
+  reset-os-safety:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile guarded code and dispatcher
+        run: |
+          python -m py_compile iqfanda-agent/rootfs/app/reset_os.py
+          python -m py_compile iqfanda-agent/rootfs/app/command_worker.py
+          python -m py_compile iqfanda-agent/tests/test_reset_os.py
+      - name: Run Reset OS isolation and anti-repeat tests
+        env:
+          PYTHONPATH: iqfanda-agent/rootfs/app
+        run: |
+          python -m unittest discover -v -s iqfanda-agent/tests -p test_reset_os.py
+      - name: Protect 00012 and 00013 unchanged relay drivers
+        run: |
+          test "$(cat iqfanda-agent/rootfs/app/VERSION)" = "0.1.167"
+          grep -Fx 'version: "0.1.167"' iqfanda-agent/config.yaml
+          grep -Fx '  software_version: "0.1.167"' iqfanda-agent/config.yaml
+          grep -Fq "CIL_UUID = '28fb44c3-4f8d-4ea4-90ab-f7e6a3b509fc'" iqfanda-agent/rootfs/app/f48_r10_00012_off_readback.py
+          grep -Fq "CIL_IEEE = 'b0:e8:e8:ff:fe:66:2f:fd'" iqfanda-agent/rootfs/app/f48_r10_00012_off_readback.py
