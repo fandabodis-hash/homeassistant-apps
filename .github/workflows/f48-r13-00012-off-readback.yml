@@ -19,9 +19,10 @@ jobs:
       - name: Version contract
         shell: bash
         run: |
-          test "$(cat iqfanda-agent/rootfs/app/VERSION)" = "0.1.166"
-          grep -Fx 'version: "0.1.166"' iqfanda-agent/config.yaml
-          grep -Fx '  software_version: "0.1.166"' iqfanda-agent/config.yaml
+          VERSION="$(cat iqfanda-agent/rootfs/app/VERSION)"
+          case "$VERSION" in 0.1.166|0.1.167) ;; *) exit 1 ;; esac
+          grep -Fx "version: \"$VERSION\"" iqfanda-agent/config.yaml
+          grep -Fx "  software_version: \"$VERSION\"" iqfanda-agent/config.yaml
       - name: Python syntax
         run: |
           python -m py_compile iqfanda-agent/rootfs/app/command_worker.py

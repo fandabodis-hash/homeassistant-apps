@@ -4085,6 +4085,17 @@ def execute_command(
         )
         return
 
+    # F52 Reset OS: generic, single-device, Supervisor Core restart only.
+    if command_type == "reset_os":
+        from reset_os import execute_reset_os
+        execute_reset_os(
+            identity=identity,
+            command_id=command_id,
+            command_payload=command_payload,
+            submit_result=submit_command_result,
+        )
+        return
+
     if command_type == "zigbee_topology_refresh":
         execute_zigbee_topology_refresh(
             identity=identity,
