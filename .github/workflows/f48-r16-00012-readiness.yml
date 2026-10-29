@@ -1,0 +1,48 @@
+name: F48 R16 00012 ON OFF and HA readiness candidate
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'iqfanda-agent/**'
+      - '.github/workflows/f48-r16-00012-readiness.yml'
+  push:
+    branches: ['fix/f48-r16-00012-on-off-ha-readiness']
+permissions:
+  contents: read
+jobs:
+  offline-candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Template test dependency
+        run: python -m pip install Jinja2==3.1.6
+      - name: Compile candidate and unchanged worker
+        run: python -m py_compile iqfanda-agent/rootfs/app/f48_r16_tuv.py iqfanda-agent/rootfs/app/main.py iqfanda-agent/rootfs/app/command_worker.py
+      - name: 30 offline tests without network or hardware
+        env:
+          PYTHONPATH: iqfanda-agent/rootfs/app
+        run: python -m unittest discover -s iqfanda-agent/tests -p 'test_f48_r16_tuv.py' -v
+      - name: Verify startup registration without starting any real service
+        env:
+          PYTHONPATH: iqfanda-agent/rootfs/app
+        run: |
+          python - <<'PY'
+          import sys
+          import types
+          import f48_r16_tuv as m
+          calls = []
+          old = lambda **kw: calls.append(kw)
+          worker = types.SimpleNamespace(execute_zigbee_switch_set=old, submit_command_result=lambda **kw: None)
+          startup = types.SimpleNamespace(main=lambda: calls.append('startup'))
+          sys.modules['command_worker'] = worker
+          sys.modules['startup'] = startup
+          m.spustit()
+          assert calls == ['startup']
+          assert worker.execute_zigbee_switch_set is not old
+          worker.execute_zigbee_switch_set(identity={'device_uuid':'other'}, command_id='x', command_payload={})
+          assert len(calls) == 2 and calls[1]['command_id'] == 'x'
+          print('ENTRYPOINT_DELEGATION=PASS')
+          PY
