@@ -33,6 +33,7 @@ jobs:
         run: |
           python -m unittest discover -v -s iqfanda-agent/tests -p 'test_*battery*.py'
           python -m unittest discover -v -s iqfanda-agent/tests -p 'test_foxess_remote_control_probe.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_foxess_zero_remote_release.py'
       - name: Compile battery integration without accessing hardware
         run: |
-          python -m py_compile iqfanda-agent/rootfs/app/manual_battery_runtime.py iqfanda-agent/rootfs/app/battery_control_canary.py iqfanda-agent/rootfs/app/command_worker.py iqfanda-agent/rootfs/app/startup.py iqfanda-agent/rootfs/app/heartbeat.py iqfanda-agent/rootfs/app/communication/inverter_control_adapter.py iqfanda-agent/rootfs/app/communication/battery_feature_guard.py iqfanda-agent/rootfs/app/communication/foxess_remote_control_probe.py
+          python -m py_compile iqfanda-agent/rootfs/app/manual_battery_runtime.py iqfanda-agent/rootfs/app/battery_control_canary.py iqfanda-agent/rootfs/app/command_worker.py iqfanda-agent/rootfs/app/startup.py iqfanda-agent/rootfs/app/heartbeat.py iqfanda-agent/rootfs/app/communication/inverter_control_adapter.py iqfanda-agent/rootfs/app/communication/battery_feature_guard.py iqfanda-agent/rootfs/app/communication/foxess_remote_control_probe.py iqfanda-agent/rootfs/app/foxess_zero_remote_release.py

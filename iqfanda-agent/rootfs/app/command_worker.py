@@ -4228,6 +4228,14 @@ def execute_command(
         )
         return
 
+    if command_type == "foxess_zero_remote_release_v1":
+        from foxess_zero_remote_release import execute_foxess_zero_remote_release
+        execute_foxess_zero_remote_release(
+            identity=identity, command_id=command_id,
+            command_payload=command_payload, submit_result=submit_command_result,
+        )
+        return
+
     if command_type == "manual_battery_canary_v1":
         execute_manual_battery_canary(
             identity=identity, command_id=command_id, command_payload=command_payload,

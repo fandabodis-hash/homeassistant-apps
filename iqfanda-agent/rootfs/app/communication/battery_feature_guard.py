@@ -23,6 +23,7 @@ PROFILE_IDS = {
 }
 REQUIRED_FILES = {
     "VERSION", "manual_battery_runtime.py", "spot_battery_intent.py", "battery_control_canary.py",
+    "foxess_zero_remote_release.py",
     "command_worker.py", "startup.py", "heartbeat.py", "device_config.py",
     "communication/battery_feature_guard.py",
     "communication/battery_control_safety.py",
