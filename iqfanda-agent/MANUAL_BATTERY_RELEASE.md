@@ -11,6 +11,38 @@ GoodWe, protokolové readbacky, unit testy ani zelené CI nejsou fyzické ověř
 této nové verze. `verified` vrácené ovladačem označuje rozsah jeho kontroly
 povelu; skutečný směr a výkon baterie je nutné doložit odděleným měřením.
 
+## 0.1.169: jednorázové uvolnění nulového remote požadavku na 00007
+
+R15 dne 1. 11. 2026 doložil na 00007 zapnutý FoxESS remote enable 44000,
+nulový vzdálený výkon 44002 a chybějící lokální owner marker. Běžný ovladač
+takové řízení správně nepřebírá. Stav `stop_pending` blokuje další START.
+Původ zapnutého registru report neprokazuje; firmware ani jiný řadič se
+nesmějí označit za příčinu pouze podle chybějícího markeru.
+
+Samostatný příkaz `foxess_zero_remote_release_v1` umožňuje výslovně zadaný
+servisní zásah pouze na výrobním čísle `F800711-TNG-00007`. Je svázaný
+s lokální identitou zařízení, krátkou platností požadavku, přesnou verzí
+a otiskem implementace a s konkrétním stavem zjištěným v R15. Není to
+automatická migrace ani obecné převzetí vzdáleného řízení.
+
+Operace používá stejný místní runtime zámek a Modbus zámek jako běžný addon.
+Ověří protokol 115, adresu 247, identifikační slova firmware 223/103/403,
+work mode 0, timeout 500, max SOC 100, nulový vzdálený setpoint a nepřítomnost
+owner markeru. Jediný povolený servisní zápis vypíná 44000. Nemění work mode,
+timeout, SOC meze ani výkonový setpoint a nevytváří náhradní owner marker.
+Záměr zápisu musí být trvale zaznamenaný před zápisem do měniče; nejasný
+výsledek se nesmí automaticky znovu změnit na další pokus o převzetí.
+
+Po ověření registrů běžný manuální STOP dokončí lokální stav a vyčistí
+blokování staré relace. Podklady před i po opravě zůstávají v lokálním auditu.
+Úspěch servisní operace dokládá pouze uvolnění řízení a ověřený STOP.
+Fyzické nabíjení, vybíjení a profilový pin musí nadále potvrdit samostatný
+omezený test. Skutečný výkon baterie může být v AUTO nenulový kvůli FV
+výrobě nebo spotřebě domu.
+
+Ostatní instalace tento servisní příkaz odmítnou. Normální ownership guard,
+běžné nabíjení/vybíjení/STOP a dřívější fyzické protokoly se nemění.
+
 ## Tři oddělené kontroly
 
 | Kontrola | Co kontroluje | Co z ní neplyne |
