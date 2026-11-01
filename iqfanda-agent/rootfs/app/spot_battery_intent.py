@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -110,6 +111,7 @@ def save_spot_battery_intent(
     payload: dict[str, Any],
     *,
     now: datetime | None = None,
+    persist: bool = True,
 ) -> dict[str, Any]:
     """
     Overi a atomicky ulozi spotovy battery intent.
@@ -182,6 +184,12 @@ def save_spot_battery_intent(
         payload,
         "battery_capacity_kwh",
     )
+
+    if not all(math.isfinite(value) for value in (
+        target_soc_percent, current_soc_percent,
+        minimum_discharge_soc_percent, battery_capacity_kwh,
+    )):
+        raise ValueError("Battery intent nesmi obsahovat NaN nebo nekonecno.")
 
     if not (
         0.0
@@ -367,6 +375,24 @@ def save_spot_battery_intent(
             now.isoformat()
         ),
     }
+
+    # Preserve ownership across the transport boundary. The local runtime
+    # must distinguish an explicit user's STOP from a background Spot AUTO.
+    stored["manual_immediate_charge"] = payload.get("manual_immediate_charge") is True
+    stored["control_source"] = str(payload.get("control_source") or "")[:80]
+    if stored["manual_immediate_charge"]:
+        session_id = str(payload.get("manual_session_id") or "")
+        if len(session_id) > 160:
+            raise ValueError("manual_session_id je prilis dlouhe.")
+        stored["manual_session_id"] = session_id
+        if payload.get("manual_session_expires_at"):
+            session_end = _parse_datetime(payload["manual_session_expires_at"])
+            if not 0 < (session_end - now).total_seconds() <= 43200:
+                raise ValueError("Lokalni manualni relace musi koncit do 12 hodin.")
+            stored["manual_session_expires_at"] = session_end.isoformat()
+
+    if not persist:
+        return stored
 
     SPOT_BATTERY_INTENT_PATH.parent.mkdir(
         parents=True,

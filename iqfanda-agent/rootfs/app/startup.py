@@ -5,6 +5,7 @@ import threading
 import time
 
 from command_worker import main as command_worker_main
+from manual_battery_runtime import main as local_battery_runtime_main
 from communication.communication_manager import main as communication_manager_main
 from device_config import main as device_config_main
 from heartbeat import main as heartbeat_main
@@ -398,6 +399,11 @@ def main() -> None:
         nazev="command-worker",
     )
 
+    local_battery_thread = vytvorit_vlakno(
+        cil=local_battery_runtime_main,
+        nazev="local-battery-runtime",
+    )
+
     usb_inventory_thread = vytvorit_vlakno(
         cil=spustit_usb_inventory,
         nazev="usb-inventory",
@@ -425,6 +431,7 @@ def main() -> None:
 
     device_config_thread.start()
     heartbeat_thread.start()
+    local_battery_thread.start()
     command_worker_thread.start()
     usb_inventory_thread.start()
     communication_manager_thread.start()
@@ -440,6 +447,7 @@ def main() -> None:
             "device-config-sync": device_config_thread,
             "heartbeat": heartbeat_thread,
             "command-worker": command_worker_thread,
+            "local-battery-runtime": local_battery_thread,
             "usb-inventory": usb_inventory_thread,
             "communication-manager": communication_manager_thread,
             "module-telemetry": module_telemetry_thread,

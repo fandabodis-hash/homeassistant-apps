@@ -34,8 +34,6 @@ jobs:
           python -m unittest discover -v -s iqfanda-agent/tests -p test_reset_os.py
       - name: Protect 00012 and 00013 unchanged relay drivers
         run: |
-          test "$(cat iqfanda-agent/rootfs/app/VERSION)" = "0.1.167"
-          grep -Fx 'version: "0.1.167"' iqfanda-agent/config.yaml
-          grep -Fx '  software_version: "0.1.167"' iqfanda-agent/config.yaml
+          python iqfanda-agent/scripts/check_agent_version.py --minimum 0.1.167
           grep -Fq "CIL_UUID = '28fb44c3-4f8d-4ea4-90ab-f7e6a3b509fc'" iqfanda-agent/rootfs/app/f48_r10_00012_off_readback.py
           grep -Fq "CIL_IEEE = 'b0:e8:e8:ff:fe:66:2f:fd'" iqfanda-agent/rootfs/app/f48_r10_00012_off_readback.py

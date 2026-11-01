@@ -1,0 +1,137 @@
+{
+  "agent_version": "0.1.168",
+  "change_history": [
+    {
+      "agent_version": "0.1.168",
+      "reason": "F53 0.1.168: local manual battery owner, guarded STOP and verified FoxESS canary; physical release evidence remains pending",
+      "revision": 1,
+      "runtime_fingerprint": "a9eadaddf15419bc6979c53f47a41a710f44cf5bdf5df51ffe171cd6c27a1c13",
+      "source_fingerprint": "6abf08d25934a87306d52cf3d2a939c8e81e47d6ec4efc11f1de45bd520ea6bc"
+    },
+    {
+      "agent_version": "0.1.168",
+      "reason": "F53 0.1.168: accept actual cloud manufacturer/model routing without a top-level profile_id while rejecting explicit foreign profiles",
+      "revision": 2,
+      "runtime_fingerprint": "107f01477d7f1203ef9246ac02f118b49feb7a821671e9ee836f92f3139e56ac",
+      "source_fingerprint": "f83e1a7a48f983d0e876aaa2ad5a37c20ecff97a1d0384892399bb47b6a61b1f"
+    },
+    {
+      "agent_version": "0.1.168",
+      "reason": "F53 0.1.168: bind physical canary to the exact expected runtime fingerprint before preparing ownership or any battery write",
+      "revision": 3,
+      "runtime_fingerprint": "e0faee6ae3e367f75c40590410c4b2d71cc021541cee0a20939aa6313f7e1c95",
+      "source_fingerprint": "8d4debd059b27d21560a4b28a2f3f80c9e0c6ba3188e177a5aef1ed3a9c265dd"
+    }
+  ],
+  "feature": "local_manual_battery",
+  "files": {
+    ".github/workflows/manual-battery-release-guard.yml": "3664a69703bdc14d87a50510a01b9f24855b46726134e1885a330553bb13bee8",
+    "iqfanda-agent/Dockerfile": "3807f87277deedde6d16cdd90814eb27f23eec4b25e06341a6a2a8e91e8ddc82",
+    "iqfanda-agent/MANUAL_BATTERY_RELEASE.md": "83a18b163928f9e9111a76f687bef13b79f2c1346326bc4a7e6b0ccf91d3ba5e",
+    "iqfanda-agent/config.yaml": "b28d8d0df9246b6362f9bc6917314f2d9fe2daa2927566c4c0c5bbeaccee02d5",
+    "iqfanda-agent/rootfs/app/VERSION": "8578e7b26fbcb0e764e5a06d66a7ebf789b25d76796df2819eec465c39486601",
+    "iqfanda-agent/rootfs/app/battery_control_canary.py": "27d4538b8388bd8ca065c26f1cab4fc9e26d026e603a338c3f79a4b667f07a9d",
+    "iqfanda-agent/rootfs/app/command_worker.py": "b456c7bd5160e85f684956fb66a0d46fc3a8e040b5293dd953576200671c152a",
+    "iqfanda-agent/rootfs/app/communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
+    "iqfanda-agent/rootfs/app/communication/battery_feature_guard.py": "5e2df0e268aa99efb4e2ebb7e652f1fd04fdcf6c10aaa727663f771e13587565",
+    "iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py": "566a50d6e4afc945d07b9ac1b0bf550cb27fc1c5ac66d132a0ffef47afa1c2cd",
+    "iqfanda-agent/rootfs/app/communication/foxess_remote_control_probe.py": "618d3563c44cec35d96af997289c28431ad6e8bc4d0bad8664ec4a3f838a54ce",
+    "iqfanda-agent/rootfs/app/communication/goodwe_ems_controller.py": "f6290bde65c4ad5a4260b8368dd53bc44f291d167ce7aded3bc0140ba85fd95d",
+    "iqfanda-agent/rootfs/app/communication/goodwe_probe.py": "df24b073a3d2e320c8c39b7559b58e30c1c980fea554c0b530e6a5b3442af3ae",
+    "iqfanda-agent/rootfs/app/communication/inverter_adapter.py": "dd397812b25cec277621f3da0a5e2c2eacce5566361d8b7795a4bbbe83cd0924",
+    "iqfanda-agent/rootfs/app/communication/inverter_control_adapter.py": "4012eeaa44b23598c26ea88fcbe8039b98057a9d1215ccef7747df49504d42b3",
+    "iqfanda-agent/rootfs/app/communication/inverter_profiles/catalog.json": "59f515d68a2c09bd049dc83939183047ed3d06aa5452cdfd342f94d98cc44da2",
+    "iqfanda-agent/rootfs/app/communication/inverter_profiles/deye_3x_lv_off_grid.json": "76eeac23f1321a7ce04aa894321a8519b3b7504ed1cb339d05182e78c77538be",
+    "iqfanda-agent/rootfs/app/communication/inverter_profiles/deye_50_hybrid_hv.json": "1e07cd50e9020924baea6e4994530d57aa2e736ddb59b8bee04665b0e1bf2a57",
+    "iqfanda-agent/rootfs/app/communication/inverter_profiles/foxess_h3_10_0_e.json": "dc1f4b0be975ca6f0369422caf552f4246291b57fe884a2fa7e95b497607a079",
+    "iqfanda-agent/rootfs/app/communication/inverter_profiles/goodwe_et.json": "a87a205aa6cabd4d19e1f6b737a82da2b40540b56bd5607b4a2f5a992ee3208c",
+    "iqfanda-agent/rootfs/app/communication/inverter_profiles/goodwe_et_15_30kw.json": "35ce7a5b99f4ff092a209847e260e600e7abf955b3b568b2dbe56b6e318cad3f",
+    "iqfanda-agent/rootfs/app/communication/inverter_profiles/solax_x3_hybrid_g4.json": "2e571117bbc0a1c455890388f618319b5417f3cf2bf548e1e51222179a811e38",
+    "iqfanda-agent/rootfs/app/communication/json_utils.py": "5e622e084388923234c044aec1a6199d67a545306649430734c1d8453dc3f8ac",
+    "iqfanda-agent/rootfs/app/communication/modbus_bus_lock.py": "a5b1e7366e816545e0e3eefbfb1c99c609f85271144d21727b54acbfff4da00c",
+    "iqfanda-agent/rootfs/app/communication/solax_ems_controller.py": "af3afcb244585aaf56c322f38cf2f644119f331832b8e24d4af2e8d770c97277",
+    "iqfanda-agent/rootfs/app/device_config.py": "28a39b57044a81b9d920bd5afe1344584e246ceee8f9afaac5b922b84e4995dc",
+    "iqfanda-agent/rootfs/app/heartbeat.py": "2b63d18618c5529d2a3ca25d9a488152777426821c6363d308f8de1cb94defa7",
+    "iqfanda-agent/rootfs/app/manual_battery_runtime.py": "9b42ff9fef6e489ee998cd5906a46dd79dc0bfab417322ca5c568041bca6a498",
+    "iqfanda-agent/rootfs/app/spot_battery_intent.py": "9614747ec7a5e246c9bff2c18527c741f75c2453251baeaacea813bdc0fdcc02",
+    "iqfanda-agent/rootfs/app/startup.py": "6c0072302d43a75da2f0091c9732ba455a9214b4be3ea2fc3b5395994e8411f4",
+    "iqfanda-agent/rootfs/etc/services.d/iqfanda/run": "14f3f2fbe262d2884bf40082a75876b25c300085995d69c4d3e67e4c670fe735",
+    "iqfanda-agent/scripts/check_agent_version.py": "e93dfbd2203223a9023eb0f2f6411506aec72563111157ca4c6875916ae77f9e",
+    "iqfanda-agent/scripts/check_manual_battery_release.py": "9154097a833ba64d24aab3b74bf9a7a70ace558fad70382736385f9cea7a5e4b",
+    "iqfanda-agent/scripts/read_addon_update_preflight.py": "d438856132db05b26ef01f3ec098c2d44ca5694c4f3d58e265a1c01cc6e17d98",
+    "iqfanda-agent/tests/test_battery_control_canary.py": "3e569c56dd20213aeab738c9596e4ebf159d05658b420a3e8884c5222e2f5c82",
+    "iqfanda-agent/tests/test_foxess_battery_control.py": "8d64ff93c8a487a89ddc713278d944c05693b008a8b8b90357f53d5399acd523",
+    "iqfanda-agent/tests/test_foxess_remote_control_probe.py": "e2c5ff2f61f87581f805642b6c8f5de106f47e2a404063169d2ba9c0b43e928e",
+    "iqfanda-agent/tests/test_manual_battery_feature_guard.py": "061ebfe05d90b0a568b6bb924cbf5e74905bc2487b9a16c857eb5024aaaff83e",
+    "iqfanda-agent/tests/test_manual_battery_integration.py": "ad8d25bccedae4c49eb55008dadb77c61c8b139bef93e8955c982dd55c5f45fa",
+    "iqfanda-agent/tests/test_manual_battery_preflight.py": "a98403bfa5d77e015ab49f12a1f1270bd7dc1de54aa14e7a754d9a10acaa7a20",
+    "iqfanda-agent/tests/test_manual_battery_release_guard.py": "439f323d91290e05ddf14524506041c7933a136499051991cdf59e4bdf7977fd",
+    "iqfanda-agent/tests/test_manual_battery_runtime.py": "5e7ac12c9355a4959be88d00a7c8c6578aacc7099f8034797c8eeb28d6bee762",
+    "iqfanda-agent/tests/test_solax_battery_control.py": "086600e4c65c2b698e6779d30ac47254facd970c61c21fde72fd72831d846bf8"
+  },
+  "profiles": {
+    "deye_3x_lv_off_grid": {
+      "brand": "Deye",
+      "control_available": false,
+      "driver_function": null,
+      "driver_module": null,
+      "supported_actions": [],
+      "unavailable_reason": "off_grid_fixed_battery_power_unavailable"
+    },
+    "deye_50_hybrid_hv": {
+      "brand": "Deye",
+      "control_available": false,
+      "driver_function": null,
+      "driver_module": null,
+      "supported_actions": [],
+      "unavailable_reason": "deye_hv_control_protocol_unverified"
+    },
+    "foxess_h3_10_0_e": {
+      "brand": "FoxESS",
+      "control_available": true,
+      "driver_function": "execute_foxess_h3_from_cloud_config",
+      "driver_module": "communication.foxess_ems_controller",
+      "supported_actions": [
+        "auto",
+        "charge_grid",
+        "discharge_grid"
+      ],
+      "unavailable_reason": null
+    },
+    "goodwe_et": {
+      "brand": "GoodWe",
+      "control_available": true,
+      "driver_function": "execute_goodwe_ems_from_cloud_config",
+      "driver_module": "communication.goodwe_ems_controller",
+      "supported_actions": [
+        "auto",
+        "charge_grid",
+        "discharge_grid"
+      ],
+      "unavailable_reason": null
+    },
+    "goodwe_et_15_30kw": {
+      "brand": "GoodWe",
+      "control_available": false,
+      "driver_function": null,
+      "driver_module": null,
+      "supported_actions": [],
+      "unavailable_reason": null
+    },
+    "solax_x3_hybrid_g4": {
+      "brand": "SolaX",
+      "control_available": true,
+      "driver_function": "execute_solax_x3_g4_from_cloud_config",
+      "driver_module": "communication.solax_ems_controller",
+      "supported_actions": [
+        "auto",
+        "charge_grid",
+        "discharge_grid"
+      ],
+      "unavailable_reason": null
+    }
+  },
+  "runtime_fingerprint": "e0faee6ae3e367f75c40590410c4b2d71cc021541cee0a20939aa6313f7e1c95",
+  "schema_version": 1,
+  "source_fingerprint": "8d4debd059b27d21560a4b28a2f3f80c9e0c6ba3188e177a5aef1ed3a9c265dd"
+}

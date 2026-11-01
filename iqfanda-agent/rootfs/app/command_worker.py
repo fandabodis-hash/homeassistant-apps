@@ -1856,150 +1856,89 @@ def execute_pv_surplus_target_intent(
 
 
 def execute_spot_battery_intent(
-    *,
-    identity: dict[str, Any],
-    command_id: str,
-    command_payload: dict[str, Any],
+    *, identity: dict[str, Any], command_id: str, command_payload: dict[str, Any],
 ) -> None:
-    """
-    Overi spot battery intent a provede
-    fyzicke rizeni baterie pres univerzalni control adapter.
-
-    Povolene akce:
-    - auto
-    - charge_grid
-
-    Discharge zustava hard-block.
-    """
-
+    """Hand a battery request to its persistent, locally supervised owner."""
+    from manual_battery_runtime import (
+        get_local_battery_status, submit_local_battery_intent,
+    )
     try:
-        stored = save_spot_battery_intent(
-            command_payload
+        config = load_cached_cloud_config()
+        if not isinstance(config, dict):
+            raise RuntimeError("Cloudova konfigurace neni lokalne dostupna.")
+        outcome = submit_local_battery_intent(
+            payload=command_payload, command_id=command_id, cloud_config=config,
         )
-
-        cloud_config = (
-            load_cached_cloud_config()
-        )
-
-        if not isinstance(
-            cloud_config,
-            dict,
-        ):
-            raise RuntimeError(
-                "Cloudova konfigurace "
-                "neni lokalne dostupna."
-            )
-
-        applied = (
-            execute_battery_control_from_cloud_config(
-                cloud_config=cloud_config,
-                action=stored["action"],
-                allowed_charge_power_w=stored[
-                    "allowed_charge_power_w"
-                ],
-                target_soc_percent=stored[
-                    "target_soc_percent"
-                ],
-                allowed_discharge_power_w=stored[
-                    "allowed_discharge_power_w"
-                ],
-                minimum_discharge_soc_percent=stored[
-                    "minimum_discharge_soc_percent"
-                ],
-            )
-        )
-
+        applied = outcome.get("applied") or {}
+        local_status = outcome["local_runtime"]
+        active = local_status.get("state") == "active"
+        result = {
+            "worker": "command_worker", "executor": "local_battery_runtime",
+            "phase": outcome["phase"], "physical_control_active": active,
+            "real_modbus_write": applied.get("write_performed", False),
+            "verified": applied.get("verified", False),
+            "action": applied.get("action", local_status.get("action")),
+            "applied_power_w": applied.get("applied_power_w", 0),
+            "allowed_charge_power_w": applied.get("applied_power_w", 0)
+                if applied.get("action") == "charge_grid" else 0,
+            "allowed_discharge_power_w": applied.get("applied_power_w", 0)
+                if applied.get("action") == "discharge_grid" else 0,
+            "control_capability": "battery_charge_control",
+            "local_runtime": local_status,
+            "valid_until": local_status.get("expires_at"),
+        }
     except Exception as exc:
         submit_command_result(
-            identity=identity,
-            command_id=command_id,
-            status="failed",
-            result={
-                "worker": "command_worker",
-                "executor": "spot_battery_intent",
-                "phase": "battery_control_apply_failed",
-                "physical_control_active": True,
-                "payload_received": (
-                    command_payload
-                ),
-            },
+            identity=identity, command_id=command_id, status="failed",
+            result={"worker": "command_worker", "executor": "local_battery_runtime",
+                    "phase": "battery_control_apply_failed",
+                    "local_runtime": get_local_battery_status()},
             error_message=str(exc),
         )
-
-        logging.exception(
-            "Spot battery control prikaz %s selhal.",
-            command_id,
-        )
+        logging.exception("Local battery command %s failed", command_id)
         return
-
-    submit_command_result(
-        identity=identity,
-        command_id=command_id,
-        status="succeeded",
-        result={
-            "worker": "command_worker",
-            "executor": "spot_battery_intent",
-            "phase": "battery_control_applied",
-            "physical_control_active": True,
-            "real_modbus_write": (
-                applied.write_performed
-            ),
-            "verified": applied.verified,
-            "action": applied.action,
-            "requested_charge_power_w": (
-                stored[
-                    "requested_charge_power_w"
-                ]
-            ),
-            "allowed_charge_power_w": (
-                applied.applied_power_w
-                if applied.action == "charge_grid"
-                else 0
-            ),
-            "requested_discharge_power_w": stored[
-                "requested_discharge_power_w"
-            ],
-            "allowed_discharge_power_w": (
-                applied.applied_power_w
-                if applied.action == "discharge_grid"
-                else 0
-            ),
-            "minimum_discharge_soc_percent": stored[
-                "minimum_discharge_soc_percent"
-            ],
-            "target_soc_percent": stored[
-                "target_soc_percent"
-            ],
-            "current_soc_percent": stored[
-                "current_soc_percent"
-            ],
-            "control_capability": (
-                applied.capability
-            ),
-            "valid_until": stored[
-                "valid_until"
-            ],
-        },
-        error_message=None,
-    )
-
-    logging.info(
-        "Spot battery control | "
-        "prikaz=%s capability=%s "
-        "action=%s applied=%s W "
-        "SOC=%s/%s verified=%s "
-        "REAL_WRITE=%s",
-        command_id,
-        applied.capability,
-        applied.action,
-        applied.applied_power_w,
-        stored["current_soc_percent"],
-        stored["target_soc_percent"],
-        applied.verified,
-        applied.write_performed,
-    )
+    submit_command_result(identity=identity, command_id=command_id,
+                          status="succeeded", result=result, error_message=None)
 
 
+def execute_manual_battery_canary(
+    *, identity: dict[str, Any], command_id: str, command_payload: dict[str, Any],
+) -> None:
+    """One bounded local FoxESS commissioning test; a PASS pins its exact scope."""
+    try:
+        if command_payload.get("commissioning") is not True:
+            raise ValueError("Canary requires commissioning=true.")
+        if command_payload.get("profile_id") != "foxess_h3_10_0_e":
+            raise ValueError("This canary is restricted to FoxESS H3 protocol 115.")
+        if command_payload.get("power_w") != 500:
+            raise ValueError("Canary power is fixed at 500 W.")
+        if command_payload.get("expected_agent_version") != read_installed_agent_version():
+            raise ValueError("Canary requires the exact installed agent version.")
+        fingerprint = command_payload.get("expected_runtime_fingerprint")
+        if not isinstance(fingerprint, str) or len(fingerprint) != 64 or any(c not in "0123456789abcdef" for c in fingerprint):
+            raise ValueError("Canary requires the explicit expected runtime fingerprint.")
+        config = load_cached_cloud_config()
+        if not isinstance(config, dict):
+            raise RuntimeError("Local device configuration is unavailable.")
+        from battery_control_canary import run_foxess_battery_canary
+        from manual_battery_runtime import run_exclusive_battery_canary
+        submit_command_result(identity=identity, command_id=command_id, status="running",
+            result={"worker": "command_worker", "executor": "local_battery_canary",
+                    "phase": "commissioning_local", "power_w": 500}, error_message=None)
+        result = run_exclusive_battery_canary(callback=run_foxess_battery_canary,
+            cloud_config=config, command_id=command_id, expected_runtime_fingerprint=fingerprint)
+        succeeded = (result.get("status") == "passed" and result.get("verified") is True
+                     and result.get("local_final_auto_verified") is True
+                     and result.get("protection", {}).get("status") == "locked")
+        submit_command_result(identity=identity, command_id=command_id,
+            status="succeeded" if succeeded else "failed",
+            result={"worker": "command_worker", "executor": "local_battery_canary", **result},
+            error_message=None if succeeded else json.dumps(result.get("error") or result.get("final_auto_error") or "Canary not verified"))
+    except Exception as exc:
+        submit_command_result(identity=identity, command_id=command_id, status="failed",
+            result={"worker": "command_worker", "executor": "local_battery_canary", "verified": False},
+            error_message=str(exc))
+        logging.exception("Local battery canary %s failed", command_id)
 
 
 AGENT_UPDATE_TIMEOUT_SECONDS = 15 * 60
@@ -4286,6 +4225,12 @@ def execute_command(
             identity=identity,
             command_id=command_id,
             command_payload=command_payload,
+        )
+        return
+
+    if command_type == "manual_battery_canary_v1":
+        execute_manual_battery_canary(
+            identity=identity, command_id=command_id, command_payload=command_payload,
         )
         return
 

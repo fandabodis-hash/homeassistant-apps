@@ -8,6 +8,25 @@
     "X3-Hybrid G4"
   ],
   "verification_status": "physically_verified_00010",
+  "control_capabilities": {
+    "battery_charge_control": {
+      "schema_version": 1,
+      "driver_module": "communication.solax_ems_controller",
+      "driver_function": "execute_solax_x3_g4_from_cloud_config",
+      "supported_actions": [
+        "auto",
+        "charge_grid",
+        "discharge_grid"
+      ],
+      "discharge_allowed": true,
+      "verification_status": "protocol_implemented_hardware_canary_pending",
+      "maximum_charge_power_w": 15000,
+      "maximum_discharge_power_w": 15000,
+      "verification_scope": "accepted_write_and_remote_mode_readback",
+      "requires_local_session_supervisor": true,
+      "hardware_watchdog_verified": false
+    }
+  },
   "protocol": {
     "type": "modbus_rtu",
     "function_code": 4,
