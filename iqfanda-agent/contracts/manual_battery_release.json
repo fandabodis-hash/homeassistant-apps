@@ -21,6 +21,13 @@
       "revision": 3,
       "runtime_fingerprint": "e0faee6ae3e367f75c40590410c4b2d71cc021541cee0a20939aa6313f7e1c95",
       "source_fingerprint": "8d4debd059b27d21560a4b28a2f3f80c9e0c6ba3188e177a5aef1ed3a9c265dd"
+    },
+    {
+      "agent_version": "0.1.168",
+      "reason": "R13R1: single controlled recovery 0.1.167 to 0.1.168 with precise protected configuration audit and covered script/test dependencies; production unchanged",
+      "revision": 4,
+      "runtime_fingerprint": "e0faee6ae3e367f75c40590410c4b2d71cc021541cee0a20939aa6313f7e1c95",
+      "source_fingerprint": "4ed32ee4b01870c1aad15961bf3860469ce92c9be5fe6b5796cfca3d991c65d8"
     }
   ],
   "feature": "local_manual_battery",
@@ -58,6 +65,9 @@
     "iqfanda-agent/rootfs/etc/services.d/iqfanda/run": "14f3f2fbe262d2884bf40082a75876b25c300085995d69c4d3e67e4c670fe735",
     "iqfanda-agent/scripts/check_agent_version.py": "e93dfbd2203223a9023eb0f2f6411506aec72563111157ca4c6875916ae77f9e",
     "iqfanda-agent/scripts/check_manual_battery_release.py": "9154097a833ba64d24aab3b74bf9a7a70ace558fad70382736385f9cea7a5e4b",
+    "iqfanda-agent/scripts/f53_protected_config_audit.py": "7dad22be304511b1e0531bcf277efa4e4a3533f886fe8d62090d6c4935fd0d98",
+    "iqfanda-agent/scripts/f53_r13_deploy_foxess.py": "0c47d397099b954f5001457e5169dc9da637cc7fb620c95c0e717ee19d1e2369",
+    "iqfanda-agent/scripts/f53_r13r1_finish_foxess.py": "d7e777e32b84826375f48c33f35f2c64c047bb6781aab5d2809905d554c0674b",
     "iqfanda-agent/scripts/read_addon_update_preflight.py": "d438856132db05b26ef01f3ec098c2d44ca5694c4f3d58e265a1c01cc6e17d98",
     "iqfanda-agent/tests/test_battery_control_canary.py": "3e569c56dd20213aeab738c9596e4ebf159d05658b420a3e8884c5222e2f5c82",
     "iqfanda-agent/tests/test_foxess_battery_control.py": "8d64ff93c8a487a89ddc713278d944c05693b008a8b8b90357f53d5399acd523",
@@ -65,6 +75,8 @@
     "iqfanda-agent/tests/test_manual_battery_feature_guard.py": "061ebfe05d90b0a568b6bb924cbf5e74905bc2487b9a16c857eb5024aaaff83e",
     "iqfanda-agent/tests/test_manual_battery_integration.py": "ad8d25bccedae4c49eb55008dadb77c61c8b139bef93e8955c982dd55c5f45fa",
     "iqfanda-agent/tests/test_manual_battery_preflight.py": "a98403bfa5d77e015ab49f12a1f1270bd7dc1de54aa14e7a754d9a10acaa7a20",
+    "iqfanda-agent/tests/test_manual_battery_protected_audit.py": "63d219db3258fe22a5534ed8f5888e6a1b1fbd0c53aa39812faf23731525f77f",
+    "iqfanda-agent/tests/test_manual_battery_r13_recovery.py": "8da9fd008e8bf8f818d4218136d92719b9da4242d517fd05b520bbb934b09945",
     "iqfanda-agent/tests/test_manual_battery_release_guard.py": "439f323d91290e05ddf14524506041c7933a136499051991cdf59e4bdf7977fd",
     "iqfanda-agent/tests/test_manual_battery_runtime.py": "5e7ac12c9355a4959be88d00a7c8c6578aacc7099f8034797c8eeb28d6bee762",
     "iqfanda-agent/tests/test_solax_battery_control.py": "086600e4c65c2b698e6779d30ac47254facd970c61c21fde72fd72831d846bf8"
@@ -133,5 +145,5 @@
   },
   "runtime_fingerprint": "e0faee6ae3e367f75c40590410c4b2d71cc021541cee0a20939aa6313f7e1c95",
   "schema_version": 1,
-  "source_fingerprint": "8d4debd059b27d21560a4b28a2f3f80c9e0c6ba3188e177a5aef1ed3a9c265dd"
+  "source_fingerprint": "4ed32ee4b01870c1aad15961bf3860469ce92c9be5fe6b5796cfca3d991c65d8"
 }
