@@ -1,0 +1,38 @@
+name: Manual battery release contract
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  manual-battery-release-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Preserve reviewed source and physical evidence history
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        shell: bash
+        run: |
+          if [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] && [[ "$BASE_SHA" != 0000000000000000000000000000000000000000 ]]; then
+            python iqfanda-agent/scripts/check_manual_battery_release.py --base-ref "$BASE_SHA"
+          else
+            python iqfanda-agent/scripts/check_manual_battery_release.py
+          fi
+      - name: Manual runtime and release-guard regressions
+        env:
+          PYTHONPATH: iqfanda-agent/rootfs/app
+        run: |
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_*battery*.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_foxess_remote_control_probe.py'
+      - name: Compile battery integration without accessing hardware
+        run: |
+          python -m py_compile iqfanda-agent/rootfs/app/manual_battery_runtime.py iqfanda-agent/rootfs/app/battery_control_canary.py iqfanda-agent/rootfs/app/command_worker.py iqfanda-agent/rootfs/app/startup.py iqfanda-agent/rootfs/app/heartbeat.py iqfanda-agent/rootfs/app/communication/inverter_control_adapter.py iqfanda-agent/rootfs/app/communication/battery_feature_guard.py iqfanda-agent/rootfs/app/communication/foxess_remote_control_probe.py

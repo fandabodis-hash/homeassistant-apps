@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "records": [],
+  "revocations": [],
+  "note": "All new local-manual-runtime physical checks are pending. Historical reports about an older driver or successful CI do not certify this new source fingerprint."
+}

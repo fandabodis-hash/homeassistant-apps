@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from communication.battery_control_safety import BatteryControlSafetyStop
+
 from dataclasses import dataclass
 import time
 from typing import Any, Callable
@@ -462,7 +464,10 @@ def execute_goodwe_ems_from_cloud_config(
                 if local_soc >= target_soc or charge_current_limit <= 0:
                     if current_mode != EMS_MODE_AUTO or current_power != 0:
                         apply_goodwe_ems_action(client=client, device_id=device_id, action="auto", allowed_charge_power_w=0, allowed_discharge_power_w=0)
-                    raise RuntimeError("Charge safety guard zablokoval rizeni.")
+                    raise BatteryControlSafetyStop(
+                        reason="target_soc_reached" if local_soc >= target_soc else "bms_charge_blocked",
+                        observed_soc_percent=float(local_soc),
+                    )
                 desired_mode = EMS_MODE_CHARGE_FROM_GRID
                 desired_power = charge_power_w
 
@@ -475,7 +480,10 @@ def execute_goodwe_ems_from_cloud_config(
                 if local_soc <= minimum_with_margin or discharge_current_limit <= 0:
                     if current_mode != EMS_MODE_AUTO or current_power != 0:
                         apply_goodwe_ems_action(client=client, device_id=device_id, action="auto", allowed_charge_power_w=0, allowed_discharge_power_w=0)
-                    raise RuntimeError("Discharge safety guard zablokoval rizeni.")
+                    raise BatteryControlSafetyStop(
+                        reason="minimum_soc_reached" if local_soc <= minimum_with_margin else "bms_discharge_blocked",
+                        observed_soc_percent=float(local_soc),
+                    )
                 desired_mode = EMS_MODE_DISCHARGE_BATTERY
                 desired_power = discharge_power_w
 

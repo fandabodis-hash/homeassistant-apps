@@ -415,6 +415,15 @@ def build_inverter_control_capability_state(
                 "verification_status"
             ] = verification_status
 
+        # Semantic support information only; no register maps or driver internals.
+        for public_key in ("unsupported_reason", "verification_scope"):
+            public_value = capability_definition.get(public_key)
+            if isinstance(public_value, str) and len(public_value) <= 160:
+                public_definition[public_key] = public_value
+        for public_key in ("requires_local_session_supervisor", "hardware_watchdog_verified"):
+            if type(capability_definition.get(public_key)) is bool:
+                public_definition[public_key] = capability_definition[public_key]
+
         public_capabilities[
             name
         ] = public_definition

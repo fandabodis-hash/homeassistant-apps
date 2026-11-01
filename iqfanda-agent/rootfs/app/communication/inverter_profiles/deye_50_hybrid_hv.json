@@ -8,6 +8,15 @@
     "Deye 50 hybrid HV"
   ],
   "verification_status": "candidate_read_only_identity_00015",
+  "control_capabilities": {
+    "battery_charge_control": {
+      "schema_version": 1,
+      "supported_actions": [],
+      "discharge_allowed": false,
+      "verification_status": "manual_control_protocol_variant_unverified",
+      "unsupported_reason": "deye_hv_control_protocol_unverified"
+    }
+  },
   "protocol": {
     "type": "modbus_rtu",
     "function_code": 3,

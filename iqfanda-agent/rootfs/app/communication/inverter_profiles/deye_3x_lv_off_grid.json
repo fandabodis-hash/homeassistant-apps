@@ -8,6 +8,15 @@
     "3xDEYE LV off grid"
   ],
   "verification_status": "physical_registers_verified_00011_adapter_pending",
+  "control_capabilities": {
+    "battery_charge_control": {
+      "schema_version": 1,
+      "supported_actions": [],
+      "discharge_allowed": false,
+      "verification_status": "manual_control_unsupported_off_grid_topology",
+      "unsupported_reason": "off_grid_fixed_battery_power_unavailable"
+    }
+  },
   "protocol": {
     "type": "modbus_rtu",
     "function_code": 3,

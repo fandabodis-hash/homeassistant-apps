@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import os
+from pathlib import Path
+import time
 from typing import Any
 
 from pymodbus.client import ModbusSerialClient
@@ -23,6 +27,14 @@ REMOTE_TIMEOUT_REGISTER = 44001
 REMOTE_ACTIVE_POWER_REGISTER = 44002
 BATTERY_POWER_REGISTER = 31036
 BATTERY_SOC_REGISTER = 31038
+
+# foxess_h3_10_0_e.json identification.versions: address 30016, count 3.
+# Keep the raw words; the profile does not specify a firmware-version decoder.
+FIRMWARE_VERSION_REGISTERS = (30016, 30017, 30018)
+MODBUS_TRANSACTION_GAP_SECONDS = 0.03
+OWNER_MARKER_PATH = Path(
+    os.getenv("IQF_FOXESS_REMOTE_OWNER_PATH", "/config/foxess_remote_control_owner.json")
+)
 
 READ_BLOCKS = (
     (PROTOCOL_VERSION_REGISTER, 1),
@@ -94,11 +106,14 @@ def _decode_s32(high_word: int, low_word: int) -> int:
 
 
 def _read_block(*, client: Any, device_id: int, address: int, count: int) -> list[int]:
-    response = client.read_holding_registers(
-        address=address,
-        count=count,
-        device_id=device_id,
-    )
+    try:
+        response = client.read_holding_registers(
+            address=address,
+            count=count,
+            device_id=device_id,
+        )
+    finally:
+        time.sleep(MODBUS_TRANSACTION_GAP_SECONDS)
 
     if response is None:
         raise RuntimeError(f"FoxESS read {address}/{count} vratil None.")
@@ -112,6 +127,56 @@ def _read_block(*, client: Any, device_id: int, address: int, count: int) -> lis
         raise RuntimeError(f"FoxESS read {address}/{count} nema platny vysledek.")
 
     return [int(value) & 0xFFFF for value in registers]
+
+
+def _owner_marker_status(marker_path: Path) -> dict[str, Any]:
+    """Describe local ownership without exposing arbitrary marker data or paths."""
+    try:
+        raw = marker_path.read_text(encoding="utf-8-sig")
+    except FileNotFoundError:
+        return {"present": False, "owner": None, "status": "missing"}
+    except OSError:
+        return {"present": None, "owner": None, "status": "unreadable"}
+    except UnicodeError:
+        return {"present": True, "owner": None, "status": "invalid"}
+
+    try:
+        marker = json.loads(raw)
+    except (ValueError, TypeError):
+        return {"present": True, "owner": None, "status": "invalid"}
+    if not isinstance(marker, dict):
+        return {"present": True, "owner": None, "status": "invalid"}
+
+    owner = marker.get("owner")
+    if owner != "tng_iq_fanda":
+        return {
+            "present": True,
+            "owner": "other" if owner else None,
+            "status": "foreign" if owner else "invalid",
+        }
+
+    try:
+        identity_matches = (
+            marker.get("schema_version") == 1
+            and marker.get("profile_id") == EXPECTED_PROFILE_ID
+            and int(marker.get("device_id") or 0) == EXPECTED_DEVICE_ID
+        )
+    except (TypeError, ValueError):
+        identity_matches = False
+    original_mode = marker.get("original_work_mode")
+    original_timeout = marker.get("original_timeout")
+    restore_valid = (
+        type(original_mode) is int
+        and original_mode in {0, 1, 2}
+        and type(original_timeout) is int
+        and 0 <= original_timeout <= 0xFFFF
+    )
+    return {
+        "present": True,
+        "owner": "tng_iq_fanda",
+        "status": "owned" if identity_matches and restore_valid else "invalid",
+        "restore_settings_valid": restore_valid,
+    }
 
 
 def probe_foxess_remote_control_from_cloud_config(
@@ -134,6 +199,7 @@ def probe_foxess_remote_control_from_cloud_config(
     _communicator, serial_path = _find_communicator(communicator_id)
     bus_lock = ziskej_zamek_modbus_sbernice(serial_path)
     values: dict[int, int] = {}
+    firmware: dict[str, int | None] = {}
 
     with bus_lock:
         client = ModbusSerialClient(
@@ -159,6 +225,20 @@ def probe_foxess_remote_control_from_cloud_config(
                 )
                 for offset, raw in enumerate(block):
                     values[address + offset] = raw
+
+            # Firmware is additional evidence. An unavailable identity word
+            # must not hide the core remote-control registers we just read.
+            for address in FIRMWARE_VERSION_REGISTERS:
+                try:
+                    firmware[str(address)] = _read_block(
+                        client=client,
+                        device_id=EXPECTED_DEVICE_ID,
+                        address=address,
+                        count=1,
+                    )[0]
+                except Exception:
+                    firmware[str(address)] = None
+            owner_marker = _owner_marker_status(OWNER_MARKER_PATH)
         finally:
             client.close()
 
@@ -195,6 +275,9 @@ def probe_foxess_remote_control_from_cloud_config(
         "protocol_version": protocol_version,
         "device_id": EXPECTED_DEVICE_ID,
         "serial_path_verified": serial_path.startswith("/dev/serial/by-id/"),
+        "firmware_versions_raw": firmware,
+        "firmware_read_complete": all(value is not None for value in firmware.values()),
+        "owner_marker": owner_marker,
         "registers": {
             "work_mode_41000": work_mode,
             "max_soc_41010": max_soc,

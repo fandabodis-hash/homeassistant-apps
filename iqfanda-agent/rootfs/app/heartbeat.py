@@ -322,6 +322,13 @@ def send_heartbeat(config: dict) -> dict:
 
     communication_state = build_communication_state()
 
+    # Observation only: the local battery loop never waits for the heartbeat.
+    try:
+        from manual_battery_runtime import get_local_battery_status
+        communication_state["local_battery_runtime"] = get_local_battery_status()
+    except Exception as exc:
+        logging.warning("Local battery status is unavailable: %s", type(exc).__name__)
+
     # F47 R161: outbound status ONLY. The regulation thread never reads this
     # cloud response or sends any motor commands through the internet.
     if config.get("device_uuid")=="014a0d23-d440-4131-abb4-28a860595043":

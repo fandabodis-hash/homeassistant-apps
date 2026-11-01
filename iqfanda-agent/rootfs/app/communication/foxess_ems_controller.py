@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import math
 import os
 import time
 from pathlib import Path
@@ -15,6 +16,7 @@ from pymodbus.client import ModbusSerialClient
 
 from communication.goodwe_probe import _find_communicator
 from communication.modbus_bus_lock import ziskej_zamek_modbus_sbernice
+from communication.battery_control_safety import BatteryControlSafetyStop
 
 
 PROFILE_ID = "foxess_h3_10_0_e"
@@ -45,6 +47,8 @@ MODBUS_READ_RETRY_DELAY_SECONDS = 0.35
 MODBUS_WRITE_ATTEMPTS = 3
 MODBUS_WRITE_SETTLE_SECONDS = 0.45
 MODBUS_POST_VERIFY_SETTLE_SECONDS = 0.20
+MODBUS_TRANSACTION_GAP_SECONDS = 0.03
+MODBUS_WRITE_VERIFY_ATTEMPTS = 4
 
 SUPPORTED_ACTIONS = {
     "auto",
@@ -173,6 +177,10 @@ def _read_registers(
 
             if attempt >= MODBUS_READ_ATTEMPTS:
                 raise
+        finally:
+            # These serial devices need a gap after a reply as well as after
+            # a write. Keep the bus lock held until the next request is safe.
+            time.sleep(MODBUS_TRANSACTION_GAP_SECONDS)
 
     raise RuntimeError(
         f"FoxESS read {address}/{count} selhal."
@@ -283,35 +291,43 @@ def _write_one(
             MODBUS_WRITE_SETTLE_SECONDS
         )
 
-        try:
-            actual = _read_one(
-                client=client,
-                device_id=device_id,
-                address=address,
+        # A successful write reply is not a physical readback. Conversely,
+        # rewriting immediately after one stale read can keep restarting an
+        # inverter's asynchronous update. Poll the same write before retrying
+        # it, and require two consistent reads. Persistent rejection still
+        # fails; there is no success fallback or alternate register mapping.
+        for verification in range(MODBUS_WRITE_VERIFY_ATTEMPTS):
+            if verification:
+                time.sleep(MODBUS_READ_RETRY_DELAY_SECONDS)
+            try:
+                actual = _read_one(
+                    client=client,
+                    device_id=device_id,
+                    address=address,
+                )
+                if actual == expected:
+                    time.sleep(MODBUS_POST_VERIFY_SETTLE_SECONDS)
+                    actual = _read_one(
+                        client=client,
+                        device_id=device_id,
+                        address=address,
+                    )
+                    if actual == expected:
+                        return
+            except Exception as exc:
+                # _read_one already retries transport failures. Do not nest
+                # another full set of retries and hold the bus indefinitely.
+                last_error = exc
+                break
+
+            detail = (
+                f" write_error={type(write_error).__name__}: {write_error}"
+                if write_error is not None else ""
             )
-        except Exception as exc:
-            last_error = exc
-
-            if attempt >= MODBUS_WRITE_ATTEMPTS:
-                if write_error is not None:
-                    raise RuntimeError(
-                        f"FoxESS write/readback {address} selhal "
-                        f"po {MODBUS_WRITE_ATTEMPTS} pokusech."
-                    ) from write_error
-                raise
-
-            continue
-
-        if actual == expected:
-            time.sleep(
-                MODBUS_POST_VERIFY_SETTLE_SECONDS
+            last_error = RuntimeError(
+                f"FoxESS registr {address}: "
+                f"ocekavano {expected}, nacteno {actual}.{detail}"
             )
-            return
-
-        last_error = RuntimeError(
-            f"FoxESS registr {address}: "
-            f"ocekavano {expected}, nacteno {actual}."
-        )
 
         if attempt >= MODBUS_WRITE_ATTEMPTS:
             raise last_error
@@ -585,6 +601,16 @@ def _restore_auto(
     marker_path: Path,
     marker: dict[str, Any],
 ) -> bool:
+    # Validate the saved settings before making even a neutralizing write.
+    # Never guess replacement settings for an incomplete/corrupt owner file.
+    original_work_mode = marker.get("original_work_mode")
+    original_timeout = marker.get("original_timeout")
+    if type(original_work_mode) is not int or original_work_mode not in {
+        WORK_MODE_SELF_USE, WORK_MODE_FEED_IN_FIRST, WORK_MODE_BACK_UP
+    }:
+        raise RuntimeError("FoxESS owner marker ma neplatny puvodni work mode.")
+    if type(original_timeout) is not int or not 0 <= original_timeout <= 0xFFFF:
+        raise RuntimeError("FoxESS owner marker ma neplatny puvodni timeout.")
     writes = False
 
     active_power = _read_s16(
@@ -617,13 +643,6 @@ def _restore_auto(
         )
         writes = True
 
-    original_timeout = int(
-        marker.get(
-            "original_timeout",
-            REMOTE_TIMEOUT_SECONDS,
-        )
-    )
-
     current_timeout = _read_one(
         client=client,
         device_id=device_id,
@@ -638,22 +657,6 @@ def _restore_auto(
             value=original_timeout,
         )
         writes = True
-
-    original_work_mode = int(
-        marker.get(
-            "original_work_mode",
-            WORK_MODE_SELF_USE,
-        )
-    )
-
-    if original_work_mode not in {
-        WORK_MODE_SELF_USE,
-        WORK_MODE_FEED_IN_FIRST,
-        WORK_MODE_BACK_UP,
-    }:
-        raise RuntimeError(
-            "FoxESS owner marker ma neplatny puvodni work mode."
-        )
 
     current_work_mode = _read_one(
         client=client,
@@ -670,9 +673,23 @@ def _restore_auto(
         )
         writes = True
 
-    _remove_marker(
-        marker_path
-    )
+    # A later setting/write can expose a race with another controller or a
+    # firmware supervisor. Keep ownership for a retry until the complete
+    # restored state has been read back together, never just the last write.
+    for address, expected in (
+        (REMOTE_ACTIVE_POWER_REGISTER, 0),
+        (REMOTE_ENABLE_REGISTER, 0),
+        (REMOTE_TIMEOUT_REGISTER, original_timeout),
+        (WORK_MODE_REGISTER, original_work_mode),
+    ):
+        actual = _read_one(client=client, device_id=device_id, address=address)
+        if actual != expected:
+            raise RuntimeError(
+                f"FoxESS AUTO final readback {address}: "
+                f"ocekavano {expected}, nacteno {actual}."
+            )
+
+    _remove_marker(marker_path)
 
     return writes
 
@@ -712,7 +729,8 @@ def apply_foxess_h3_action(
     )
 
     if (
-        target_soc < 0
+        not math.isfinite(target_soc)
+        or target_soc < 0
         or target_soc > 100
     ):
         raise ValueError(
@@ -720,7 +738,8 @@ def apply_foxess_h3_action(
         )
 
     if (
-        minimum_discharge_soc < 10
+        not math.isfinite(minimum_discharge_soc)
+        or minimum_discharge_soc < 10
         or minimum_discharge_soc > 100
     ):
         raise ValueError(
@@ -768,9 +787,16 @@ def apply_foxess_h3_action(
         device_id=device_id,
         address=REMOTE_ENABLE_REGISTER,
     )
+    if remote_enable not in {0, 1}:
+        raise RuntimeError("FoxESS remote_enable nema platnou hodnotu 0/1.")
 
     if action == "auto":
         if marker is None:
+            if remote_enable != 0:
+                raise RuntimeError(
+                    "FoxESS AUTO neni potvrzeno: remote control je aktivni "
+                    "bez vlastnictvi TNG IQ FANDA; cizi rizeni nebude zmeneno."
+                )
             return FoxessH3ControlResult(
                 action="auto",
                 requested_power_w=0,
@@ -838,14 +864,12 @@ def apply_foxess_h3_action(
                     marker=marker,
                 )
 
-            return FoxessH3ControlResult(
-                action="auto",
-                requested_power_w=charge_power_w,
-                applied_power_w=0,
-                verified=True,
-                write_performed=(
-                    marker is not None
+            raise BatteryControlSafetyStop(
+                reason=(
+                    "target_soc_reached" if local_soc >= target_soc
+                    else "inverter_max_soc_reached"
                 ),
+                observed_soc_percent=float(local_soc),
             )
 
         selected_power_w = charge_power_w
@@ -866,8 +890,9 @@ def apply_foxess_h3_action(
                     marker=marker,
                 )
 
-            raise RuntimeError(
-                "FoxESS discharge safety guard zablokoval rizeni."
+            raise BatteryControlSafetyStop(
+                reason="minimum_soc_reached",
+                observed_soc_percent=float(local_soc),
             )
 
         selected_power_w = discharge_power_w

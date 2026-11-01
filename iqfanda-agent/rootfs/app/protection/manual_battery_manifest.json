@@ -1,0 +1,41 @@
+{
+  "agent_version": "0.1.168",
+  "build_inputs": {
+    "Dockerfile": "3807f87277deedde6d16cdd90814eb27f23eec4b25e06341a6a2a8e91e8ddc82",
+    "config.yaml": "b28d8d0df9246b6362f9bc6917314f2d9fe2daa2927566c4c0c5bbeaccee02d5"
+  },
+  "feature": "local_manual_battery",
+  "files": {
+    "VERSION": "8578e7b26fbcb0e764e5a06d66a7ebf789b25d76796df2819eec465c39486601",
+    "battery_control_canary.py": "27d4538b8388bd8ca065c26f1cab4fc9e26d026e603a338c3f79a4b667f07a9d",
+    "command_worker.py": "b456c7bd5160e85f684956fb66a0d46fc3a8e040b5293dd953576200671c152a",
+    "communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
+    "communication/battery_feature_guard.py": "5e2df0e268aa99efb4e2ebb7e652f1fd04fdcf6c10aaa727663f771e13587565",
+    "communication/foxess_ems_controller.py": "566a50d6e4afc945d07b9ac1b0bf550cb27fc1c5ac66d132a0ffef47afa1c2cd",
+    "communication/foxess_remote_control_probe.py": "618d3563c44cec35d96af997289c28431ad6e8bc4d0bad8664ec4a3f838a54ce",
+    "communication/goodwe_ems_controller.py": "f6290bde65c4ad5a4260b8368dd53bc44f291d167ce7aded3bc0140ba85fd95d",
+    "communication/goodwe_probe.py": "df24b073a3d2e320c8c39b7559b58e30c1c980fea554c0b530e6a5b3442af3ae",
+    "communication/inverter_adapter.py": "dd397812b25cec277621f3da0a5e2c2eacce5566361d8b7795a4bbbe83cd0924",
+    "communication/inverter_control_adapter.py": "4012eeaa44b23598c26ea88fcbe8039b98057a9d1215ccef7747df49504d42b3",
+    "communication/inverter_profiles/catalog.json": "59f515d68a2c09bd049dc83939183047ed3d06aa5452cdfd342f94d98cc44da2",
+    "communication/inverter_profiles/deye_3x_lv_off_grid.json": "76eeac23f1321a7ce04aa894321a8519b3b7504ed1cb339d05182e78c77538be",
+    "communication/inverter_profiles/deye_50_hybrid_hv.json": "1e07cd50e9020924baea6e4994530d57aa2e736ddb59b8bee04665b0e1bf2a57",
+    "communication/inverter_profiles/foxess_h3_10_0_e.json": "dc1f4b0be975ca6f0369422caf552f4246291b57fe884a2fa7e95b497607a079",
+    "communication/inverter_profiles/goodwe_et.json": "a87a205aa6cabd4d19e1f6b737a82da2b40540b56bd5607b4a2f5a992ee3208c",
+    "communication/inverter_profiles/goodwe_et_15_30kw.json": "35ce7a5b99f4ff092a209847e260e600e7abf955b3b568b2dbe56b6e318cad3f",
+    "communication/inverter_profiles/solax_x3_hybrid_g4.json": "2e571117bbc0a1c455890388f618319b5417f3cf2bf548e1e51222179a811e38",
+    "communication/json_utils.py": "5e622e084388923234c044aec1a6199d67a545306649430734c1d8453dc3f8ac",
+    "communication/modbus_bus_lock.py": "a5b1e7366e816545e0e3eefbfb1c99c609f85271144d21727b54acbfff4da00c",
+    "communication/solax_ems_controller.py": "af3afcb244585aaf56c322f38cf2f644119f331832b8e24d4af2e8d770c97277",
+    "device_config.py": "28a39b57044a81b9d920bd5afe1344584e246ceee8f9afaac5b922b84e4995dc",
+    "heartbeat.py": "2b63d18618c5529d2a3ca25d9a488152777426821c6363d308f8de1cb94defa7",
+    "manual_battery_runtime.py": "9b42ff9fef6e489ee998cd5906a46dd79dc0bfab417322ca5c568041bca6a498",
+    "spot_battery_intent.py": "9614747ec7a5e246c9bff2c18527c741f75c2453251baeaacea813bdc0fdcc02",
+    "startup.py": "6c0072302d43a75da2f0091c9732ba455a9214b4be3ea2fc3b5395994e8411f4"
+  },
+  "rootfs_files": {
+    "etc/services.d/iqfanda/run": "14f3f2fbe262d2884bf40082a75876b25c300085995d69c4d3e67e4c670fe735"
+  },
+  "runtime_fingerprint": "e0faee6ae3e367f75c40590410c4b2d71cc021541cee0a20939aa6313f7e1c95",
+  "schema_version": 1
+}
