@@ -233,6 +233,16 @@ def build_communication_state() -> dict:
         }
 
 
+    # F54 R5: public capability contract for the read-only Rotek probe.
+    capabilities = communication_state.get("agent_capabilities")
+    if not isinstance(capabilities, dict):
+        capabilities = {}
+    else:
+        capabilities = dict(capabilities)
+
+    capabilities["generator_modbus_probe_v1"] = True
+    communication_state["agent_capabilities"] = capabilities
+
     # F30_04C_R6_REGISTERED_WIFI_RUNTIME: no discovery or registry writes.
     from wifi_runtime_telemetry import collect_registered_wifi_telemetry
     communication_state["wifi_telemetry"] = collect_registered_wifi_telemetry()
