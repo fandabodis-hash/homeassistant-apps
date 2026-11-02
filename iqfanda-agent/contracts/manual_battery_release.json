@@ -1,5 +1,5 @@
 {
-  "agent_version": "0.1.169",
+  "agent_version": "0.1.170",
   "change_history": [
     {
       "agent_version": "0.1.168",
@@ -42,6 +42,13 @@
       "revision": 6,
       "runtime_fingerprint": "4baabda610229bb7b0ac55f0990ef464b3db3deb86e7fed98fc3473929530f9c",
       "source_fingerprint": "1b5d950b208518f02d2058644b2a696abe90e0ff65bebc38f7b0667b504b085b"
+    },
+    {
+      "agent_version": "0.1.170",
+      "reason": "F54 R5: add read-only Rotek RTG3 telemetry capability for 00011 and bump Agent to 0.1.170; no battery control behavior change.",
+      "revision": 7,
+      "runtime_fingerprint": "aa5d2febdbf272246fe148787728e057146a2f86e57f8b1bd6b0fb00bce116de",
+      "source_fingerprint": "544a8bffb3fa0960ff303f3ec3cb809f6f9bb2cd53e0446541cfc6bf597a107e"
     }
   ],
   "feature": "local_manual_battery",
@@ -49,10 +56,10 @@
     ".github/workflows/manual-battery-release-guard.yml": "385b1d05f7da7a049e57ea4397f2260acf77f86a107aa6c3818e1d4ea3eabe3b",
     "iqfanda-agent/Dockerfile": "3807f87277deedde6d16cdd90814eb27f23eec4b25e06341a6a2a8e91e8ddc82",
     "iqfanda-agent/MANUAL_BATTERY_RELEASE.md": "0af74076c43d28bd5cb94e9f312f95fed2aebe6f7ce794de4ee5e80c34fdc65d",
-    "iqfanda-agent/config.yaml": "1d0f525b67562796f4b0c0cf1b6ec2fb94a7938787759c6d64638391631f9073",
-    "iqfanda-agent/rootfs/app/VERSION": "dd2f14cf5c5e716bee511fd4910378f2fba86f8533a4c09b69aedf32f533edad",
+    "iqfanda-agent/config.yaml": "93415fab63346cfc93532bdb21030c1a3d1859034a196c55630f9c85387b6491",
+    "iqfanda-agent/rootfs/app/VERSION": "85149f0773be06bf6bf8f3039f0179d23d94036f7f0077a34bb7ee55d3576628",
     "iqfanda-agent/rootfs/app/battery_control_canary.py": "27d4538b8388bd8ca065c26f1cab4fc9e26d026e603a338c3f79a4b667f07a9d",
-    "iqfanda-agent/rootfs/app/command_worker.py": "b87cb30128fb8bb5e371390a60511b53472b4c38f97aa9e3c75ff85eedb6e54f",
+    "iqfanda-agent/rootfs/app/command_worker.py": "f6ae5018dc3e3dcd2e286e375ed02a8aa4867711407b79089eaeafab1f782306",
     "iqfanda-agent/rootfs/app/communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
     "iqfanda-agent/rootfs/app/communication/battery_feature_guard.py": "fabdffe76209cce8e755bc30ae89135db049ba6eb54fa4f0433ca7875c4ad0bf",
     "iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py": "566a50d6e4afc945d07b9ac1b0bf550cb27fc1c5ac66d132a0ffef47afa1c2cd",
@@ -73,7 +80,7 @@
     "iqfanda-agent/rootfs/app/communication/solax_ems_controller.py": "af3afcb244585aaf56c322f38cf2f644119f331832b8e24d4af2e8d770c97277",
     "iqfanda-agent/rootfs/app/device_config.py": "28a39b57044a81b9d920bd5afe1344584e246ceee8f9afaac5b922b84e4995dc",
     "iqfanda-agent/rootfs/app/foxess_zero_remote_release.py": "d9dc930130857c190d19e10e61667c4c129ffd5149ffcd4a4541d9c16c1f4866",
-    "iqfanda-agent/rootfs/app/heartbeat.py": "2b63d18618c5529d2a3ca25d9a488152777426821c6363d308f8de1cb94defa7",
+    "iqfanda-agent/rootfs/app/heartbeat.py": "728adfbda449615a7dabc7976101d600a3d78b869cf08a1871e51d586ee8c5dc",
     "iqfanda-agent/rootfs/app/manual_battery_runtime.py": "9b42ff9fef6e489ee998cd5906a46dd79dc0bfab417322ca5c568041bca6a498",
     "iqfanda-agent/rootfs/app/spot_battery_intent.py": "9614747ec7a5e246c9bff2c18527c741f75c2453251baeaacea813bdc0fdcc02",
     "iqfanda-agent/rootfs/app/startup.py": "6c0072302d43a75da2f0091c9732ba455a9214b4be3ea2fc3b5395994e8411f4",
@@ -163,7 +170,7 @@
       "unavailable_reason": null
     }
   },
-  "runtime_fingerprint": "4baabda610229bb7b0ac55f0990ef464b3db3deb86e7fed98fc3473929530f9c",
+  "runtime_fingerprint": "aa5d2febdbf272246fe148787728e057146a2f86e57f8b1bd6b0fb00bce116de",
   "schema_version": 1,
-  "source_fingerprint": "1b5d950b208518f02d2058644b2a696abe90e0ff65bebc38f7b0667b504b085b"
+  "source_fingerprint": "544a8bffb3fa0960ff303f3ec3cb809f6f9bb2cd53e0446541cfc6bf597a107e"
 }
