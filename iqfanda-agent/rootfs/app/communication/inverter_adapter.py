@@ -1094,10 +1094,18 @@ def decode_profile_entities(
             ]
         )
 
-        value = decode_register_value(
-            registers=registers,
-            definition=definition,
-        )
+        # F43: only a diagnostic entity explicitly marked optional
+        # may be skipped when a non-required Modbus read is unsupported.
+        # All existing mandatory entities retain fail-closed semantics.
+        try:
+            value = decode_register_value(
+                registers=registers,
+                definition=definition,
+            )
+        except KeyError:
+            if definition.get("optional") is True:
+                continue
+            raise
 
         values_by_key[
             key
