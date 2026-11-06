@@ -42,7 +42,7 @@ class ReadOnlyPreflight(unittest.TestCase):
                  patch.object(r,'atomic_json',forbidden),patch.object(r,'install',forbidden),
                  patch.object(ha,'get_entity_device_id',registry),patch.object(ha,'get_entity_state',state),
                  patch.object(p.platform,'machine',lambda:'aarch64'),
-                 patch.object(Path,'read_text',lambda *a,**kw:'0.1.171\n')]
+                 patch.object(Path,'read_text',lambda *a,**kw:'0.1.172\n')]
         for x in patches:x.start();self.addCleanup(x.stop)
     def inspect(self):
         result=p.inspect(identity=self.ident,payload=self.payload)
