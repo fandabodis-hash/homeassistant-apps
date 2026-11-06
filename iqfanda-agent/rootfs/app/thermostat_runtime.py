@@ -119,6 +119,54 @@ def load_reservations():
     OWNERS.update(rows)
 
 
+def _active_commission_marker(*, selected, uid, revision, contracts):
+    p = ROOT / 'commission.json'
+    if not p.exists():
+        raise ContractError('active mode requires explicit F55 R6 commissioning marker')
+    doc = read_json(p)
+    expected_targets = sorted(str(x) for x in selected)
+    expected_outputs = sorted(o['reference'] for c in contracts for o in c['outputs'])
+    if (doc.get('schema_version') != 1 or doc.get('device_uuid') != uid
+            or sorted(str(x) for x in (doc.get('target_ids') or [])) != expected_targets
+            or doc.get('config_version') != revision
+            or sorted(str(x) for x in (doc.get('outputs') or [])) != expected_outputs):
+        raise ContractError('commission marker does not match active local contract')
+    if doc.get('phase') not in ('commission_pending_restart', 'active'):
+        raise ContractError('commission marker phase invalid')
+    return doc
+
+
+def _complete_handback_if_requested(zm, mode):
+    p = ROOT / 'handback.json'
+    if not p.exists():
+        return False
+    try:
+        doc = read_json(p)
+        if mode != 'disabled' or doc.get('schema_version') != 1:
+            raise ContractError('handback marker requires disabled mode')
+        if doc.get('device_uuid') != identity()['device_uuid']:
+            raise ContractError('handback marker belongs to another device')
+        expected = sorted(str(x) for x in (doc.get('outputs') or []))
+        if expected != sorted(OWNERS):
+            raise ContractError('handback output set does not match ownership')
+        for ref, owner in list(OWNERS.items()):
+            if zm.get_entity_device_id(entity_id=ref) != owner.get('device_reg_id'):
+                raise ContractError('handback registry identity changed: ' + ref)
+            if (zm.get_entity_state(ref) or {}).get('state') != 'off':
+                raise ContractError('handback requires verified OFF: ' + ref)
+        OWNERS.clear()
+        for stale in (ROOT / 'ownership.json', ROOT / 'commission.json', ROOT / 'handback.json'):
+            stale.unlink(missing_ok=True)
+        STATUS.update(mode='disabled', physical_control_active=False, cloud_fence=False,
+                      owner_outputs=[], reason='explicit_handback_completed')
+        return True
+    except Exception as exc:
+        STATUS.update(mode='disabled', physical_control_active=False, cloud_fence=True,
+                      owner_outputs=sorted(OWNERS), reason='handback_pending_fail_closed',
+                      errors=[str(exc)])
+        return False
+
+
 def request_guard(original):
     @wraps(original)
     def guarded(*, path, method='GET', payload=None):
@@ -169,13 +217,28 @@ def install():
     import heartbeat as hb
     import telemetrie_modulu as tm
     with LOCK:
-        # A corrupted prior claim must abort startup, not silently restore cloud authority.
+        # A corrupted prior claim must never silently restore cloud authority.
         load_reservations()
         mode, selected, _ = options()
+        if mode == 'disabled' and (ROOT / 'handback.json').exists():
+            _complete_handback_if_requested(zm, mode)
         BOOT_MODE = mode
         if mode == 'active':
-            contracts, uid, _ = cached_contracts(selected)
+            contracts, uid, revision = cached_contracts(selected)
+            marker = _active_commission_marker(
+                selected=selected, uid=uid, revision=revision, contracts=contracts)
             reserve(contracts, uid)
+            marker = dict(marker)
+            marker['phase'] = 'active'
+            marker['activated_at'] = datetime.now(timezone.utc).isoformat()
+            atomic_json(ROOT / 'commission.json', marker)
+            STATUS.update(cloud_fence=True, owner_outputs=sorted(OWNERS),
+                          selected_targets=sorted(str(x) for x in selected),
+                          config_version=revision)
+        elif OWNERS:
+            STATUS.update(cloud_fence=True, owner_outputs=sorted(OWNERS))
+        else:
+            STATUS.update(cloud_fence=False, owner_outputs=[])
         zm.home_assistant_request = request_guard(zm.home_assistant_request)
         previous_heartbeat = hb.build_communication_state
         @wraps(previous_heartbeat)
@@ -193,6 +256,8 @@ def install():
         tm.nacti_fve_telemetrii = inverter_reader
         INSTALLED = True
         STATUS['mode'] = mode
+        STATUS['owner_outputs'] = sorted(OWNERS)
+        STATUS['selected_targets'] = sorted(str(x) for x in selected)
 
 
 def sensor_value(state, max_age, now):
@@ -270,7 +335,10 @@ def tick():
     with LOCK:
         now, mono = datetime.now(timezone.utc), time.monotonic()
         mode, selected, max_age = options()
-        STATUS.update(mode=mode, evaluated_at=now.isoformat(), targets=[])
+        STATUS.update(mode=mode, evaluated_at=now.isoformat(), targets=[],
+                      owner_outputs=sorted(OWNERS),
+                      selected_targets=sorted(str(x) for x in selected),
+                      cloud_fence=bool(OWNERS))
         if mode in ('disabled', 'shadow') and OWNERS:
             off_reserved('owner_retained_pending_explicit_handback')
             return
