@@ -61,8 +61,8 @@ jobs:
           {
             echo "### F55 R6 native ARM64"
             echo
-            echo "Source commit: `$SOURCE_SHA`"
-            echo "Image: `$(cat F55_R6_IMAGE_ID.txt)`"
+            printf 'Source commit: %s\n' "$SOURCE_SHA"
+            printf 'Image: %s\n' "$(cat F55_R6_IMAGE_ID.txt)"
             echo
             echo '~~~'
             tail -n 8 F55_R6_NATIVE_ARM64_TESTS.txt
