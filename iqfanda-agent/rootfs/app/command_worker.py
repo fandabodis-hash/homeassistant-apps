@@ -4024,7 +4024,31 @@ def execute_command(
         )
         return
 
-    # F55_R4: diagnostic only. Does not arm, restart, or operate any output.
+    # F55 R6: once commission begins, legacy/cloud writes to the same verified
+    # thermostat output are rejected before any local intent/service path.
+    import thermostat_commission as f55_commission
+    if f55_commission.command_is_fenced(command_type, command_payload):
+        submit_command_result(
+            identity=identity, command_id=command_id, status="failed",
+            result={"worker":"command_worker","phase":"local_thermostat_owns_output",
+                    "actuation":False,"reason":"f55_r6_local_single_writer"},
+            error_message="F55 local thermostat owns this output; cloud actuation is fenced.",
+        )
+        return
+
+    if command_type == "local_thermostat_commission_v1":
+        f55_commission.execute_commission(
+            identity=identity, command_id=command_id,
+            command_payload=command_payload, submit_result=submit_command_result)
+        return
+
+    if command_type == "local_thermostat_handback_v1":
+        f55_commission.execute_handback(
+            identity=identity, command_id=command_id,
+            command_payload=command_payload, submit_result=submit_command_result)
+        return
+
+    # F55 read-only field preflight.
     if command_type == "local_thermostat_preflight_v1":
         from thermostat_preflight import execute as f55_read_only_preflight
         f55_read_only_preflight(identity=identity, command_id=command_id,
