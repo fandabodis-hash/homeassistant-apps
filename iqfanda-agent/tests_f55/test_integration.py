@@ -100,8 +100,17 @@ class FullRuntime(unittest.TestCase):
         self.reader_calls+=1
         return ({},[{'entity_key':'baterie.soc','quality':'good','value':12}], 'fixture','universal')
 
+    def arm_commission(self):
+        contract=e.compile_targets(self.cloud,self.ident,[TID])[0]
+        r.atomic_json(r.ROOT/'commission.json',{
+            'schema_version':1,'phase':'commission_pending_restart',
+            'version':'0.1.172','device_uuid':self.ident['device_uuid'],
+            'target_ids':[TID],'config_version':self.cloud['config_version'],
+            'outputs':[o['reference'] for o in contract['outputs']],
+            'contract_sha256':{},'created_at':NOW.isoformat()})
+
     def start_active(self):
-        self.mode='active';self.selected=[TID];r.install();r.tick()
+        self.mode='active';self.selected=[TID];self.arm_commission();r.install();r.tick()
 
     def heat(self):
         self.start_active();self.mono=301;r.tick()
@@ -122,8 +131,14 @@ class FullRuntime(unittest.TestCase):
         self.assertTrue(r.snapshot()['targets'][0]['desired_on'])
         self.assertFalse(r.snapshot()['targets'][0]['actuation_verified'])
 
+    def test_active_without_commission_marker_is_rejected(self):
+        self.mode='active';self.selected=[TID]
+        with self.assertRaises(e.ContractError):
+            r.install()
+        self.assertFalse(r.OWNERS)
+
     def test_claim_is_durable_before_first_service(self):
-        self.mode='active';self.selected=[TID];r.install()
+        self.mode='active';self.selected=[TID];self.arm_commission();r.install()
         doc=json.loads((r.ROOT/'ownership.json').read_text())
         self.assertEqual(doc['outputs'],r.OWNERS);self.assertFalse(self.writes)
 
