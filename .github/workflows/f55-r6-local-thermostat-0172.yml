@@ -1,0 +1,70 @@
+name: F55 R6 native ARM64 controlled handover 0.1.172
+on:
+  push:
+    branches: ['f55-local-thermostat-0172-r6']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f55-r6-native-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native-arm64:
+    if: github.repository == 'fandabodis-hash/homeassistant-apps' && github.ref_name == 'f55-local-thermostat-0172-r6'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert candidate metadata
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = aarch64
+          test "$(cat iqfanda-agent/rootfs/app/VERSION)" = "0.1.172"
+          grep -F 'version: "0.1.172"' iqfanda-agent/config.yaml
+          grep -F 'stage: "experimental"' iqfanda-agent/config.yaml
+          test -f iqfanda-agent/rootfs/app/thermostat_commission.py
+          python3 -m py_compile             iqfanda-agent/rootfs/app/thermostat_engine.py             iqfanda-agent/rootfs/app/thermostat_runtime.py             iqfanda-agent/rootfs/app/thermostat_preflight.py             iqfanda-agent/rootfs/app/thermostat_commission.py             iqfanda-agent/rootfs/app/command_worker.py             iqfanda-agent/rootfs/app/startup.py
+
+      - name: Record exact source hashes
+        run: |
+          set -euo pipefail
+          sha256sum             iqfanda-agent/rootfs/app/thermostat_engine.py             iqfanda-agent/rootfs/app/thermostat_runtime.py             iqfanda-agent/rootfs/app/thermostat_preflight.py             iqfanda-agent/rootfs/app/thermostat_commission.py             iqfanda-agent/rootfs/app/command_worker.py             iqfanda-agent/rootfs/app/startup.py             iqfanda-agent/tests_f55/test_thermostat.py             iqfanda-agent/tests_f55/test_integration.py             iqfanda-agent/tests_f55/test_preflight.py             iqfanda-agent/tests_f55/test_preflight_adapter.py             iqfanda-agent/tests_f55/test_commission.py             > F55_R6_SOURCE_SHA256.txt
+          cat F55_R6_SOURCE_SHA256.txt
+
+      - name: Build native ARM64 candidate
+        run: |
+          set -euo pipefail
+          cd iqfanda-agent
+          cp Dockerfile Dockerfile.f55-r6-ci
+          printf '\nCOPY tests_f55/ /opt/f55qa/\n' >> Dockerfile.f55-r6-ci
+          docker build --platform linux/arm64 -f Dockerfile.f55-r6-ci -t f55-r6-native-arm64:0172 .
+          test "$(docker image inspect -f '{{.Architecture}}' f55-r6-native-arm64:0172)" = arm64
+          docker image inspect f55-r6-native-arm64:0172 --format '{{.Id}}' > ../F55_R6_IMAGE_ID.txt
+
+      - name: Run native addon tests without network or hardware
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --read-only --user 0:0 --cap-drop ALL             --security-opt no-new-privileges --pids-limit 128 --cpus 1             --memory 512m --memory-swap 512m --no-healthcheck             --tmpfs /tmp:rw,nosuid,nodev,mode=1777,size=96m             --tmpfs /config:rw,nosuid,nodev,mode=1777,size=16m             --tmpfs /data:rw,nosuid,nodev,mode=1777,size=16m             -e SUPERVISOR_TOKEN= -e PYTHONDONTWRITEBYTECODE=1             --entrypoint python3 f55-r6-native-arm64:0172             -B -u /opt/f55qa/addon_runner.py 2>&1 | tee F55_R6_NATIVE_ARM64_TESTS.txt
+          grep -F 'F55_R4_ADDON_QA_PASS=YES' F55_R6_NATIVE_ARM64_TESTS.txt
+          grep -F '"commission_tests": 8' F55_R6_NATIVE_ARM64_TESTS.txt
+          grep -F '"failures": 0' F55_R6_NATIVE_ARM64_TESTS.txt
+          grep -F '"errors": 0' F55_R6_NATIVE_ARM64_TESTS.txt
+          grep -F '"network_attempts": []' F55_R6_NATIVE_ARM64_TESTS.txt
+
+      - name: Summarize
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          {
+            echo "### F55 R6 native ARM64"
+            echo
+            echo "Source commit: `$SOURCE_SHA`"
+            echo "Image: `$(cat F55_R6_IMAGE_ID.txt)`"
+            echo
+            echo '~~~'
+            tail -n 8 F55_R6_NATIVE_ARM64_TESTS.txt
+            echo '~~~'
+          } >> "$GITHUB_STEP_SUMMARY"
