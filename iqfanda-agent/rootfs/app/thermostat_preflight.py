@@ -11,7 +11,7 @@ from pathlib import Path
 import platform
 import uuid
 
-VERSION = '0.1.171'
+VERSION = '0.1.172'
 COMMAND = 'local_thermostat_preflight_v1'
 
 class PreflightError(ValueError):
