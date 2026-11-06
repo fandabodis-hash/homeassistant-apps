@@ -1,0 +1,44 @@
+TNG IQ FANDA - LOCAL THERMOSTAT / F55 R2 / candidate 0.1.171
+STATUS: CANDIDATE, NOT PUBLISHED, NOT INSTALLED, NOT A CONFIRMED FIELD REPAIR
+
+Architecture:
+- Thermostat decisions run inside the Agent using local Home Assistant data.
+- The cloud supplies configuration and receives monitoring, not cyclic relay decisions.
+- The locally persisted cloud-config.json remains usable during WAN loss.
+- Configured targets and persistent relay ownership are device-scoped.
+- Main code has only service registration; engine/runtime are separate files.
+
+Implemented candidate:
+- Verified generic_load room thermostat using its existing weekly program.
+- Temperature hysteresis, timezone/week/DST, per-target SOC boost thresholds.
+- Normal heating independent of missing/low battery SOC.
+- 300-second minimum OFF and existing confirmation delay.
+- 1-3 individually verified relay outputs, feedback and rollback of partial ON.
+- Local registry identity validation before every actuation.
+- Atomic persistent owner claims; cloud/legacy direct switch requests blocked.
+- On process restart, OFF is verified and a new monotonic OFF timer is started.
+- A supervised local thread and heartbeat monitoring.
+- Default disabled; explicit mode and target selection are required.
+
+Not yet commissioned / NOT claimed as complete:
+- Native full-addon build/import integration on actual HA/ARM64.
+- Physical preflight and takeover of 00014.
+- Independent physical safety interlocks beyond the configured room-temperature limit.
+- Complete interception of every possible direct Zigbee/group actuation path.
+- Controlled handback/rebinding, remote commissioning API and cloud queue suppression.
+- UI distinction between saved weekly configuration and actual local runtime state.
+- Field WAN-loss/restart validation, all-installation rollout.
+- Adapter migration for coupled heating controllers such as 00012 and 00013.
+- Constant-mode profiles that are not represented by the verified weekly generic target.
+
+Do NOT publish this candidate as a finished stable version, enable it on a live
+installation, or update the whole fleet based only on its unit tests.
+The preparation script cannot install, activate, write the database, push Git,
+restart containers, or send device commands. It stages files in the user's
+.tngiqfanda-kandidati directory and writes the test/manifest outputs there.
+
+Release gate:
+Native integration -> local preflight 00014 -> single-owner handover -> feedback
+and WAN-loss/restart test -> rollback/handback verification -> publish common
+release -> staged installation rollout. Protected coupled controllers require
+their own compatible thermostat adapter, not automatic generic-relay takeover.

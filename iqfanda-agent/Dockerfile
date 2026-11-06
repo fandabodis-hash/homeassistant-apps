@@ -1,4 +1,4 @@
-FROM ghcr.io/home-assistant/base:latest
+FROM ghcr.io/home-assistant/base@sha256:880016115f356afc814398e17ba68a7ee66dfc1b4eaef09755ea2c9fa18ea481
 
 RUN apk add --no-cache \
     bash \

@@ -1,0 +1,78 @@
+name: F55 R5 native ARM64 exact candidate
+on:
+  push:
+    branches: ['f55-local-thermostat-0171-r5-0645fc726dd0']
+permissions:
+  contents: read
+concurrency:
+  group: f55-r5-native-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  native-arm64:
+    if: github.repository == 'fandabodis-hash/homeassistant-apps' && github.ref_name == 'f55-local-thermostat-0171-r5-0645fc726dd0'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - name: Fetch exact candidate commit
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(uname -m)" = aarch64
+          git init source
+          git -C source remote add origin https://github.com/fandabodis-hash/homeassistant-apps.git
+          git -C source fetch --depth 1 origin "$SOURCE_SHA"
+          git -C source checkout --detach FETCH_HEAD
+          test "$(git -C source rev-parse HEAD)" = "$SOURCE_SHA"
+      - name: Verify exact R4R1 addon bytes
+        run: |
+          set -euo pipefail
+          cd source
+          python3 .github/f55-r5/verify.py sources
+      - name: Build native ARM64 candidate
+        run: |
+          set -euo pipefail
+          cd source/iqfanda-agent
+          cp Dockerfile Dockerfile.f55-ci
+          printf '\nCOPY tests_f55/ /opt/f55qa/\nCOPY f55-r5-source-manifest.json /opt/f55qa/source-manifest.json\n' >> Dockerfile.f55-ci
+          docker build --platform linux/arm64 -f Dockerfile.f55-ci -t f55-r5-native-arm64:candidate .
+          test "$(docker image inspect -f '{{.Architecture}}' f55-r5-native-arm64:candidate)" = arm64
+          docker image inspect f55-r5-native-arm64:candidate --format '{{.Id}}' > ../F55_R5_IMAGE_ID.txt
+      - name: Run 125 native ARM64 tests without network or hardware
+        run: |
+          set -euo pipefail
+          cd source
+          docker run --rm --network none --read-only --user 0:0 --cap-drop ALL \
+            --security-opt no-new-privileges --pids-limit 128 --cpus 1 \
+            --memory 512m --memory-swap 512m --no-healthcheck \
+            --tmpfs /tmp:rw,nosuid,nodev,mode=1777,size=96m \
+            --tmpfs /config:rw,nosuid,nodev,mode=1777,size=16m \
+            --tmpfs /data:rw,nosuid,nodev,mode=1777,size=16m \
+            -e SUPERVISOR_TOKEN= -e PYTHONDONTWRITEBYTECODE=1 \
+            --entrypoint python3 f55-r5-native-arm64:candidate -B -u -c '
+          import hashlib,json,pathlib,platform,runpy
+          assert platform.machine().lower() in ("aarch64","arm64"), "not_native_arm64"
+          m=json.loads(pathlib.Path("/opt/f55qa/source-manifest.json").read_text())
+          n=0
+          for rel,pin in m["files"].items():
+              if rel.startswith("rootfs/app/"):
+                  p=pathlib.Path("/app")/rel[len("rootfs/app/"):]
+              elif rel.startswith("tests_f55/"):
+                  p=pathlib.Path("/opt/f55qa")/rel[len("tests_f55/"):]
+              else:
+                  continue
+              assert hashlib.sha256(p.read_bytes()).hexdigest()==pin, "image_source_mismatch:"+rel
+              n+=1
+          print("F55_R5_NATIVE_RUNTIME="+json.dumps({"architecture":platform.machine(),"verified_image_files":n,"source_manifest_sha256":hashlib.sha256(pathlib.Path("/opt/f55qa/source-manifest.json").read_bytes()).hexdigest()}),flush=True)
+          runpy.run_path("/opt/f55qa/addon_runner.py",run_name="__main__")
+          ' 2>&1 | tee F55_R5_NATIVE_ARM64_TESTS.txt
+      - name: Verify native evidence and unchanged application
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd source
+          python3 .github/f55-r5/verify.py result F55_R5_NATIVE_ARM64_TESTS.txt
+          python3 .github/f55-r5/verify.py sources
+          printf '\nSource commit: `%s`\nImage: `%s`\n' "$SOURCE_SHA" "$(cat F55_R5_IMAGE_ID.txt)" >> "$GITHUB_STEP_SUMMARY"

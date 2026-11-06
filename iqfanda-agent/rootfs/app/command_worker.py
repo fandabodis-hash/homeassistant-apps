@@ -4024,6 +4024,13 @@ def execute_command(
         )
         return
 
+    # F55_R4: diagnostic only. Does not arm, restart, or operate any output.
+    if command_type == "local_thermostat_preflight_v1":
+        from thermostat_preflight import execute as f55_read_only_preflight
+        f55_read_only_preflight(identity=identity, command_id=command_id,
+            command_payload=command_payload, submit_result=submit_command_result)
+        return
+
     # F52 Reset OS: generic, single-device, Supervisor Core restart only.
     if command_type == "reset_os":
         from reset_os import execute_reset_os

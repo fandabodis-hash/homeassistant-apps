@@ -5,6 +5,7 @@ import threading
 import time
 
 from command_worker import main as command_worker_main
+from thermostat_runtime import install as f55_thermostat_install, run_forever as f55_thermostat_main
 from manual_battery_runtime import main as local_battery_runtime_main
 from communication.communication_manager import main as communication_manager_main
 from device_config import main as device_config_main
@@ -312,6 +313,8 @@ def main() -> None:
     """Spusti lokalni API a po registraci cloudove sluzby."""
 
     logging.info("IQ FANDA Agent Core spusten.")
+    # F55: claim/guard initialization precedes every legacy worker.
+    f55_thermostat_install()
 
     zarizeni_bylo_nainstalovane_pri_startu = (
         DEVICE_CONFIG_PATH.exists()
@@ -429,6 +432,11 @@ def main() -> None:
         nazev="f47-00013-local-mixing",
     )
 
+    local_thermostat_thread = vytvorit_vlakno(
+        cil=f55_thermostat_main, nazev="local-thermostat-runtime",
+    )
+    local_thermostat_thread.start()
+
     device_config_thread.start()
     heartbeat_thread.start()
     local_battery_thread.start()
@@ -448,6 +456,7 @@ def main() -> None:
             "heartbeat": heartbeat_thread,
             "command-worker": command_worker_thread,
             "local-battery-runtime": local_battery_thread,
+            "local-thermostat-runtime": local_thermostat_thread,
             "usb-inventory": usb_inventory_thread,
             "communication-manager": communication_manager_thread,
             "module-telemetry": module_telemetry_thread,

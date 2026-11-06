@@ -1,6 +1,6 @@
 name: "TNG IQ FANDA Agent"
-version: "0.1.169"
-stage: "stable"
+version: "0.1.171"
+stage: "experimental"
 slug: "tng_iq_fanda_agent"
 description: "Lokální runtime a cloudová komunikace TNG IQ FANDA"
 url: "https://github.com/fandabodis-hash/homeassistant-apps"
@@ -46,6 +46,9 @@ map:
     read_only: false
 
 options:
+  local_thermostat_mode: "disabled"
+  local_thermostat_targets: []
+  local_thermostat_sensor_max_age_seconds: 1800
   api_base_url: "https://api.tngiqfanda.cz"
   provisioning_enabled: true
   provisioning_id: ""
@@ -63,10 +66,14 @@ options:
   device_model: "IQ FANDA PI5"
   hardware_revision: "Raspberry Pi 5"
   device_hostname: "iqfanda"
-  software_version: "0.1.169"
+  software_version: "0.1.171"
   log_level: "INFO"
 
 schema:
+  local_thermostat_mode: list(disabled|shadow|active)
+  local_thermostat_targets:
+    - str
+  local_thermostat_sensor_max_age_seconds: int(180,7200)
   api_base_url: str
   provisioning_enabled: bool
   provisioning_id: str?
