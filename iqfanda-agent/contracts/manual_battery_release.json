@@ -56,11 +56,18 @@
       "revision": 8,
       "runtime_fingerprint": "053c3cb61ff4144671afbf4c1511b0323434847aa4e63f0c3ae923fd990a7cec",
       "source_fingerprint": "c93eb2f6b10e7e6c6cb3adcc1f25396bee0e0fc8b58f562a3b82656c8f4b3a69"
+    },
+    {
+      "agent_version": "0.1.175",
+      "reason": "F58 0.1.175: explicitly align FoxESS test expectations to the byte-identical physically verified Vaculik 00018 driver; all unrelated source remains 0.1.171 baseline",
+      "revision": 9,
+      "runtime_fingerprint": "053c3cb61ff4144671afbf4c1511b0323434847aa4e63f0c3ae923fd990a7cec",
+      "source_fingerprint": "95d6d0a00d8bd21e3d914562f9aacbccfa85effd9e42a688274ac0aac4a1a2cf"
     }
   ],
   "feature": "local_manual_battery",
   "files": {
-    ".github/workflows/f58-foxess-only-175.yml": "2a0e3ad341275c065b547badf022bd628e7999635e691ae8bf527cb59b82639e",
+    ".github/workflows/f58-foxess-only-175.yml": "6d0443be3c4529a17d6f7db2bce41dfd64fc0b080cde9ce6877ffbbacfb59f5d",
     ".github/workflows/manual-battery-release-guard.yml": "385b1d05f7da7a049e57ea4397f2260acf77f86a107aa6c3818e1d4ea3eabe3b",
     "iqfanda-agent/Dockerfile": "3807f87277deedde6d16cdd90814eb27f23eec4b25e06341a6a2a8e91e8ddc82",
     "iqfanda-agent/MANUAL_BATTERY_RELEASE.md": "0af74076c43d28bd5cb94e9f312f95fed2aebe6f7ce794de4ee5e80c34fdc65d",
@@ -104,7 +111,7 @@
     "iqfanda-agent/scripts/read_addon_update_preflight.py": "d438856132db05b26ef01f3ec098c2d44ca5694c4f3d58e265a1c01cc6e17d98",
     "iqfanda-agent/tests/test_battery_control_canary.py": "3e569c56dd20213aeab738c9596e4ebf159d05658b420a3e8884c5222e2f5c82",
     "iqfanda-agent/tests/test_f58_foxess_only_175.py": "740dff4aa8d33fcf3db5ddf79dfdd72f1ca01f5ca1e5be31886432d7393a320e",
-    "iqfanda-agent/tests/test_foxess_battery_control.py": "00a94debf9074dc6b3a0363c2cab097e899318b2a7b5c313f8197a8be65fc2df",
+    "iqfanda-agent/tests/test_foxess_battery_control.py": "d151fedf33527b8bac67430b4de9d7c997f010463da3c91ffb9f49947a69ed0c",
     "iqfanda-agent/tests/test_foxess_remote_control_probe.py": "e2c5ff2f61f87581f805642b6c8f5de106f47e2a404063169d2ba9c0b43e928e",
     "iqfanda-agent/tests/test_foxess_zero_remote_release.py": "09a5e06213d97a1933b4f792dd51725d0562d6824e68b126e7a468e3974b913e",
     "iqfanda-agent/tests/test_manual_battery_energy_context.py": "5a33eed43935d3c921ddcb66c73b38c5fe8263544a0e1808e27c0d350fe9b3de",
@@ -182,5 +189,5 @@
   },
   "runtime_fingerprint": "053c3cb61ff4144671afbf4c1511b0323434847aa4e63f0c3ae923fd990a7cec",
   "schema_version": 1,
-  "source_fingerprint": "c93eb2f6b10e7e6c6cb3adcc1f25396bee0e0fc8b58f562a3b82656c8f4b3a69"
+  "source_fingerprint": "95d6d0a00d8bd21e3d914562f9aacbccfa85effd9e42a688274ac0aac4a1a2cf"
 }
