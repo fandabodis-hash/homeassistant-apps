@@ -32,6 +32,7 @@ REQUIRED_FILES = {
     "communication/goodwe_probe.py", "communication/inverter_profiles/catalog.json",
     "communication/foxess_ems_controller.py",
     "communication/foxess_remote_control_probe.py",
+    "communication/foxess_175_00007_commissioning.py",
     "communication/goodwe_ems_controller.py",
     "communication/solax_ems_controller.py",
     "communication/modbus_bus_lock.py",
@@ -74,6 +75,7 @@ def _file(root: Path, relative: str) -> Path:
 # VERSION alone is not proof of a change in physical charge/discharge behavior.
 FOXESS_CERTIFIED_CODE = {
     "communication/foxess_ems_controller.py",
+    "communication/foxess_175_00007_commissioning.py",
     "communication/battery_feature_guard.py",
     "communication/battery_control_safety.py",
     "communication/inverter_control_adapter.py",
