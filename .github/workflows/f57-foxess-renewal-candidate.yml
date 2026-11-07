@@ -53,7 +53,7 @@ jobs:
               # Only FoxESS 0.1.175 intentionally supersedes the experimental
               # F57 throttle by restoring Vaculik's physically verified bytes.
               # Other versions must keep passing the original F57 contract.
-              blob=hashlib.sha1(b"blob "+str(len(raw)).encode()+b"\\0"+raw).hexdigest()
+              blob=hashlib.sha1(b"blob "+str(len(raw)).encode()+b"\0"+raw).hexdigest()
               assert blob == "680f9c89221dc9fc20d0408bf28c8637a367c7c5",blob
               assert "_restore_auto" in src
               assert "REMOTE_POWER_REFRESH_SECONDS = 60" not in src
