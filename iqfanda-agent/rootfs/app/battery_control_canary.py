@@ -16,6 +16,7 @@ from typing import Any
 from agent_updater import read_installed_agent_version
 from communication import foxess_ems_controller as driver
 from communication.inverter_adapter import select_inverter_profile
+from local_modules.foxess_commissioning_grid_guard import LocalGridImportGuard, GridGuardUnavailable
 
 
 PROFILE_ID = "foxess_h3_10_0_e"
@@ -125,10 +126,17 @@ def _require_soc(current: dict[str, int]) -> None:
         raise CanaryFailure("invalid_maximum_soc", "The inverter maximum SOC is outside its valid range.")
 
 
-def _phase(client: Any, action: str, evidence: dict[str, Any]) -> None:
+def _phase(client: Any, action: str, evidence: dict[str, Any], *, grid_guard: Any) -> None:
     evidence.update(action=action, status="failed", samples=[], consecutive_matching_samples=0)
     setpoint = POWER_W if action == "discharge_grid" else -POWER_W
     evidence["requested_setpoint_w"] = setpoint
+    if action == "discharge_grid":
+        # Independently verified local meter + zero-export hardware limiter.
+        # No cloud telemetry, estimated consumption or stale smart-meter data.
+        try:
+            evidence["grid_import_before_w"] = grid_guard.check_before_discharge()
+        except GridGuardUnavailable as exc:
+            raise CanaryFailure("grid_import_preflight_failed", str(exc)) from exc
     evidence["driver_result"] = _apply(client, action)
     started = time.monotonic()
     deadline = started + PHASE_TIMEOUT_SECONDS
@@ -141,9 +149,16 @@ def _phase(client: Any, action: str, evidence: dict[str, Any]) -> None:
         if remaining <= 0:
             break
         time.sleep(min(SAMPLE_INTERVAL_SECONDS, remaining))
+        if action == "discharge_grid":
+            try:
+                grid_import = grid_guard.check_during_discharge()
+            except GridGuardUnavailable as exc:
+                raise CanaryFailure("grid_import_during_discharge_failed", str(exc)) from exc
         current = _snapshot(client)
         elapsed = time.monotonic() - started
         sample = {"elapsed_seconds": round(elapsed, 3), "registers": current}
+        if action == "discharge_grid":
+            sample["grid_import_w"] = grid_import
         evidence["samples"].append(sample)
         _require_soc(current)
         if action == "charge_grid" and current["battery_soc_percent"] >= min(
@@ -163,7 +178,8 @@ def _phase(client: Any, action: str, evidence: dict[str, Any]) -> None:
     raise CanaryFailure("physical_power_not_confirmed", "Three consecutive independent battery-power samples did not confirm the requested direction and tolerance within 60 seconds.")
 
 
-def run_foxess_battery_canary(*, cloud_config: dict, command_id: str) -> dict[str, Any]:
+def run_foxess_battery_canary(*, cloud_config: dict, command_id: str,
+                              export_guard: Any | None = None) -> dict[str, Any]:
     """Return complete evidence on success or failure, including AUTO cleanup.
 
     Invoke through the local runtime's exclusive, persistent canary wrapper.
@@ -205,6 +221,13 @@ def run_foxess_battery_canary(*, cloud_config: dict, command_id: str) -> dict[st
         profile = select_inverter_profile(manufacturer=manufacturer, model=model)
         if profile.get("profile_id") != PROFILE_ID:
             raise CanaryFailure("unsupported_profile", "The local profile does not match the FoxESS H3-10.0-E canary.")
+        # Installation-specific source is local HA, never a cloud request or
+        # a writable parameter from DeviceCommand. Missing proof denies the test.
+        if export_guard is None:
+            try:
+                export_guard = LocalGridImportGuard()
+            except GridGuardUnavailable as exc:
+                raise CanaryFailure("independent_grid_meter_missing", str(exc)) from exc
         _communicator, serial_path = driver._find_communicator(str(runtime["communicator_id"]).strip())
         with driver.ziskej_zamek_modbus_sbernice(serial_path):
             client = driver.ModbusSerialClient(port=serial_path, baudrate=9600, bytesize=8,
@@ -246,7 +269,7 @@ def run_foxess_battery_canary(*, cloud_config: dict, command_id: str) -> dict[st
                     phase = action
                     evidence: dict[str, Any] = {}
                     result["phases"].append(evidence)
-                    _phase(client, action, evidence)
+                    _phase(client, action, evidence, grid_guard=export_guard)
                     if action == "discharge_grid":
                         phase = "between_phases_auto"
                         result["between_phases_auto"] = _auto(client, original)
