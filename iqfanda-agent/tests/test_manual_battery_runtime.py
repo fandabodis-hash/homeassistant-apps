@@ -154,6 +154,61 @@ class LocalRuntimeTests(unittest.TestCase):
         self.submit()
         self.assertEqual(self.runtime.status()["state"], "active")
 
+    def test_f58_background_auto_after_explicit_stop_does_not_reblock_same_power(self):
+        """Regression: old 0.1.171 re-latched same request after next Spot AUTO."""
+        self.submit("discharge_grid")
+        self.submit("auto")
+        self.assertEqual(self.runtime.status()["state"], "stopped")
+        self.assertEqual(self.runtime._load().get("blocked_signature"), None)
+        self.submit("auto", manual=False)
+        self.assertEqual(self.runtime.status()["state"], "stopped")
+        self.assertEqual(self.runtime._load().get("blocked_signature"), None)
+        self.clock.advance(1)
+        self.submit("discharge_grid")
+        self.assertEqual(self.runtime.status()["state"], "active")
+        self.assertEqual(self.inverter.calls[-1]["action"], "discharge_grid")
+
+    def test_f58_repeated_background_auto_preserves_explicit_stop_clear(self):
+        self.submit("charge_grid")
+        self.submit("auto")
+        for _ in range(4):
+            self.clock.advance(20)
+            self.submit("auto", manual=False)
+            self.assertEqual(self.runtime._load().get("blocked_manual_signatures"), [])
+        self.submit("charge_grid")
+        self.assertEqual(self.runtime.status()["state"], "active")
+
+    def test_f58_safety_stopped_session_stays_blocked_through_spot_auto(self):
+        self.submit("discharge_grid")
+        self.inverter.start_error = BatteryControlSafetyStop("minimum_soc_reached", 42)
+        self.clock.advance(10)
+        self.runtime.tick()
+        self.inverter.start_error = None
+        self.submit("auto", manual=False)
+        with self.assertRaisesRegex(RuntimeError, "already ended locally"):
+            self.submit("discharge_grid")
+        self.submit("auto")  # explicit user STOP is the only rearm
+        self.clock.advance(1)
+        self.submit("discharge_grid")
+        self.assertEqual(self.runtime.status()["state"], "active")
+
+    def test_f58_process_restart_stays_blocked_until_explicit_stop(self):
+        self.submit("charge_grid")
+        another = self.new_runtime()
+        another.tick()
+        self.assertEqual(another.status()["state"], "stopped")
+        another.submit(payload=self.payload("auto", manual=False),
+                       command_id="spot-auto", cloud_config=self.config)
+        with self.assertRaisesRegex(RuntimeError, "already ended locally"):
+            another.submit(payload=self.payload("charge_grid"),
+                           command_id="replayed-start", cloud_config=self.config)
+        another.submit(payload=self.payload("auto"),
+                       command_id="user-auto", cloud_config=self.config)
+        self.clock.advance(1)  # a fresh command is created after the stop barrier
+        another.submit(payload=self.payload("charge_grid"),
+                       command_id="fresh-start", cloud_config=self.config)
+        self.assertEqual(another.status()["state"], "active")
+
     def test_failed_apply_cleans_up_then_latches_the_request(self):
         self.inverter.start_error = RuntimeError("mode write rejected")
         with self.assertRaisesRegex(RuntimeError, "mode write rejected"):

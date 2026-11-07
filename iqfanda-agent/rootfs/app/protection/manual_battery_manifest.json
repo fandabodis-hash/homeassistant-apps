@@ -1,12 +1,12 @@
 {
-  "agent_version": "0.1.171",
+  "agent_version": "0.1.172",
   "build_inputs": {
     "Dockerfile": "3807f87277deedde6d16cdd90814eb27f23eec4b25e06341a6a2a8e91e8ddc82",
-    "config.yaml": "2e1ebbed72a3f43b54c1d8523ed4b2f87d70acbffb3c4d784a4fc96125c59b67"
+    "config.yaml": "1495a4cba9cc8a4e78a7b9efb65be3db72633d8a978269f7e4b1a4e175098bc8"
   },
   "feature": "local_manual_battery",
   "files": {
-    "VERSION": "dab1db4bf902acc35d3ce4731b9930dc05961094d926b0ba631a25fc05e6528a",
+    "VERSION": "568a0cae04b5208287685e39f74e047a0a9d4baec00c1d178484488b45912a8f",
     "battery_control_canary.py": "27d4538b8388bd8ca065c26f1cab4fc9e26d026e603a338c3f79a4b667f07a9d",
     "command_worker.py": "b87cb30128fb8bb5e371390a60511b53472b4c38f97aa9e3c75ff85eedb6e54f",
     "communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
@@ -30,13 +30,13 @@
     "device_config.py": "28a39b57044a81b9d920bd5afe1344584e246ceee8f9afaac5b922b84e4995dc",
     "foxess_zero_remote_release.py": "d9dc930130857c190d19e10e61667c4c129ffd5149ffcd4a4541d9c16c1f4866",
     "heartbeat.py": "2b63d18618c5529d2a3ca25d9a488152777426821c6363d308f8de1cb94defa7",
-    "manual_battery_runtime.py": "9b42ff9fef6e489ee998cd5906a46dd79dc0bfab417322ca5c568041bca6a498",
+    "manual_battery_runtime.py": "b4c8175c8f0d9adec72a40fd3f5329ddcc98375df537217c5ffebf736211c643",
     "spot_battery_intent.py": "9614747ec7a5e246c9bff2c18527c741f75c2453251baeaacea813bdc0fdcc02",
     "startup.py": "6c0072302d43a75da2f0091c9732ba455a9214b4be3ea2fc3b5395994e8411f4"
   },
   "rootfs_files": {
     "etc/services.d/iqfanda/run": "14f3f2fbe262d2884bf40082a75876b25c300085995d69c4d3e67e4c670fe735"
   },
-  "runtime_fingerprint": "31bd1c302ee5f5f4838069cb97e0da1dddbd9809e2d756d3099595c0e5c20bd0",
+  "runtime_fingerprint": "3217af06caa9d98ae36892ad49bfc73d7f55eedfd5b651ad5a19e8e631fc2010",
   "schema_version": 1
 }
