@@ -1,17 +1,17 @@
 {
-  "agent_version": "0.1.169",
+  "agent_version": "0.1.171",
   "build_inputs": {
     "Dockerfile": "3807f87277deedde6d16cdd90814eb27f23eec4b25e06341a6a2a8e91e8ddc82",
-    "config.yaml": "1d0f525b67562796f4b0c0cf1b6ec2fb94a7938787759c6d64638391631f9073"
+    "config.yaml": "2e1ebbed72a3f43b54c1d8523ed4b2f87d70acbffb3c4d784a4fc96125c59b67"
   },
   "feature": "local_manual_battery",
   "files": {
-    "VERSION": "dd2f14cf5c5e716bee511fd4910378f2fba86f8533a4c09b69aedf32f533edad",
+    "VERSION": "dab1db4bf902acc35d3ce4731b9930dc05961094d926b0ba631a25fc05e6528a",
     "battery_control_canary.py": "27d4538b8388bd8ca065c26f1cab4fc9e26d026e603a338c3f79a4b667f07a9d",
     "command_worker.py": "b87cb30128fb8bb5e371390a60511b53472b4c38f97aa9e3c75ff85eedb6e54f",
     "communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
     "communication/battery_feature_guard.py": "fabdffe76209cce8e755bc30ae89135db049ba6eb54fa4f0433ca7875c4ad0bf",
-    "communication/foxess_ems_controller.py": "566a50d6e4afc945d07b9ac1b0bf550cb27fc1c5ac66d132a0ffef47afa1c2cd",
+    "communication/foxess_ems_controller.py": "c381729e802ce2244cb29bd9a090d4b89c631b887400d5768f539e2520ed36e7",
     "communication/foxess_remote_control_probe.py": "618d3563c44cec35d96af997289c28431ad6e8bc4d0bad8664ec4a3f838a54ce",
     "communication/goodwe_ems_controller.py": "f6290bde65c4ad5a4260b8368dd53bc44f291d167ce7aded3bc0140ba85fd95d",
     "communication/goodwe_probe.py": "df24b073a3d2e320c8c39b7559b58e30c1c980fea554c0b530e6a5b3442af3ae",
@@ -37,6 +37,6 @@
   "rootfs_files": {
     "etc/services.d/iqfanda/run": "14f3f2fbe262d2884bf40082a75876b25c300085995d69c4d3e67e4c670fe735"
   },
-  "runtime_fingerprint": "4baabda610229bb7b0ac55f0990ef464b3db3deb86e7fed98fc3473929530f9c",
+  "runtime_fingerprint": "31bd1c302ee5f5f4838069cb97e0da1dddbd9809e2d756d3099595c0e5c20bd0",
   "schema_version": 1
 }
