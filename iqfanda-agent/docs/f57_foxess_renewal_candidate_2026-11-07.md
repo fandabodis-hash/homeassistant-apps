@@ -31,3 +31,17 @@ Změna produkčního souboru automaticky poruší původní `manual_battery_mani
 Před fyzickou aktivací je nutno ověřit na 00018 aktuální `stopped/auto`, žádné `stop_pending`, identitu měniče, platný SOC/BMS, stávající `44000` a přesný způsob cíleného bezpečného nasazení. K dispozici musí být cesta návratu a bezpečný fyzický dohled.
 
 **Kandidát není důkazem, že se náběh zkrátil.** To potvrdí až nový experiment s fyzicky změřeným časem od START do výkonu baterie v obou směrech, včetně STOP/AUTO a watchdogu při ztrátě WAN.
+
+## 2026-11-07 04:14 – F57 R4 cloud-only preflight
+
+Read-only report `F57_R4_00018_BEZPECNY_PREFLIGHT_KANDIDATA_20261107-041359.txt` on `F800711-TNG-00018`:
+
+- Agent `0.1.168`, `device_status=online`, heartbeat fresh.
+- `local_battery_runtime`: `state=stopped, action=auto, manual=true, verified=true`, FoxESS H3 profile, `stop_attempts=0`, no retry pending.
+- Cloud `battery:manual_immediate_charge`: `demand_state=idle`, not active, `reason=manual_user_stop`.
+- SOC 60 %, battery power 0 W, recent AUTO commands succeeded, pending agent updates 0.
+- Result `F57R4_CLOUD_ONLY_UPDATE_PREFLIGHT=PASS`. **This is not permission to install 0.1.171** and doesn't prove HA Supervisor state or physical Modbus registers.
+
+The next file `F57_R5_00018_LOKALNI_HA_SUPERVISOR_READ_ONLY.ps1` (Windows Downloads, no ZIP) verifies the *local 00018 HA OS host only* via operator-supplied SSH access to that host with Docker permission. It first requires `/data/options.json` serial `F800711-TNG-00018`, then reads `/app/VERSION`, the battery manifest and local STOP state, and internally GETs Supervisor addon/repository metadata using the token already inside the container without revealing it. It **does not** open Modbus, submit commands, restart or update. On no local SSH, wrong serial, unknown auto-update or missing state it fails closed and emits TXT report in Downloads.
+
+Supervisor access is container-internal; using the VPS as the SSH destination is explicitly rejected. Even local PASS does not establish fleet-wide auto-update policy, candidate availability or physical rollback. PR #39 remains a **draft, not published**.
