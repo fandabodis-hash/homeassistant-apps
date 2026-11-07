@@ -19,7 +19,7 @@ Datum: 2026-11-07. **Stav: SOURCE/ARM64 TEST PASS, FIELD PASS PENDING, NENASAZOV
 4. **Nulový export:** `local_modules/foxess_commissioning_grid_guard.py` vyžaduje skutečný nezávislý elektroměr s ověřeným kladným importem, fyzicky ověřený hardwarový limit zákazu přetoků, lokální HA senzor ve wattech a správné `device_uuid`. Měření musí být maximálně 3 s staré, před vybíjením min. 800 W importu, během vybíjení min. 300 W. Výpadek měření => konec canary a AUTO. Tento software **nenahrazuje nezávislou hardwarovou ochranu exportu**.
 5. Manuální `discharge_grid` pro **00007** navíc kontroluje lokální měření před prvním i při dalších cyklech. Neznámé měření => nezapínat, STOP/AUTO bez blokace. 00018 má odlišné UUID a zůstává mimo novou povinnost, ale není na 0.1.174 aktualizována.
 6. F58 oprava blokování nové manuální relace po STOP (původní draft 0.1.172), F59 pasivní modulární host (draft 0.1.173), bez vložení další fyzické řídicí smyčky.
-7. GitHub CI: release manifest append-only rev 15, **9/9 jobů PASS** včetně simulace hardwaru, 3.12/3.13, Zigbee/serva, 00012/00013 TUV, termostat, reset OS, izolovaný ARM64 Docker build (bez publikace).
+7. GitHub CI: release manifest append-only rev 16, **9/9 jobů PASS** včetně simulace hardwaru, 3.12/3.13, Zigbee/serva, 00012/00013 TUV, termostat, reset OS, izolovaný ARM64 Docker build (bez publikace).
 
 ## Fyzický předávací krok – nepřeskakovat
 
@@ -31,7 +31,7 @@ Za instalaci nelze označit stav `PASS` bez:
    **Nepoužívat imaginární `sensor` či odhad z PV/spotřebičů**. Tento soubor nesmí být vytvořen jen proto, že kontrola očekává PASS.
 4. Pilotní Agent 0.1.174 instalovat jen na 00007 po úplné kontrole aktuálního release, se zachováním add-on data a rollback image. Nedotknout se 00018/00012/00013.
 5. Před jediným fyzickým testem ověřit `verify_battery_feature()` a profilové `BLOCKED` pro starý pin, současný SOC 30–90%, absence jiné relace, zásadně `44000=0` / `44002=0`, samostatný export-limit.
-6. Jeden explicitně schválený canary `manual_battery_canary_v1` s `power_w=500`, `expected_agent_version="0.1.174"`, `expected_runtime_fingerprint="82b16e393f516a042381418fc6633a665b4a3e1435e5403d274c50863745c7c1"`, `expected_previous_pin_sha256="7717125241c7b4903f9f7f183d3929e49481a4b2ead77e3f5ae33e07fc7a6cdc"`, exact UUID a technické schválení. Zda backend podporuje bezpečné queueování commissioning požadavku pouze pro daný FANDA ověřit ještě zvlášť; **neposílat slepé Modbus zápisy**.
+6. Jeden explicitně schválený canary `manual_battery_canary_v1` s `power_w=500`, `expected_agent_version="0.1.174"`, `expected_runtime_fingerprint="1e3ea7774ac48710d7c056ec2ba4e68f24b94fd48c7629f515425da27aaa6cbf"`, `expected_previous_pin_sha256="7717125241c7b4903f9f7f183d3929e49481a4b2ead77e3f5ae33e07fc7a6cdc"`, exact UUID a technické schválení. Zda backend podporuje bezpečné queueování commissioning požadavku pouze pro daný FANDA ověřit ještě zvlášť; **neposílat slepé Modbus zápisy**.
 7. Výsledek testu: 500 W vybíjení pouze při aktuální bezpečné zátěži, 500 W nabíjení, nový profilový pin a 3x AUTO readback. Při FAIL nepokračovat manuálními START.
 8. Po fyzickém PASS ověřit přes klientskou Chytrou kartu **novou samostatnou relaci** 500 W nabíjení → STOP/AUTO a následně vybíjení při nezávislém nulovém exportu → STOP/AUTO, bez zastavení termostatů či jiných instalací. Neověřené výkony nad 500 W vyžadují nové posouzení a fyzický limit baterie/BMS.
 
