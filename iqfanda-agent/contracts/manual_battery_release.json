@@ -98,6 +98,13 @@
       "revision": 14,
       "runtime_fingerprint": "4fac37752d1c742bcb3e5e54875da5dc70bc4593b4d377ce2b706cb8e5ed94e2",
       "source_fingerprint": "71b0aff3628ab9db4c022e96fccd1f9067247965d47f42908988450f53528476"
+    },
+    {
+      "agent_version": "0.1.174",
+      "reason": "F58 0.1.174: CI found and corrected technician identity gate parenthesis before any release or hardware use; all prior evidence preserved",
+      "revision": 15,
+      "runtime_fingerprint": "82b16e393f516a042381418fc6633a665b4a3e1435e5403d274c50863745c7c1",
+      "source_fingerprint": "16906610e38587886d4e096335f7047be9114d763b673bc7b39d2f268528ce0f"
     }
   ],
   "feature": "local_manual_battery",
@@ -112,7 +119,7 @@
     "iqfanda-agent/docs/F59_LOCAL_FIRST_MODULE_ARCHITECTURE.md": "0ba0f274e5cea8bea5f4f50bc3234e16d179caf698a117443c2fb030a4b19d61",
     "iqfanda-agent/rootfs/app/VERSION": "425c0b68f33498fb69bbb663cc5f24716e130f151ab5b490c4f5908cf3474ffd",
     "iqfanda-agent/rootfs/app/battery_control_canary.py": "fa4e445670b14737d057ac73fba2e9c1eb50f99dc73bdb67353681bd7e5a07f9",
-    "iqfanda-agent/rootfs/app/command_worker.py": "400a756416c97108b0b2c1a45283751da3be0f42fec4681836e407b9e36ab39b",
+    "iqfanda-agent/rootfs/app/command_worker.py": "95ee6e8e9f0bc2d2580cdc45071e976a55114c0d844392e813faf9e0821a0bec",
     "iqfanda-agent/rootfs/app/communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
     "iqfanda-agent/rootfs/app/communication/battery_feature_guard.py": "e94f95d5f9d7af0593b1254052d8b52c32a2b8acb19eb613b5064219aa8ccea3",
     "iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py": "c381729e802ce2244cb29bd9a090d4b89c631b887400d5768f539e2520ed36e7",
@@ -233,7 +240,7 @@
       "unavailable_reason": null
     }
   },
-  "runtime_fingerprint": "4fac37752d1c742bcb3e5e54875da5dc70bc4593b4d377ce2b706cb8e5ed94e2",
+  "runtime_fingerprint": "82b16e393f516a042381418fc6633a665b4a3e1435e5403d274c50863745c7c1",
   "schema_version": 1,
-  "source_fingerprint": "71b0aff3628ab9db4c022e96fccd1f9067247965d47f42908988450f53528476"
+  "source_fingerprint": "16906610e38587886d4e096335f7047be9114d763b673bc7b39d2f268528ce0f"
 }
