@@ -105,6 +105,13 @@
       "revision": 15,
       "runtime_fingerprint": "82b16e393f516a042381418fc6633a665b4a3e1435e5403d274c50863745c7c1",
       "source_fingerprint": "16906610e38587886d4e096335f7047be9114d763b673bc7b39d2f268528ce0f"
+    },
+    {
+      "agent_version": "0.1.174",
+      "reason": "F58 R6 00007 distinguish fresh 800W grid-import preflight vs 300W ongoing battery discharge reserve, with fail-closed unit test; no physical commissioning evidence inferred",
+      "revision": 16,
+      "runtime_fingerprint": "1e3ea7774ac48710d7c056ec2ba4e68f24b94fd48c7629f515425da27aaa6cbf",
+      "source_fingerprint": "7d289be2be1229864bb89acafd7af1fc82d8af931fdc1bc3f847d626ec536daa"
     }
   ],
   "feature": "local_manual_battery",
@@ -144,10 +151,10 @@
     "iqfanda-agent/rootfs/app/local_modules/__init__.py": "eb3bc17f7e2bb270d8444c315d09d5a7f2f1b9cd44e0ade48d60d90113738825",
     "iqfanda-agent/rootfs/app/local_modules/battery_pin_transition.py": "2115970a01993e7949503ddc532d15239872ba2c318a86407e3fe19966c758fd",
     "iqfanda-agent/rootfs/app/local_modules/battery_recovery_policy.py": "b711ab94025c2cd11f60c053003e21b13ea6625a5edcd921004ad2c0de2a547e",
-    "iqfanda-agent/rootfs/app/local_modules/foxess_commissioning_grid_guard.py": "43d78aa942b8674842b9666772e28b0d7d50b5b5b88950b65cd6d0090607ca92",
+    "iqfanda-agent/rootfs/app/local_modules/foxess_commissioning_grid_guard.py": "8b57ab9463b8e95bda32a5c0395afe237cf71c4ef8533e7bc90524aba97a488f",
     "iqfanda-agent/rootfs/app/local_modules/host.py": "579fb752c7f78fc8782f188cfa9cebcec312bd5e9ef970ea380c8a1c5075a0f3",
     "iqfanda-agent/rootfs/app/local_modules/registry.py": "67611d77ea5f10435e48262cde0b1be5f7a63a5308a375b04521797ad088e11d",
-    "iqfanda-agent/rootfs/app/manual_battery_runtime.py": "86df1f2bbc6ba07e59b15faf7552bca977f4fc9d08559c5b1a3f5246ee5950bc",
+    "iqfanda-agent/rootfs/app/manual_battery_runtime.py": "1e3e4d3166699ea73b8e0a73551ada864cea177590e3876c0779cb280d590313",
     "iqfanda-agent/rootfs/app/spot_battery_intent.py": "9614747ec7a5e246c9bff2c18527c741f75c2453251baeaacea813bdc0fdcc02",
     "iqfanda-agent/rootfs/app/startup.py": "02527443e44e350fcfc074b95103d39d8c818c420cc79bd14d7ea0045983f56b",
     "iqfanda-agent/rootfs/etc/services.d/iqfanda/run": "14f3f2fbe262d2884bf40082a75876b25c300085995d69c4d3e67e4c670fe735",
@@ -161,7 +168,7 @@
     "iqfanda-agent/scripts/read_addon_update_preflight.py": "d438856132db05b26ef01f3ec098c2d44ca5694c4f3d58e265a1c01cc6e17d98",
     "iqfanda-agent/tests/test_battery_control_canary.py": "ab6556410f64378fd1793f419923f88ff17b0c5daeee310f0eaae822f1f5e5c2",
     "iqfanda-agent/tests/test_f58_battery_pin_transition.py": "747263ee121bd81865121cbd446757e30a4243132c1de12eb29bbeee8de183a9",
-    "iqfanda-agent/tests/test_f58_foxess_grid_commissioning_guard.py": "d8518afcc8cd0f8166ad2aa7008fd35d68cb3be142b590acbb262146f914006a",
+    "iqfanda-agent/tests/test_f58_foxess_grid_commissioning_guard.py": "b4e0d3682de1ff409265f46bb2f3f4bfda7e0a27b4f171c938985fbd417da888",
     "iqfanda-agent/tests/test_f58_recovery_policy.py": "45ef2505965c7f07f6ea51dbb84c1fb575f297ebcb1514415a90ad9792e2735a",
     "iqfanda-agent/tests/test_f59_local_modules.py": "bf93c19f011dc012b08bf3d43fe41b6a54d0553773a9b20f9772af1e0531ba5a",
     "iqfanda-agent/tests/test_foxess_battery_control.py": "00a94debf9074dc6b3a0363c2cab097e899318b2a7b5c313f8197a8be65fc2df",
@@ -240,7 +247,7 @@
       "unavailable_reason": null
     }
   },
-  "runtime_fingerprint": "82b16e393f516a042381418fc6633a665b4a3e1435e5403d274c50863745c7c1",
+  "runtime_fingerprint": "1e3ea7774ac48710d7c056ec2ba4e68f24b94fd48c7629f515425da27aaa6cbf",
   "schema_version": 1,
-  "source_fingerprint": "16906610e38587886d4e096335f7047be9114d763b673bc7b39d2f268528ce0f"
+  "source_fingerprint": "7d289be2be1229864bb89acafd7af1fc82d8af931fdc1bc3f847d626ec536daa"
 }
