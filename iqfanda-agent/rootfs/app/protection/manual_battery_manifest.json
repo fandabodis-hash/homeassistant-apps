@@ -7,10 +7,10 @@
   "feature": "local_manual_battery",
   "files": {
     "VERSION": "425c0b68f33498fb69bbb663cc5f24716e130f151ab5b490c4f5908cf3474ffd",
-    "battery_control_canary.py": "27d4538b8388bd8ca065c26f1cab4fc9e26d026e603a338c3f79a4b667f07a9d",
-    "command_worker.py": "b87cb30128fb8bb5e371390a60511b53472b4c38f97aa9e3c75ff85eedb6e54f",
+    "battery_control_canary.py": "fa4e445670b14737d057ac73fba2e9c1eb50f99dc73bdb67353681bd7e5a07f9",
+    "command_worker.py": "400a756416c97108b0b2c1a45283751da3be0f42fec4681836e407b9e36ab39b",
     "communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
-    "communication/battery_feature_guard.py": "fabdffe76209cce8e755bc30ae89135db049ba6eb54fa4f0433ca7875c4ad0bf",
+    "communication/battery_feature_guard.py": "e94f95d5f9d7af0593b1254052d8b52c32a2b8acb19eb613b5064219aa8ccea3",
     "communication/foxess_ems_controller.py": "c381729e802ce2244cb29bd9a090d4b89c631b887400d5768f539e2520ed36e7",
     "communication/foxess_remote_control_probe.py": "618d3563c44cec35d96af997289c28431ad6e8bc4d0bad8664ec4a3f838a54ce",
     "communication/goodwe_ems_controller.py": "f6290bde65c4ad5a4260b8368dd53bc44f291d167ce7aded3bc0140ba85fd95d",
@@ -33,15 +33,16 @@
     "local_modules/__init__.py": "eb3bc17f7e2bb270d8444c315d09d5a7f2f1b9cd44e0ade48d60d90113738825",
     "local_modules/battery_pin_transition.py": "2115970a01993e7949503ddc532d15239872ba2c318a86407e3fe19966c758fd",
     "local_modules/battery_recovery_policy.py": "b711ab94025c2cd11f60c053003e21b13ea6625a5edcd921004ad2c0de2a547e",
+    "local_modules/foxess_commissioning_grid_guard.py": "43d78aa942b8674842b9666772e28b0d7d50b5b5b88950b65cd6d0090607ca92",
     "local_modules/host.py": "579fb752c7f78fc8782f188cfa9cebcec312bd5e9ef970ea380c8a1c5075a0f3",
     "local_modules/registry.py": "67611d77ea5f10435e48262cde0b1be5f7a63a5308a375b04521797ad088e11d",
-    "manual_battery_runtime.py": "b4c8175c8f0d9adec72a40fd3f5329ddcc98375df537217c5ffebf736211c643",
+    "manual_battery_runtime.py": "86df1f2bbc6ba07e59b15faf7552bca977f4fc9d08559c5b1a3f5246ee5950bc",
     "spot_battery_intent.py": "9614747ec7a5e246c9bff2c18527c741f75c2453251baeaacea813bdc0fdcc02",
     "startup.py": "02527443e44e350fcfc074b95103d39d8c818c420cc79bd14d7ea0045983f56b"
   },
   "rootfs_files": {
     "etc/services.d/iqfanda/run": "14f3f2fbe262d2884bf40082a75876b25c300085995d69c4d3e67e4c670fe735"
   },
-  "runtime_fingerprint": "9393f33f3aa1f25f467db8528646a528212d8c2816fe628d640bca4a488843aa",
+  "runtime_fingerprint": "4fac37752d1c742bcb3e5e54875da5dc70bc4593b4d377ce2b706cb8e5ed94e2",
   "schema_version": 1
 }
