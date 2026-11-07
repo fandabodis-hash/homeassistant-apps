@@ -76,7 +76,7 @@ class LocalBatteryFeatureGuardTests(unittest.TestCase):
     def test_new_physical_profile_pin_survives_version_only_update(self):
         self.write_profile_scoped_pin()
         old_runtime=self.manifest["runtime_fingerprint"]
-        (self.root / "VERSION").write_text("0.1.169\\n")
+        (self.root / "VERSION").write_text("0.1.169\n")
         updated=self.refresh()
         self.assertNotEqual(old_runtime, updated["runtime_fingerprint"])
         self.assertEqual(guard.verify_battery_feature("foxess_h3_10_0_e"),
@@ -84,7 +84,7 @@ class LocalBatteryFeatureGuardTests(unittest.TestCase):
 
     def test_old_version_only_pin_still_requires_revalidation(self):
         self.write_pin()
-        (self.root / "VERSION").write_text("0.1.169\\n")
+        (self.root / "VERSION").write_text("0.1.169\n")
         self.refresh()
         with self.assertRaisesRegex(RuntimeError, "runtime differs from the physically verified pin"):
             guard.verify_battery_feature("foxess_h3_10_0_e")
