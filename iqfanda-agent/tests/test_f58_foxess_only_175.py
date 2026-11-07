@@ -39,10 +39,25 @@ class FoxessOnly175Tests(unittest.TestCase):
         self.assertIn("foxess_control_fingerprint", source)
 
     def test_only_00007_can_be_commissioned_on_175(self):
-        source=(APP/"command_worker.py").read_text()
-        self.assertIn('read_installed_agent_version() == "0.1.175"', source)
-        self.assertIn('1c25a8d4-b986-43ee-b2fc-eaa152e9bdf8', source)
-        self.assertIn("explicit_technician_approval", source)
+        from communication.foxess_175_00007_commissioning import (
+            require_foxess_175_pilot, PROTECTED_FOXESS_PILOT_UUID,
+            ORIGINAL_00007_PIN_SHA256,
+        )
+        import tempfile
+        import unittest
+        identity={"device_uuid":PROTECTED_FOXESS_PILOT_UUID}
+        payload={"expected_device_uuid":PROTECTED_FOXESS_PILOT_UUID,
+                 "expected_previous_pin_sha256":ORIGINAL_00007_PIN_SHA256,
+                 "explicit_technician_approval":True}
+        require_foxess_175_pilot(identity=identity,payload=payload,installed_version="0.1.175")
+        with self.assertRaises(ValueError):
+            require_foxess_175_pilot(identity={"device_uuid":"other"},payload=payload,installed_version="0.1.175")
+        with self.assertRaises(ValueError):
+            require_foxess_175_pilot(identity=identity,payload={**payload,"explicit_technician_approval":False},installed_version="0.1.175")
+        with self.assertRaises(ValueError):
+            require_foxess_175_pilot(identity=identity,payload={**payload,"expected_previous_pin_sha256":"0"*64},installed_version="0.1.175")
+        # Universal runtime remains free of any literal installation UUID.
+        self.assertNotIn(PROTECTED_FOXESS_PILOT_UUID,(APP/"command_worker.py").read_text())
 
     def test_original_foxess_169_evidence_remains_append_only(self):
         history=json.loads((ADDON/"contracts/manual_battery_release.json").read_text())
