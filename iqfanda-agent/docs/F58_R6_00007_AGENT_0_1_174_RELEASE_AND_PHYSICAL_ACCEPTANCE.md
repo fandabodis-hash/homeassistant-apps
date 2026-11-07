@@ -40,3 +40,15 @@ Za instalaci nelze označit stav `PASS` bez:
 - **00007 FIELD PASS PENDING**, starý pin zůstává, `0.1.174` není na 00007 nainstalován.
 - **NO_GLOBAL_PUBLISH/NO_GLOBAL_DEVICE_UPDATE** do fyzické akceptace a ověření instalace 00018 a chráněných 00012/00013.
 - Kritický bod před uvedením do provozu: nezávislé fyzické potvrzení znaménka a zdroje importu. Bez toho automaticky **zastavit** vybíjecí test.
+
+## Oprava příčiny opakované blokace při dalších aktualizacích
+
+Dříve měl `physical pin` jen `agent_version` + otisk **celého** Agenta. I změna nesouvisejícího `VERSION` nebo jiné značky jej zneplatnila.
+
+0.1.174 přidává do **nově skutečně fyzicky potvrzeného** pinu `control_feature_fingerprint`. Tento SHA256 obsahuje explicitně chráněné funkční soubory společného bateriového vlastníka, hardware řadiče a vybraného profilu. **Neobsahuje pouhé číslo verze** ani cizí ovladač GoodWe/SolaX, pokud se ověřuje FoxESS. Přitom `verify_battery_feature` nadále kontroluje celé podepsané/SHA-manifestované vydání a všechna chráněná produkční data.
+
+Důsledky:
+- Při změně pouze čísla verze nebo nesouvisejícího ovladače zůstane nový pin po fyzickém PASS platný.
+- Při změně FoxESS řadiče, profilu, přepínání výkonových povelů, bezpečnostního guardu, mapování či koordinačního vlastníka se nový pin opět **zablokuje**, dokud nebude daná změna fyzicky ověřena.
+- Původní ověření 00007 z `0.1.169` **neobsahuje tento nový údaj**, a proto se na ně nevztahuje výjimka. Před prvním nasazením 0.1.174 je stále nutný celý nový 500 W fyzický test včetně zákazu přetoků.
+- Ověřeno syntetickými unit testy pro změnu `VERSION`, změnu FoxESS zdroje i izolaci GoodWe profilu; testy **nenahrazují fyzický canary**.
