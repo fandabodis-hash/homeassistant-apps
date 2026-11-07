@@ -14,7 +14,7 @@ The only existing runtime files allowed to change are:
 - `communication/foxess_ems_controller.py`: exact working 00018 driver, remove unverified F57 60-second remote setpoint suppression introduced in 0.1.171. The verified driver reasserts the requested power for local lease renewal.
 - `manual_battery_runtime.py`: FoxESS-specific repeated AUTO/STOP latch fix, byte-exact append-only backup of the old physically verified pin before any FoxESS canary power request and saving new FoxESS profile control proof only after measured 500 W bidirectional + final AUTO PASS. Non-FoxESS driver paths and semantics stay unchanged.
 - `communication/battery_feature_guard.py`: new **FoxESS-only** physical control fingerprint after an actual successful canary, which permits future VERSION-only changes but still detects changed FoxESS/owner sources. Pre-0.1.175 pins and all other inverter profiles continue to use strict version-bound comparison.
-- `command_worker.py`: guard ONLY `manual_battery_canary_v1` on 0.1.175 by 00007's exact local UUID, explicit technician approval, exact agent version and expected fingerprint; all other worker actions unchanged.
+- `communication/foxess_175_00007_commissioning.py`: pure FoxESS 00007 identity, exact original pin hash and explicit technician acceptance policy. `command_worker.py` only calls this specialized validation from `manual_battery_canary_v1`; the universal dispatcher contains no hardcoded serial or UUID, and all other commands are unchanged.
 
 Other changed paths permitted: Agent VERSION/config.yaml (0.1.175), release SHA manifest and append-only release history, unit tests, release CI and this documentation. NO unrelated source changes (thermostats, Zigbee, heat pumps, 00012/00013, GoodWe, SolaX, DEYE, generator, UI, cloud, frontend). This is enforced by an explicit Git diff whitelist against the original 0.1.171 SHA.
 
@@ -40,3 +40,6 @@ Other changed paths permitted: Agent VERSION/config.yaml (0.1.175), release SHA 
 - `00007 FIELD PASS` is not present until physically verified.
 - Do not publish 0.1.175 to the global add-on repository, do not perform automatic upgrades, do not claim 00007 is fixed until charging and discharging have both been physically verified with proper stop.
 - No cloud/backend/frontend deployment or DB mutation is necessary for this standalone FoxESS driver fix.
+
+## Legacy F57 test compatibility
+The old F57 CI expected an **experimental 60s power throttle** and therefore cannot require that text from the proven Vaculík driver. The `f57-foxess-renewal-candidate.yml` test still enforces all original checks on all non-0.1.175 versions. Only when VERSION is exactly 0.1.175 does it require byte-for-byte Git blob `680f9c89221dc9fc20d0408bf28c8637a367c7c5`, unchanged AUTO and no 60s suppression. This changes **CI test expectations**, never other hardware or software functions. A separate `f58-foxess-only-175.yml` ensures all other production source files are unchanged from the main 0.1.171 baseline.
