@@ -116,7 +116,8 @@ class LocalGridImportGuard:
 
 
 def require_protected_00007_discharge_safety(*, identity_path: Path = DEVICE_PATH,
-                                             config_path: Path = CONFIG_PATH) -> None:
+                                             config_path: Path = CONFIG_PATH,
+                                             renewal: bool = False) -> None:
     """A scoped extra safety for 00007; STOP/AUTO bypasses this check.
 
     Not a claim that this 10-second supervisor can replace hardware export
@@ -125,5 +126,7 @@ def require_protected_00007_discharge_safety(*, identity_path: Path = DEVICE_PAT
     """
     if is_protected_00007(identity_path=identity_path):
         LocalGridImportGuard(
+            identity_path=identity_path, config_path=config_path
+        ).check_during_discharge() if renewal is True else LocalGridImportGuard(
             identity_path=identity_path, config_path=config_path
         ).check_before_discharge()
