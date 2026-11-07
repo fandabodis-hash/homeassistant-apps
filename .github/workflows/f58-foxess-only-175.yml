@@ -1,0 +1,104 @@
+name: F58 FoxESS only Agent 0.1.175 (candidate - never publish)
+on:
+  push:
+    branches:
+      - fix/f58-foxess-only-agent-0-1-175-00007-from-00018-20261107
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+jobs:
+  foxess-only-source-and-regression:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: No unrelated source changed relative to live 0.1.171
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          base='34c1441f44542f442623a4c595efebf6f898813e'
+          changed=subprocess.check_output(['git','diff','--name-only',base,'HEAD'],text=True).splitlines()
+          allowed={
+            '.github/workflows/f58-foxess-only-175.yml',
+            'iqfanda-agent/config.yaml',
+            'iqfanda-agent/rootfs/app/VERSION',
+            'iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py',
+            'iqfanda-agent/rootfs/app/communication/battery_feature_guard.py',
+            'iqfanda-agent/rootfs/app/manual_battery_runtime.py',
+            'iqfanda-agent/rootfs/app/command_worker.py',
+            'iqfanda-agent/rootfs/app/protection/manual_battery_manifest.json',
+            'iqfanda-agent/contracts/manual_battery_release.json',
+            'iqfanda-agent/tests/test_manual_battery_runtime.py',
+            'iqfanda-agent/tests/test_manual_battery_feature_guard.py',
+            'iqfanda-agent/tests/test_f58_foxess_only_175.py',
+            'iqfanda-agent/docs/F58_FOXESS_ONLY_0_1_175_RELEASE.md',
+          }
+          unexpected=set(changed)-allowed
+          assert changed and not unexpected, 'UNRELATED_SOURCE_CHANGE='+str(sorted(unexpected))
+          for path in ('iqfanda-agent/rootfs/app/startup.py',
+                       'iqfanda-agent/rootfs/app/heartbeat.py',
+                       'iqfanda-agent/rootfs/app/communication/goodwe_ems_controller.py',
+                       'iqfanda-agent/rootfs/app/communication/solax_ems_controller.py',
+                       'iqfanda-agent/rootfs/app/battery_control_canary.py',
+                       'iqfanda-agent/rootfs/app/spot_battery_intent.py'):
+            assert path not in changed, 'UNRELATED_RUNTIME_CHANGED='+path
+          print('F58_175_SOURCE_SCOPE=PASS_FOXESS_ONLY')
+          PY
+          test "$(git hash-object iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py)" = "680f9c89221dc9fc20d0408bf28c8637a367c7c5"
+          echo "VACULIK_00018_EXACT_DRIVER=PASS"
+          git diff --check 34c1441f44542f442623a4c595efebf6f898813e HEAD
+      - name: Version and append-only battery release manifest
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python iqfanda-agent/scripts/check_agent_version.py --minimum 0.1.175
+          python iqfanda-agent/scripts/check_manual_battery_release.py --base-ref 34c1441f44542f442623a4c595efebf6f898813e
+      - name: Old FoxESS physical evidence, AUTO and cross-brand regression
+        env:
+          PYTHONPATH: iqfanda-agent/rootfs/app
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_*battery*.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_foxess*.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f58_foxess_only_175.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_solax_battery_control.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_deye_control_support.py'
+      - name: Verify unchanged related runtime files compile
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -m py_compile iqfanda-agent/rootfs/app/command_worker.py iqfanda-agent/rootfs/app/manual_battery_runtime.py iqfanda-agent/rootfs/app/battery_control_canary.py iqfanda-agent/rootfs/app/communication/battery_feature_guard.py iqfanda-agent/rootfs/app/startup.py iqfanda-agent/rootfs/app/heartbeat.py
+  isolated-arm64-image:
+    runs-on: ubuntu-latest
+    needs: foxess-only-source-and-regression
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build exact ARM64 candidate (no push, no start)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          docker buildx build --platform linux/arm64 --load --tag tng-f58-foxess-only-175:candidate -f iqfanda-agent/Dockerfile iqfanda-agent
+          test "$(docker image inspect tng-f58-foxess-only-175:candidate --format '{{.Architecture}}')" = arm64
+          c="$(docker create --platform linux/arm64 tng-f58-foxess-only-175:candidate)"
+          trap 'docker rm -f "$c" >/dev/null 2>&1 || true' EXIT
+          docker cp "$c":/app/VERSION /tmp/f58-175-VERSION
+          docker cp "$c":/app/communication/foxess_ems_controller.py /tmp/f58-175-foxess.py
+          test "$(tr -d '\r\n' </tmp/f58-175-VERSION)" = 0.1.175
+          test "$(git hash-object /tmp/f58-175-foxess.py)" = 680f9c89221dc9fc20d0408bf28c8637a367c7c5
+          echo 'F58_175_ARM64_IMAGE=PASS_NOT_PUBLISHED_NOT_STARTED'
