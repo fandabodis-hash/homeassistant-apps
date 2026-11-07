@@ -3,7 +3,7 @@ on:
   push:
     branches: [feature/f59-local-first-agent-0-1-173-candidate-20261107, feature/f58-f59-agent-0-1-174-unified-revalidation-20261107]
   pull_request:
-    branches: [main]
+    branches: [main, feature/f59-local-first-agent-0-1-173-candidate-20261107]
 permissions:
   contents: read
 jobs:
