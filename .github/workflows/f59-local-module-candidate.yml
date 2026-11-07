@@ -22,4 +22,5 @@ jobs:
           PYTHONPATH: iqfanda-agent/rootfs/app
         run: |
           python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f59_local_modules.py'
-          python -m py_compile iqfanda-agent/rootfs/app/local_modules/registry.py iqfanda-agent/rootfs/app/local_modules/host.py iqfanda-agent/rootfs/app/startup.py
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f58_recovery_policy.py'
+          python -m py_compile iqfanda-agent/rootfs/app/local_modules/registry.py iqfanda-agent/rootfs/app/local_modules/host.py iqfanda-agent/rootfs/app/local_modules/battery_recovery_policy.py iqfanda-agent/rootfs/app/startup.py
