@@ -390,6 +390,71 @@ class LocalRuntimeTests(unittest.TestCase):
         self.assertEqual(saved["goodwe_et"], {"status": "pending"})
         self.assertEqual(saved["foxess_h3_10_0_e"]["verification_scope"], "bidirectional_500w_and_stop")
 
+    def _old_00007_pin(self):
+        import hashlib
+        path = self.path.parent / "manual_battery_verified_fingerprint.json"
+        previous = {"schema_version": 1, "profiles": {
+            "foxess_h3_10_0_e": {
+                "status": "physically_verified", "agent_version": "0.1.169",
+                "runtime_fingerprint": "a" * 64,
+                "evidence_id": "physical-169", "report_sha256": "b" * 64,
+            },
+            "goodwe_et": {"status": "pending"},
+        }}
+        original = json.dumps(previous, sort_keys=True).encode()
+        path.write_bytes(original)
+        return path, original, hashlib.sha256(original).hexdigest()
+
+    def test_previous_169_pin_requires_specific_human_approval_before_canary(self):
+        pin_path, old_bytes, sha = self._old_00007_pin()
+        calls=[]
+        with self.assertRaisesRegex(RuntimeError, "explicitly reviewed"):
+            self.runtime.canary(callback=lambda **kw: calls.append(kw),
+                cloud_config=self.foxess_config(), command_id="canary-174",
+                expected_runtime_fingerprint="feature-1")
+        self.assertEqual(calls, [])
+        self.assertEqual(pin_path.read_bytes(), old_bytes)
+        self.assertEqual(list((self.path.parent / "manual_battery_acceptance").glob("**/*")), []) if (self.path.parent / "manual_battery_acceptance").exists() else None
+
+    def test_old_169_pin_hash_mismatch_blocks_before_hardware(self):
+        pin_path, old_bytes, sha = self._old_00007_pin()
+        calls=[]
+        with self.assertRaisesRegex(RuntimeError, "hash-matched"):
+            self.runtime.canary(callback=lambda **kw: calls.append(kw),
+                cloud_config=self.foxess_config(), command_id="canary-174",
+                expected_runtime_fingerprint="feature-1",
+                expected_previous_pin_sha256="0"*64, explicitly_approved=True)
+        self.assertEqual(calls, [])
+        self.assertEqual(pin_path.read_bytes(), old_bytes)
+
+    def test_old_169_pin_archived_byte_exact_and_new_174_locked_only_after_pass(self):
+        pin_path, old_bytes, sha = self._old_00007_pin()
+        result = self.runtime.canary(callback=lambda **kw:self.canary_result(),
+            cloud_config=self.foxess_config(),command_id="canary-174",
+            expected_runtime_fingerprint="feature-1",
+            expected_previous_pin_sha256=sha,explicitly_approved=True)
+        self.assertEqual(result["status"], "passed")
+        self.assertTrue(result["prior_pin_archived"])
+        self.assertEqual(result["prior_pin_sha256"], sha)
+        archive = (self.path.parent/"manual_battery_acceptance"/"prior_pins"/("pin-registry-"+sha+".json"))
+        self.assertTrue(archive.is_file())
+        self.assertEqual(archive.read_bytes(),old_bytes)
+        now=json.loads(pin_path.read_text())["profiles"]
+        self.assertEqual(now["foxess_h3_10_0_e"]["agent_version"],
+            (APP/"VERSION").read_text().strip())
+        self.assertEqual(now["goodwe_et"],{"status":"pending"})
+        self.assertNotEqual(pin_path.read_bytes(), old_bytes)
+
+    def test_failed_174_canary_preserves_original_pin_even_when_archived(self):
+        pin_path, old_bytes, sha = self._old_00007_pin()
+        result=self.runtime.canary(callback=lambda **kw:{"status":"failed", "verified":False},
+            cloud_config=self.foxess_config(),command_id="canary-174",
+            expected_runtime_fingerprint="feature-1",
+            expected_previous_pin_sha256=sha,explicitly_approved=True)
+        self.assertEqual(result["status"],"failed")
+        self.assertEqual(pin_path.read_bytes(),old_bytes)
+        self.assertEqual((self.path.parent/"manual_battery_acceptance"/"prior_pins"/("pin-registry-"+sha+".json")).read_bytes(),old_bytes)
+
     def test_canary_fingerprint_mismatch_is_rejected_before_physical_io(self):
         calls = []
         with self.assertRaisesRegex(RuntimeError, "selected runtime fingerprint"):
