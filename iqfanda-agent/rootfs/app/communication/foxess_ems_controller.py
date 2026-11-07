@@ -38,10 +38,6 @@ WORK_MODE_FEED_IN_FIRST = 1
 WORK_MODE_BACK_UP = 2
 
 REMOTE_TIMEOUT_SECONDS = 180
-# F57: renew the same remote setpoint before the 180s watchdog expires,
-# without restarting the inverter's internal power transition every 10s.
-# This candidate is not a release until the protected manifest is reviewed.
-REMOTE_POWER_REFRESH_SECONDS = 60
 MAXIMUM_CHARGE_POWER_W = 5000
 MAXIMUM_DISCHARGE_POWER_W = 10000
 MINIMUM_DISCHARGE_SOC_MARGIN_PERCENT = 2.0
@@ -698,35 +694,6 @@ def _restore_auto(
     return writes
 
 
-
-def _remote_power_refresh_due(
-    marker: dict[str, Any],
-    desired_active_power: int,
-    *,
-    now: datetime | None = None,
-) -> bool:
-    """Only suppress an identical write while a proven owner lease is fresh.
-
-    A missing, malformed or future timestamp always requires a normal write.
-    This never skips owner checks, SOC limits, STOP or the Modbus readbacks.
-    """
-    if marker.get("remote_power_last_write_w") != desired_active_power:
-        return True
-    raw = marker.get("remote_power_last_write_utc")
-    if not isinstance(raw, str):
-        return True
-    try:
-        written = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    except ValueError:
-        return True
-    if written.tzinfo is None:
-        return True
-    checked = now or datetime.now(timezone.utc)
-    age_seconds = (checked.astimezone(timezone.utc)
-                   - written.astimezone(timezone.utc)).total_seconds()
-    return not (0 <= age_seconds < REMOTE_POWER_REFRESH_SECONDS)
-
-
 def apply_foxess_h3_action(
     *,
     client: Any,
@@ -971,8 +938,6 @@ def apply_foxess_h3_action(
         )
 
     try:
-        wrote_modbus = False
-        rearmed_remote = False
         current_work_mode = _read_one(
             client=client,
             device_id=device_id,
@@ -986,8 +951,6 @@ def apply_foxess_h3_action(
                 address=WORK_MODE_REGISTER,
                 value=WORK_MODE_BACK_UP,
             )
-            wrote_modbus = True
-            rearmed_remote = True
 
         current_timeout = _read_one(
             client=client,
@@ -1005,8 +968,6 @@ def apply_foxess_h3_action(
                 address=REMOTE_TIMEOUT_REGISTER,
                 value=REMOTE_TIMEOUT_SECONDS,
             )
-            wrote_modbus = True
-            rearmed_remote = True
 
         current_enable = _read_one(
             client=client,
@@ -1021,8 +982,6 @@ def apply_foxess_h3_action(
                 address=REMOTE_ENABLE_REGISTER,
                 value=1,
             )
-            wrote_modbus = True
-            rearmed_remote = True
 
         current_active_power = _read_s16(
             client=client,
@@ -1047,26 +1006,15 @@ def apply_foxess_h3_action(
         # Read/write 44000, 44001 and 44002 individually because
         # multi-register reads can return invalid values on this family.
         #
-        # F57: the local supervisor checks SOC and ownership every 10s.
-        # It must not re-write an unchanged setpoint on every check.
-        # A real power change, any rearm or an expired 60s refresh window
-        # writes immediately; the inverter's remote watchdog is 180s.
-        # Never suppress a write without an intact owner marker and
-        # matching inverter readback. STOP/AUTO bypasses this path.
+        # Write on every intent because the FoxESS remote-control
+        # watchdog is refreshed by the active-power command.
         #
-        refresh_power = (
-            rearmed_remote
-            or current_active_power != desired_active_power
-            or _remote_power_refresh_due(marker, desired_active_power)
+        _write_s16(
+            client=client,
+            device_id=device_id,
+            address=REMOTE_ACTIVE_POWER_REGISTER,
+            value=desired_active_power,
         )
-        if refresh_power:
-            _write_s16(
-                client=client,
-                device_id=device_id,
-                address=REMOTE_ACTIVE_POWER_REGISTER,
-                value=desired_active_power,
-            )
-            wrote_modbus = True
 
         if (
             _read_one(
@@ -1092,15 +1040,6 @@ def apply_foxess_h3_action(
                 "FoxESS active power final readback selhal."
             )
 
-        # Persist a renewal proof only after two independent register checks.
-        # If this atomic write fails, the usual AUTO cleanup remains active.
-        if refresh_power:
-            marker["remote_power_last_write_w"] = desired_active_power
-            marker["remote_power_last_write_utc"] = datetime.now(
-                timezone.utc
-            ).isoformat()
-            _write_marker(marker_path, marker)
-
     except Exception:
         try:
             _restore_auto(
@@ -1118,7 +1057,7 @@ def apply_foxess_h3_action(
         requested_power_w=selected_power_w,
         applied_power_w=selected_power_w,
         verified=True,
-        write_performed=wrote_modbus,
+        write_performed=True,
     )
 
 def _select_runtime(

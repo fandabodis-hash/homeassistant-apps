@@ -44,8 +44,22 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          src=Path("iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py").read_text()
-          for token in ("REMOTE_POWER_REFRESH_SECONDS = 60","_remote_power_refresh_due", "refresh_power", "marker[\"remote_power_last_write_utc\"]", "_restore_auto"):
-              assert token in src,token
-          print("F57_CANDIDATE_GUARDS_PASS")
+          import hashlib
+          path=Path("iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py")
+          raw=path.read_bytes()
+          src=raw.decode("utf-8")
+          version=Path("iqfanda-agent/rootfs/app/VERSION").read_text().strip()
+          if version == "0.1.175":
+              # Only FoxESS 0.1.175 intentionally supersedes the experimental
+              # F57 throttle by restoring Vaculik's physically verified bytes.
+              # Other versions must keep passing the original F57 contract.
+              blob=hashlib.sha1(b"blob "+str(len(raw)).encode()+b"\0"+raw).hexdigest()
+              assert blob == "680f9c89221dc9fc20d0408bf28c8637a367c7c5",blob
+              assert "_restore_auto" in src
+              assert "REMOTE_POWER_REFRESH_SECONDS = 60" not in src
+              print("F58_175_EXACT_VACULIK_DRIVER_SUPERSEDES_F57=PASS")
+          else:
+              for token in ("REMOTE_POWER_REFRESH_SECONDS = 60","_remote_power_refresh_due", "refresh_power", "marker[\"remote_power_last_write_utc\"]", "_restore_auto"):
+                  assert token in src,token
+              print("F57_CANDIDATE_GUARDS_PASS")
           PY

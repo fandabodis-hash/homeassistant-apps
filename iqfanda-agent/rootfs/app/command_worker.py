@@ -1914,6 +1914,13 @@ def execute_manual_battery_canary(
             raise ValueError("Canary power is fixed at 500 W.")
         if command_payload.get("expected_agent_version") != read_installed_agent_version():
             raise ValueError("Canary requires the exact installed agent version.")
+        # Keep the universal worker free of hardcoded installation identities;
+        # a separate pure FoxESS-only guard reviews the 00007 pilot canary.
+        from communication.foxess_175_00007_commissioning import require_foxess_175_pilot
+        require_foxess_175_pilot(
+            identity=identity, payload=command_payload,
+            installed_version=read_installed_agent_version(),
+        )
         fingerprint = command_payload.get("expected_runtime_fingerprint")
         if not isinstance(fingerprint, str) or len(fingerprint) != 64 or any(c not in "0123456789abcdef" for c in fingerprint):
             raise ValueError("Canary requires the explicit expected runtime fingerprint.")
@@ -1926,7 +1933,9 @@ def execute_manual_battery_canary(
             result={"worker": "command_worker", "executor": "local_battery_canary",
                     "phase": "commissioning_local", "power_w": 500}, error_message=None)
         result = run_exclusive_battery_canary(callback=run_foxess_battery_canary,
-            cloud_config=config, command_id=command_id, expected_runtime_fingerprint=fingerprint)
+            cloud_config=config, command_id=command_id, expected_runtime_fingerprint=fingerprint,
+            expected_previous_pin_sha256=command_payload.get("expected_previous_pin_sha256"),
+            explicitly_approved=command_payload.get("explicit_technician_approval") is True)
         succeeded = (result.get("status") == "passed" and result.get("verified") is True
                      and result.get("local_final_auto_verified") is True
                      and result.get("protection", {}).get("status") == "locked")
