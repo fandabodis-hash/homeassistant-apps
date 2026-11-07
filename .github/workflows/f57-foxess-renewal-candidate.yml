@@ -1,0 +1,51 @@
+name: F57 FoxESS renewal candidate (NO RELEASE)
+on:
+  push:
+    branches: [f57/foxess-60s-renewal-candidate-20261107]
+    paths:
+      - 'iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py'
+      - 'iqfanda-agent/tests/test_foxess_battery_control.py'
+      - '.github/workflows/f57-foxess-renewal-candidate.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py'
+      - 'iqfanda-agent/tests/test_foxess_battery_control.py'
+      - '.github/workflows/f57-foxess-renewal-candidate.yml'
+permissions:
+  contents: read
+jobs:
+  foxess-candidate-simulation:
+    name: Simulated Modbus readback and STOP / Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Parse candidate and tests
+        run: |
+          python - <<'PY'
+          import ast
+          for p in (
+              "iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py",
+              "iqfanda-agent/tests/test_foxess_battery_control.py",
+          ):
+              ast.parse(open(p,encoding="utf-8").read(),filename=p)
+          print("F57_SYNTAX_PASS")
+          PY
+      - name: Run simulated Modbus controls, no physical devices
+        run: python iqfanda-agent/tests/test_foxess_battery_control.py -v
+      - name: Require candidate-local guard text
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src=Path("iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py").read_text()
+          for token in ("REMOTE_POWER_REFRESH_SECONDS = 60","_remote_power_refresh_due", "refresh_power", "marker[\"remote_power_last_write_utc\"]", "_restore_auto"):
+              assert token in src,token
+          print("F57_CANDIDATE_GUARDS_PASS")
+          PY

@@ -1,5 +1,5 @@
 {
-  "agent_version": "0.1.169",
+  "agent_version": "0.1.171",
   "change_history": [
     {
       "agent_version": "0.1.168",
@@ -42,6 +42,13 @@
       "revision": 6,
       "runtime_fingerprint": "4baabda610229bb7b0ac55f0990ef464b3db3deb86e7fed98fc3473929530f9c",
       "source_fingerprint": "1b5d950b208518f02d2058644b2a696abe90e0ff65bebc38f7b0667b504b085b"
+    },
+    {
+      "agent_version": "0.1.171",
+      "reason": "F57 0.1.171 reviewed experimental FoxESS 60s renewed setpoint without removing 10s safety supervisor",
+      "revision": 7,
+      "runtime_fingerprint": "31bd1c302ee5f5f4838069cb97e0da1dddbd9809e2d756d3099595c0e5c20bd0",
+      "source_fingerprint": "beaa0c13158d8b36fa9b00b18ea3dfb6e0706e8ea48c517b761660cc6edcabb4"
     }
   ],
   "feature": "local_manual_battery",
@@ -49,13 +56,13 @@
     ".github/workflows/manual-battery-release-guard.yml": "385b1d05f7da7a049e57ea4397f2260acf77f86a107aa6c3818e1d4ea3eabe3b",
     "iqfanda-agent/Dockerfile": "3807f87277deedde6d16cdd90814eb27f23eec4b25e06341a6a2a8e91e8ddc82",
     "iqfanda-agent/MANUAL_BATTERY_RELEASE.md": "0af74076c43d28bd5cb94e9f312f95fed2aebe6f7ce794de4ee5e80c34fdc65d",
-    "iqfanda-agent/config.yaml": "1d0f525b67562796f4b0c0cf1b6ec2fb94a7938787759c6d64638391631f9073",
-    "iqfanda-agent/rootfs/app/VERSION": "dd2f14cf5c5e716bee511fd4910378f2fba86f8533a4c09b69aedf32f533edad",
+    "iqfanda-agent/config.yaml": "2e1ebbed72a3f43b54c1d8523ed4b2f87d70acbffb3c4d784a4fc96125c59b67",
+    "iqfanda-agent/rootfs/app/VERSION": "dab1db4bf902acc35d3ce4731b9930dc05961094d926b0ba631a25fc05e6528a",
     "iqfanda-agent/rootfs/app/battery_control_canary.py": "27d4538b8388bd8ca065c26f1cab4fc9e26d026e603a338c3f79a4b667f07a9d",
     "iqfanda-agent/rootfs/app/command_worker.py": "b87cb30128fb8bb5e371390a60511b53472b4c38f97aa9e3c75ff85eedb6e54f",
     "iqfanda-agent/rootfs/app/communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
     "iqfanda-agent/rootfs/app/communication/battery_feature_guard.py": "fabdffe76209cce8e755bc30ae89135db049ba6eb54fa4f0433ca7875c4ad0bf",
-    "iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py": "566a50d6e4afc945d07b9ac1b0bf550cb27fc1c5ac66d132a0ffef47afa1c2cd",
+    "iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py": "c381729e802ce2244cb29bd9a090d4b89c631b887400d5768f539e2520ed36e7",
     "iqfanda-agent/rootfs/app/communication/foxess_remote_control_probe.py": "618d3563c44cec35d96af997289c28431ad6e8bc4d0bad8664ec4a3f838a54ce",
     "iqfanda-agent/rootfs/app/communication/goodwe_ems_controller.py": "f6290bde65c4ad5a4260b8368dd53bc44f291d167ce7aded3bc0140ba85fd95d",
     "iqfanda-agent/rootfs/app/communication/goodwe_probe.py": "df24b073a3d2e320c8c39b7559b58e30c1c980fea554c0b530e6a5b3442af3ae",
@@ -87,7 +94,7 @@
     "iqfanda-agent/scripts/f53_r14_test_foxess_00007.py": "921ae5c84a50aefb0d5da02c87f6daa68025dc07adc34089024570c1bb187ad3",
     "iqfanda-agent/scripts/read_addon_update_preflight.py": "d438856132db05b26ef01f3ec098c2d44ca5694c4f3d58e265a1c01cc6e17d98",
     "iqfanda-agent/tests/test_battery_control_canary.py": "3e569c56dd20213aeab738c9596e4ebf159d05658b420a3e8884c5222e2f5c82",
-    "iqfanda-agent/tests/test_foxess_battery_control.py": "8d64ff93c8a487a89ddc713278d944c05693b008a8b8b90357f53d5399acd523",
+    "iqfanda-agent/tests/test_foxess_battery_control.py": "00a94debf9074dc6b3a0363c2cab097e899318b2a7b5c313f8197a8be65fc2df",
     "iqfanda-agent/tests/test_foxess_remote_control_probe.py": "e2c5ff2f61f87581f805642b6c8f5de106f47e2a404063169d2ba9c0b43e928e",
     "iqfanda-agent/tests/test_foxess_zero_remote_release.py": "09a5e06213d97a1933b4f792dd51725d0562d6824e68b126e7a468e3974b913e",
     "iqfanda-agent/tests/test_manual_battery_energy_context.py": "5a33eed43935d3c921ddcb66c73b38c5fe8263544a0e1808e27c0d350fe9b3de",
@@ -163,7 +170,7 @@
       "unavailable_reason": null
     }
   },
-  "runtime_fingerprint": "4baabda610229bb7b0ac55f0990ef464b3db3deb86e7fed98fc3473929530f9c",
+  "runtime_fingerprint": "31bd1c302ee5f5f4838069cb97e0da1dddbd9809e2d756d3099595c0e5c20bd0",
   "schema_version": 1,
-  "source_fingerprint": "1b5d950b208518f02d2058644b2a696abe90e0ff65bebc38f7b0667b504b085b"
+  "source_fingerprint": "beaa0c13158d8b36fa9b00b18ea3dfb6e0706e8ea48c517b761660cc6edcabb4"
 }
