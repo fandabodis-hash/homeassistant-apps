@@ -1,0 +1,32 @@
+name: F57 refresh experimental battery protection manifest (read-only git)
+on:
+  push:
+    branches: [f57/foxess-60s-renewal-candidate-20261107]
+    paths: ['.github/workflows/f57-refresh-experimental-contract.yml']
+permissions:
+  contents: read
+jobs:
+  refresh-candidate-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate exact candidate contract in workspace only
+        run: |
+          python iqfanda-agent/scripts/check_manual_battery_release.py --refresh "F57 0.1.171 reviewed experimental FoxESS 60s renewed setpoint without removing 10s safety supervisor"
+          python iqfanda-agent/scripts/check_manual_battery_release.py
+      - name: Emit exact generated files for reviewed feature branch commit
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          paths = {
+              "CONTRACT": "iqfanda-agent/contracts/manual_battery_release.json",
+              "MANIFEST": "iqfanda-agent/rootfs/app/protection/manual_battery_manifest.json",
+          }
+          for name,path in paths.items():
+              value=Path(path).read_text(encoding="utf-8")
+              print("F57_"+name+"_ESCAPED="+json.dumps(value,ensure_ascii=True))
+          PY
