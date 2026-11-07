@@ -8,9 +8,10 @@
   "files": {
     "VERSION": "f3bad46978f2215a721e815f2e4c9398ab3dfc9bdce25a29ff24e5149c63d62f",
     "battery_control_canary.py": "27d4538b8388bd8ca065c26f1cab4fc9e26d026e603a338c3f79a4b667f07a9d",
-    "command_worker.py": "a74b00afb28fb15958c74d5c4863f32635ab01e8fc8ce439d35b1ff6cd7a66f4",
+    "command_worker.py": "143ea6027224c0bb96830db9c106050993e203077131fde9b1a36cbf57d5ab2e",
     "communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
-    "communication/battery_feature_guard.py": "eb8a1f0941dcb14d77bd0b2c955fe8c8a8c1ec1f54635d72c6c4448b59403aff",
+    "communication/battery_feature_guard.py": "3a73d9ddf58e1aca85a4d9eb85672b818a4f30fdb3ccee0b154468b793d277d3",
+    "communication/foxess_175_00007_commissioning.py": "d8e7c728ef2c15559f3accd199d4bc1dc10d4ba799fcb6cdcb3d068e48a167be",
     "communication/foxess_ems_controller.py": "566a50d6e4afc945d07b9ac1b0bf550cb27fc1c5ac66d132a0ffef47afa1c2cd",
     "communication/foxess_remote_control_probe.py": "618d3563c44cec35d96af997289c28431ad6e8bc4d0bad8664ec4a3f838a54ce",
     "communication/goodwe_ems_controller.py": "f6290bde65c4ad5a4260b8368dd53bc44f291d167ce7aded3bc0140ba85fd95d",
@@ -37,6 +38,6 @@
   "rootfs_files": {
     "etc/services.d/iqfanda/run": "14f3f2fbe262d2884bf40082a75876b25c300085995d69c4d3e67e4c670fe735"
   },
-  "runtime_fingerprint": "053c3cb61ff4144671afbf4c1511b0323434847aa4e63f0c3ae923fd990a7cec",
+  "runtime_fingerprint": "26e9859279bbf51002410796c7bede1076cfdfed695a2bddf958d7b40e469af1",
   "schema_version": 1
 }

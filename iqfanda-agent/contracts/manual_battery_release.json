@@ -63,21 +63,30 @@
       "revision": 9,
       "runtime_fingerprint": "053c3cb61ff4144671afbf4c1511b0323434847aa4e63f0c3ae923fd990a7cec",
       "source_fingerprint": "95d6d0a00d8bd21e3d914562f9aacbccfa85effd9e42a688274ac0aac4a1a2cf"
+    },
+    {
+      "agent_version": "0.1.175",
+      "reason": "F58 0.1.175: isolate 00007 FoxESS-only commissioning identity from universal command worker; enforce unchanged Vaculik 0.1.168 controller and F57 source-specific CI; never affect other modules",
+      "revision": 10,
+      "runtime_fingerprint": "26e9859279bbf51002410796c7bede1076cfdfed695a2bddf958d7b40e469af1",
+      "source_fingerprint": "cc9ae69878556bbed7794d995b0825d9de92854ff545b6fd0a70f9556ddbf1d7"
     }
   ],
   "feature": "local_manual_battery",
   "files": {
-    ".github/workflows/f58-foxess-only-175.yml": "6d0443be3c4529a17d6f7db2bce41dfd64fc0b080cde9ce6877ffbbacfb59f5d",
+    ".github/workflows/f57-foxess-renewal-candidate.yml": "bc723927ef9bbd88ce1cfde5e602afab888abe21fc1ea944e770782a295b6860",
+    ".github/workflows/f58-foxess-only-175.yml": "0f10ff8c69e0e40c5bc03f8493dd669c193fbf04203d3d5fa58c6ac8ea47a472",
     ".github/workflows/manual-battery-release-guard.yml": "385b1d05f7da7a049e57ea4397f2260acf77f86a107aa6c3818e1d4ea3eabe3b",
     "iqfanda-agent/Dockerfile": "3807f87277deedde6d16cdd90814eb27f23eec4b25e06341a6a2a8e91e8ddc82",
     "iqfanda-agent/MANUAL_BATTERY_RELEASE.md": "0af74076c43d28bd5cb94e9f312f95fed2aebe6f7ce794de4ee5e80c34fdc65d",
     "iqfanda-agent/config.yaml": "b5186c6513167adbb98c7ef43228ed34bc2680da8badd74844939411785b0f6e",
-    "iqfanda-agent/docs/F58_FOXESS_ONLY_0_1_175_RELEASE.md": "cd122d04f7ae0152010eefcfcc53262ce7211428e2783132da620349be362cc8",
+    "iqfanda-agent/docs/F58_FOXESS_ONLY_0_1_175_RELEASE.md": "0cebdcbb0432fbea4a5962b5848a86ed2530c8a41201bb66c57f239c84959c06",
     "iqfanda-agent/rootfs/app/VERSION": "f3bad46978f2215a721e815f2e4c9398ab3dfc9bdce25a29ff24e5149c63d62f",
     "iqfanda-agent/rootfs/app/battery_control_canary.py": "27d4538b8388bd8ca065c26f1cab4fc9e26d026e603a338c3f79a4b667f07a9d",
-    "iqfanda-agent/rootfs/app/command_worker.py": "a74b00afb28fb15958c74d5c4863f32635ab01e8fc8ce439d35b1ff6cd7a66f4",
+    "iqfanda-agent/rootfs/app/command_worker.py": "143ea6027224c0bb96830db9c106050993e203077131fde9b1a36cbf57d5ab2e",
     "iqfanda-agent/rootfs/app/communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
-    "iqfanda-agent/rootfs/app/communication/battery_feature_guard.py": "eb8a1f0941dcb14d77bd0b2c955fe8c8a8c1ec1f54635d72c6c4448b59403aff",
+    "iqfanda-agent/rootfs/app/communication/battery_feature_guard.py": "3a73d9ddf58e1aca85a4d9eb85672b818a4f30fdb3ccee0b154468b793d277d3",
+    "iqfanda-agent/rootfs/app/communication/foxess_175_00007_commissioning.py": "d8e7c728ef2c15559f3accd199d4bc1dc10d4ba799fcb6cdcb3d068e48a167be",
     "iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py": "566a50d6e4afc945d07b9ac1b0bf550cb27fc1c5ac66d132a0ffef47afa1c2cd",
     "iqfanda-agent/rootfs/app/communication/foxess_remote_control_probe.py": "618d3563c44cec35d96af997289c28431ad6e8bc4d0bad8664ec4a3f838a54ce",
     "iqfanda-agent/rootfs/app/communication/goodwe_ems_controller.py": "f6290bde65c4ad5a4260b8368dd53bc44f291d167ce7aded3bc0140ba85fd95d",
@@ -110,7 +119,7 @@
     "iqfanda-agent/scripts/f53_r14_test_foxess_00007.py": "921ae5c84a50aefb0d5da02c87f6daa68025dc07adc34089024570c1bb187ad3",
     "iqfanda-agent/scripts/read_addon_update_preflight.py": "d438856132db05b26ef01f3ec098c2d44ca5694c4f3d58e265a1c01cc6e17d98",
     "iqfanda-agent/tests/test_battery_control_canary.py": "3e569c56dd20213aeab738c9596e4ebf159d05658b420a3e8884c5222e2f5c82",
-    "iqfanda-agent/tests/test_f58_foxess_only_175.py": "740dff4aa8d33fcf3db5ddf79dfdd72f1ca01f5ca1e5be31886432d7393a320e",
+    "iqfanda-agent/tests/test_f58_foxess_only_175.py": "c192f98fc1ff90b06b4b64c736efd694513379305e24c3382b7c602a6025bcc1",
     "iqfanda-agent/tests/test_foxess_battery_control.py": "d151fedf33527b8bac67430b4de9d7c997f010463da3c91ffb9f49947a69ed0c",
     "iqfanda-agent/tests/test_foxess_remote_control_probe.py": "e2c5ff2f61f87581f805642b6c8f5de106f47e2a404063169d2ba9c0b43e928e",
     "iqfanda-agent/tests/test_foxess_zero_remote_release.py": "09a5e06213d97a1933b4f792dd51725d0562d6824e68b126e7a468e3974b913e",
@@ -187,7 +196,7 @@
       "unavailable_reason": null
     }
   },
-  "runtime_fingerprint": "053c3cb61ff4144671afbf4c1511b0323434847aa4e63f0c3ae923fd990a7cec",
+  "runtime_fingerprint": "26e9859279bbf51002410796c7bede1076cfdfed695a2bddf958d7b40e469af1",
   "schema_version": 1,
-  "source_fingerprint": "95d6d0a00d8bd21e3d914562f9aacbccfa85effd9e42a688274ac0aac4a1a2cf"
+  "source_fingerprint": "cc9ae69878556bbed7794d995b0825d9de92854ff545b6fd0a70f9556ddbf1d7"
 }
