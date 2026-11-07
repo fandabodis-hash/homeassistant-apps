@@ -31,6 +31,7 @@
     "foxess_zero_remote_release.py": "d9dc930130857c190d19e10e61667c4c129ffd5149ffcd4a4541d9c16c1f4866",
     "heartbeat.py": "2b63d18618c5529d2a3ca25d9a488152777426821c6363d308f8de1cb94defa7",
     "local_modules/__init__.py": "eb3bc17f7e2bb270d8444c315d09d5a7f2f1b9cd44e0ade48d60d90113738825",
+    "local_modules/battery_recovery_policy.py": "6f4fb8f0cae4cec6dd27d129a787bf768cfa59da781919efe189a60f1e8f3e4f",
     "local_modules/host.py": "579fb752c7f78fc8782f188cfa9cebcec312bd5e9ef970ea380c8a1c5075a0f3",
     "local_modules/registry.py": "67611d77ea5f10435e48262cde0b1be5f7a63a5308a375b04521797ad088e11d",
     "manual_battery_runtime.py": "b4c8175c8f0d9adec72a40fd3f5329ddcc98375df537217c5ffebf736211c643",
@@ -40,6 +41,6 @@
   "rootfs_files": {
     "etc/services.d/iqfanda/run": "14f3f2fbe262d2884bf40082a75876b25c300085995d69c4d3e67e4c670fe735"
   },
-  "runtime_fingerprint": "d3caa93646649ff29e3c5f4b0b39054b8b2d6a91e13a01783e14490ed058e459",
+  "runtime_fingerprint": "8fc5e07d3b4dc49bbd5a2ae6fdf4a24cb6a4d8e4d94161a71a444fe668b9efce",
   "schema_version": 1
 }
