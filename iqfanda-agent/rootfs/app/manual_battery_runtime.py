@@ -111,6 +111,44 @@ def _canary_evidence_complete(result: dict) -> bool:
     return True
 
 
+def _archive_previous_foxess_pin(*, pin_path: Path, expected_sha256: str) -> Path:
+    """Append-only byte-exact backup of old physically verified FoxESS pin.
+
+    Never removes/rewrites a physical certificate, never touches other sites,
+    and must be invoked only after the explicit FoxESS canary approval gate.
+    """
+    if pin_path.is_symlink() or not pin_path.is_file():
+        raise RuntimeError("Old FoxESS pin must be a regular file.")
+    original = pin_path.read_bytes()
+    actual = hashlib.sha256(original).hexdigest()
+    if expected_sha256 != actual:
+        raise RuntimeError("Old FoxESS pin SHA256 changed.")
+    existing = json.loads(original.decode("utf-8-sig"))
+    if (existing.get("schema_version") != 1 or
+            not isinstance(existing.get("profiles"), dict) or
+            existing["profiles"].get("foxess_h3_10_0_e", {}).get("status") != "physically_verified"):
+        raise RuntimeError("Old FoxESS physical evidence is not verified.")
+    archive_dir = pin_path.parent / "manual_battery_acceptance" / "prior_pins"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    if archive_dir.is_symlink():
+        raise RuntimeError("Old FoxESS pin archive is a symlink.")
+    archive = archive_dir / ("pin-registry-" + actual + ".json")
+    if archive.exists() or archive.is_symlink():
+        if archive.is_symlink() or archive.read_bytes() != original:
+            raise RuntimeError("Old FoxESS pin archive already exists with different bytes.")
+        return archive
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(archive, flags, 0o400)
+    with os.fdopen(fd, "wb") as output:
+        output.write(original)
+        output.flush()
+        os.fsync(output.fileno())
+    _sync_directory(archive_dir)
+    return archive
+
+
 class LocalBatteryRuntime:
     def __init__(self, *, path: Path = STATE_PATH, execute=None, config_loader=None, clock=None, feature_guard=None):
         self.path = path
@@ -184,6 +222,15 @@ class LocalBatteryRuntime:
         return verify_battery_feature(profile_id=state.get("profile_id"))
 
     def _stop(self, state: dict, reason: str, *, clear_latch: bool = False) -> dict:
+        # F58 00007 FoxESS-only fix: a second AUTO after a verified manual
+        # STOP must not re-latch an already stopped user command. Safety STOP
+        # from an active/stop-pending manual session still blocks replay.
+        foxess_manual_was_active = (
+            state.get("profile_id") == "foxess_h3_10_0_e"
+            and state.get("manual") is True
+            and state.get("state") in ACTIVE_STATES
+            and state.get("action") in {"charge_grid", "discharge_grid"}
+        )
         state.update(state="stop_pending", reason=reason, verified=False)
         try:
             self._save(state)
@@ -207,7 +254,9 @@ class LocalBatteryRuntime:
         if clear_latch:
             state["blocked_signature"] = None
             state["blocked_manual_signatures"] = []
-        elif state.get("manual"):
+        elif state.get("manual") and (
+            state.get("profile_id") != "foxess_h3_10_0_e" or foxess_manual_was_active
+        ):
             state["blocked_signature"] = state.get("signature")
             blocked = list(state.get("blocked_manual_signatures") or [])
             if state.get("signature") and state["signature"] not in blocked:
@@ -353,7 +402,9 @@ class LocalBatteryRuntime:
             return self.status()
 
     def canary(self, *, callback, cloud_config: dict, command_id: str,
-               expected_runtime_fingerprint: str) -> dict:
+               expected_runtime_fingerprint: str,
+               expected_previous_pin_sha256: str | None = None,
+               explicitly_approved: bool = False) -> dict:
         """Reserve an idle local owner, retain recovery data, and test only FoxESS.
 
         A PASS pins this exact implementation for this profile and the recorded
@@ -374,6 +425,31 @@ class LocalBatteryRuntime:
             fingerprint = self.feature_guard() if self.feature_guard else verify_battery_feature()
             if expected_runtime_fingerprint != fingerprint:
                 raise RuntimeError("Canary implementation does not match the explicitly selected runtime fingerprint.")
+            # Only FoxESS H3 reaches this point. Keep the original 00007
+            # physical proof intact; archive exact bytes BEFORE canary I/O.
+            from communication.battery_feature_guard import PIN_PATH
+            original_sha = None
+            if PIN_PATH == self.path.parent / "manual_battery_verified_fingerprint.json":
+                pin_path = PIN_PATH
+            else:
+                # Test runtime path is deliberately separate from live add-on.
+                pin_path = self.path.parent / "manual_battery_verified_fingerprint.json"
+            if pin_path.exists() or pin_path.is_symlink():
+                if pin_path.is_symlink() or not pin_path.is_file():
+                    raise RuntimeError("FoxESS physical pin must be a regular file.")
+                old_bytes = pin_path.read_bytes()
+                registry = json.loads(old_bytes.decode("utf-8-sig"))
+                if registry.get("schema_version") != 1 or not isinstance(registry.get("profiles"), dict):
+                    raise RuntimeError("FoxESS physical pin registry has invalid schema.")
+                pinned = registry["profiles"].get("foxess_h3_10_0_e", {})
+                if pinned.get("status") == "physically_verified" and (
+                    pinned.get("runtime_fingerprint") != fingerprint or
+                    pinned.get("agent_version") != (Path(__file__).parent / "VERSION").read_text().strip()
+                ):
+                    original_sha = hashlib.sha256(old_bytes).hexdigest()
+                    if not explicitly_approved or expected_previous_pin_sha256 != original_sha:
+                        raise RuntimeError("Old FoxESS pin requires exact SHA256 and explicit technician approval.")
+                    _archive_previous_foxess_pin(pin_path=pin_path, expected_sha256=original_sha)
             now = self.clock()
             state = {**previous, "state": "preparing", "action": "auto", "manual": True,
                 "command_id": command_id, "session_id": command_id,
@@ -400,6 +476,9 @@ class LocalBatteryRuntime:
                     result.update(status="failed", verified=False, local_final_auto_verified=False, final_auto_error=str(exc))
             result.update(runtime_fingerprint=fingerprint, command_id=command_id,
                           finished_at=self.clock().isoformat())
+            if original_sha:
+                result["prior_pin_sha256"] = original_sha
+                result["prior_pin_archived"] = True
             if result.get("status") == "passed" and not _canary_evidence_complete(result):
                 result.update(status="failed", verified=False, error="Physical canary evidence is incomplete.")
             if result.get("status") == "passed" and result.get("local_final_auto_verified") is True:
@@ -424,11 +503,20 @@ class LocalBatteryRuntime:
             os.fsync(stream.fileno())
         _sync_directory(evidence_dir)
         pin_path = self.path.parent / "manual_battery_verified_fingerprint.json"
+        if pin_path.is_symlink():
+            raise RuntimeError("FoxESS physical pin registry is a symlink.")
+        if result.get("prior_pin_sha256"):
+            if hashlib.sha256(pin_path.read_bytes()).hexdigest() != result["prior_pin_sha256"]:
+                raise RuntimeError("Previous FoxESS pin changed during physical canary.")
+            _archive_previous_foxess_pin(pin_path=pin_path, expected_sha256=result["prior_pin_sha256"])
         pin = json.loads(pin_path.read_text()) if pin_path.exists() else {"schema_version": 1, "profiles": {}}
         if pin.get("schema_version") != 1 or not isinstance(pin.get("profiles"), dict):
             raise RuntimeError("Existing physical verification registry is invalid; it was not replaced.")
+        from communication.battery_feature_guard import foxess_certified_source_fingerprint, _load, MANIFEST_PATH
+        certified = foxess_certified_source_fingerprint(_load(MANIFEST_PATH)["files"])
         pin["profiles"][result["profile_id"]] = {
             "status": "physically_verified", "runtime_fingerprint": fingerprint,
+            "foxess_control_fingerprint": certified,
             "agent_version": (Path(__file__).parent / "VERSION").read_text().strip(),
             "evidence_id": result["command_id"], "report_sha256": report_hash,
             "verification_scope": result["verification_scope"], "verified_at": result["finished_at"],
@@ -445,7 +533,9 @@ class LocalBatteryRuntime:
             if os.path.exists(temporary):
                 os.unlink(temporary)
         return {"status": "locked", "profile_id": result["profile_id"],
-                "runtime_fingerprint": fingerprint, "report_sha256": report_hash,
+                "runtime_fingerprint": fingerprint,
+                "foxess_control_fingerprint": certified,
+                "report_sha256": report_hash,
                 "verification_scope": result["verification_scope"]}
 
 
@@ -461,9 +551,13 @@ def get_local_battery_status() -> dict:
 
 
 def run_exclusive_battery_canary(*, callback, cloud_config: dict, command_id: str,
-                                 expected_runtime_fingerprint: str) -> dict:
+                                 expected_runtime_fingerprint: str,
+                                 expected_previous_pin_sha256: str | None = None,
+                                 explicitly_approved: bool = False) -> dict:
     return _RUNTIME.canary(callback=callback, cloud_config=cloud_config, command_id=command_id,
-                          expected_runtime_fingerprint=expected_runtime_fingerprint)
+                          expected_runtime_fingerprint=expected_runtime_fingerprint,
+                          expected_previous_pin_sha256=expected_previous_pin_sha256,
+                          explicitly_approved=explicitly_approved)
 
 
 def main() -> None:
