@@ -1,0 +1,31 @@
+name: F58 refresh experimental 0.1.172 protection manifest (review only)
+on:
+  push:
+    branches: [f58/172-manual-stop-latch-regression-20261107]
+    paths: ['.github/workflows/f58-refresh-experimental-contract.yml']
+permissions:
+  contents: read
+jobs:
+  refresh-candidate-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate candidate contract and validate integrity
+        run: |
+          python iqfanda-agent/scripts/check_manual_battery_release.py --refresh "F58 0.1.172 reviewed STOP replay latch correction; physical acceptance pending"
+          python iqfanda-agent/scripts/check_manual_battery_release.py
+      - name: Print exact generated files only for reviewed commit
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          paths = {
+              "CONTRACT": "iqfanda-agent/contracts/manual_battery_release.json",
+              "MANIFEST": "iqfanda-agent/rootfs/app/protection/manual_battery_manifest.json",
+          }
+          for name,path in paths.items():
+              print("F58_"+name+"_ESCAPED="+json.dumps(Path(path).read_text(encoding="utf-8"),ensure_ascii=True))
+          PY
