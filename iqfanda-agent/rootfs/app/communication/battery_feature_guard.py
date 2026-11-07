@@ -32,6 +32,8 @@ REQUIRED_FILES = {
     "communication/goodwe_probe.py", "communication/inverter_profiles/catalog.json",
     "communication/foxess_ems_controller.py",
     "communication/foxess_remote_control_probe.py",
+    "local_modules/foxess_commissioning_grid_guard.py",
+    "local_modules/battery_pin_transition.py",
     "communication/goodwe_ems_controller.py",
     "communication/solax_ems_controller.py",
     "communication/modbus_bus_lock.py",
