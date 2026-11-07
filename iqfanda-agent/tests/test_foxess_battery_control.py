@@ -263,35 +263,30 @@ class FoxessBatteryControlTests(unittest.TestCase):
                 self.assertFalse(self.marker.exists())
         self.assertTrue(all(address != 44003 for address, _ in self.inverter.writes))
 
-    def test_f57_identical_power_is_not_rewritten_every_ten_seconds(self):
-        """Local safety checks continue, while identical 44002 is throttled."""
+    def test_f58_vaculik_168_reasserts_setpoint_every_local_renewal(self):
+        """Exact physically verified 00018 driver sends 44002 on every tick."""
         for action in ("charge_grid", "discharge_grid"):
             with self.subTest(action=action):
                 self.inverter.writes.clear()
                 start = self.apply(action)
                 self.assertTrue(start.verified)
                 self.assertTrue(start.write_performed)
-                writes_before = list(self.inverter.writes)
                 again = self.apply(action)
                 self.assertTrue(again.verified)
-                self.assertFalse(again.write_performed)
-                self.assertEqual(self.inverter.writes, writes_before)
-                self.assertEqual(sum(address == 44002 for address, _ in writes_before), 1)
+                self.assertTrue(again.write_performed)
+                self.assertEqual(sum(a == 44002 for a, _ in self.inverter.writes), 2)
                 self.apply()  # AUTO cleanup must remain immediate
 
-    def test_f57_renewal_refreshes_remote_power_well_before_180s_watchdog(self):
+    def test_f58_vaculik_168_remote_renewal_requires_no_f57_throttle_marker(self):
         self.apply("discharge_grid")
         marker = json.loads(self.marker.read_text())
-        self.assertEqual(marker["remote_power_last_write_w"], 500)
+        self.assertNotIn("remote_power_last_write_w", marker)
         self.assertEqual(sum(a == 44002 for a, _ in self.inverter.writes), 1)
-        marker["remote_power_last_write_utc"] = (
-            datetime.now(timezone.utc) - timedelta(seconds=61)).isoformat()
-        self.marker.write_text(json.dumps(marker), encoding="utf-8")
-        renewed = self.apply("discharge_grid")
-        self.assertTrue(renewed.verified)
-        self.assertTrue(renewed.write_performed)
-        self.assertEqual(sum(a == 44002 for a, _ in self.inverter.writes), 2)
-        self.assertFalse(self.apply("discharge_grid").write_performed)
+        self.assertTrue(self.apply("discharge_grid").write_performed)
+        self.assertTrue(self.apply("discharge_grid").write_performed)
+        self.assertEqual(sum(a == 44002 for a, _ in self.inverter.writes), 3)
+        self.apply()
+        self.assertFalse(self.marker.exists())
 
     def test_f57_power_change_rearms_immediately_even_with_fresh_lease(self):
         self.apply("charge_grid")
@@ -302,7 +297,7 @@ class FoxessBatteryControlTests(unittest.TestCase):
             [(a, v) for a, v in self.inverter.writes if a == 44002][-2:],
             [(44002, 65536 - 500), (44002, 65536 - 700)],
         )
-        self.assertFalse(self.apply("charge_grid", allowed_charge_power_w=700).write_performed)
+        self.assertTrue(self.apply("charge_grid", allowed_charge_power_w=700).write_performed)
 
     def test_f57_remote_enable_rearm_forces_setpoint_write(self):
         self.apply("discharge_grid")
@@ -336,7 +331,7 @@ class FoxessBatteryControlTests(unittest.TestCase):
 
     def test_f57_stop_is_not_delayed_by_renewal_lease(self):
         self.apply("charge_grid")
-        self.assertFalse(self.apply("charge_grid").write_performed)
+        self.assertTrue(self.apply("charge_grid").write_performed)
         stop = self.apply()
         self.assertTrue(stop.verified)
         self.assertTrue(stop.write_performed)
