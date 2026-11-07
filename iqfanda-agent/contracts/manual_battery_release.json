@@ -84,11 +84,18 @@
       "revision": 12,
       "runtime_fingerprint": "9393f33f3aa1f25f467db8528646a528212d8c2816fe628d640bca4a488843aa",
       "source_fingerprint": "9e3ef9ce6609fd07a99a519000e37e7c5be4f3709d56f1608c59ae50f67ba4ac"
+    },
+    {
+      "agent_version": "0.1.174",
+      "reason": "F58/F59 0.1.174: run all local module pin migration CI on stacked PR branch; no change to physical control behavior",
+      "revision": 13,
+      "runtime_fingerprint": "9393f33f3aa1f25f467db8528646a528212d8c2816fe628d640bca4a488843aa",
+      "source_fingerprint": "d9b61bbd21da4f06d0e442e8b537344a47a48cf3b12f7c2824d3287fbe404206"
     }
   ],
   "feature": "local_manual_battery",
   "files": {
-    ".github/workflows/f59-local-module-candidate.yml": "74726d348dba8e653ef366bf431b8455ddfc6caf1d4ec2049adc65f44a69296e",
+    ".github/workflows/f59-local-module-candidate.yml": "c969d19f27988e5690e20e4c3f3475bcf7e306c814bb61bb8d7d0adb440f247e",
     ".github/workflows/manual-battery-release-guard.yml": "385b1d05f7da7a049e57ea4397f2260acf77f86a107aa6c3818e1d4ea3eabe3b",
     "iqfanda-agent/Dockerfile": "3807f87277deedde6d16cdd90814eb27f23eec4b25e06341a6a2a8e91e8ddc82",
     "iqfanda-agent/MANUAL_BATTERY_RELEASE.md": "0af74076c43d28bd5cb94e9f312f95fed2aebe6f7ce794de4ee5e80c34fdc65d",
@@ -218,5 +225,5 @@
   },
   "runtime_fingerprint": "9393f33f3aa1f25f467db8528646a528212d8c2816fe628d640bca4a488843aa",
   "schema_version": 1,
-  "source_fingerprint": "9e3ef9ce6609fd07a99a519000e37e7c5be4f3709d56f1608c59ae50f67ba4ac"
+  "source_fingerprint": "d9b61bbd21da4f06d0e442e8b537344a47a48cf3b12f7c2824d3287fbe404206"
 }
