@@ -10,7 +10,7 @@
     "battery_control_canary.py": "fa4e445670b14737d057ac73fba2e9c1eb50f99dc73bdb67353681bd7e5a07f9",
     "command_worker.py": "95ee6e8e9f0bc2d2580cdc45071e976a55114c0d844392e813faf9e0821a0bec",
     "communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
-    "communication/battery_feature_guard.py": "e94f95d5f9d7af0593b1254052d8b52c32a2b8acb19eb613b5064219aa8ccea3",
+    "communication/battery_feature_guard.py": "22de223939ef85d8182778647b8123ba97f7764e2120be36c82865efd9cea81a",
     "communication/foxess_ems_controller.py": "c381729e802ce2244cb29bd9a090d4b89c631b887400d5768f539e2520ed36e7",
     "communication/foxess_remote_control_probe.py": "618d3563c44cec35d96af997289c28431ad6e8bc4d0bad8664ec4a3f838a54ce",
     "communication/goodwe_ems_controller.py": "f6290bde65c4ad5a4260b8368dd53bc44f291d167ce7aded3bc0140ba85fd95d",
@@ -36,13 +36,13 @@
     "local_modules/foxess_commissioning_grid_guard.py": "8b57ab9463b8e95bda32a5c0395afe237cf71c4ef8533e7bc90524aba97a488f",
     "local_modules/host.py": "579fb752c7f78fc8782f188cfa9cebcec312bd5e9ef970ea380c8a1c5075a0f3",
     "local_modules/registry.py": "67611d77ea5f10435e48262cde0b1be5f7a63a5308a375b04521797ad088e11d",
-    "manual_battery_runtime.py": "1e3e4d3166699ea73b8e0a73551ada864cea177590e3876c0779cb280d590313",
+    "manual_battery_runtime.py": "188f7c07b5cb1b23fff661db8e425a094d2081f54e2ec56d08720eab286e3a64",
     "spot_battery_intent.py": "9614747ec7a5e246c9bff2c18527c741f75c2453251baeaacea813bdc0fdcc02",
     "startup.py": "02527443e44e350fcfc074b95103d39d8c818c420cc79bd14d7ea0045983f56b"
   },
   "rootfs_files": {
     "etc/services.d/iqfanda/run": "14f3f2fbe262d2884bf40082a75876b25c300085995d69c4d3e67e4c670fe735"
   },
-  "runtime_fingerprint": "1e3ea7774ac48710d7c056ec2ba4e68f24b94fd48c7629f515425da27aaa6cbf",
+  "runtime_fingerprint": "8a2ed3ea27401d9987457b4128e9cbf2ec4d7cdf416d02bb2c245d15abc79578",
   "schema_version": 1
 }
