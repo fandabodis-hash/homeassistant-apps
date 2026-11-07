@@ -125,8 +125,10 @@ def require_protected_00007_discharge_safety(*, identity_path: Path = DEVICE_PAT
     refuse any new or renewed 00007 discharge request.
     """
     if is_protected_00007(identity_path=identity_path):
-        LocalGridImportGuard(
+        guard = LocalGridImportGuard(
             identity_path=identity_path, config_path=config_path
-        ).check_during_discharge() if renewal is True else LocalGridImportGuard(
-            identity_path=identity_path, config_path=config_path
-        ).check_before_discharge()
+        )
+        if renewal is True:
+            guard.check_during_discharge()
+        else:
+            guard.check_before_discharge()
