@@ -1,7 +1,7 @@
 name: F59 local module host (candidate only)
 on:
   push:
-    branches: [feature/f59-local-first-agent-0-1-173-candidate-20261107]
+    branches: [feature/f59-local-first-agent-0-1-173-candidate-20261107, feature/f58-f59-agent-0-1-174-unified-revalidation-20261107]
   pull_request:
     branches: [main]
 permissions:
@@ -23,4 +23,5 @@ jobs:
         run: |
           python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f59_local_modules.py'
           python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f58_recovery_policy.py'
-          python -m py_compile iqfanda-agent/rootfs/app/local_modules/registry.py iqfanda-agent/rootfs/app/local_modules/host.py iqfanda-agent/rootfs/app/local_modules/battery_recovery_policy.py iqfanda-agent/rootfs/app/startup.py
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f58_battery_pin_transition.py'
+          python -m py_compile iqfanda-agent/rootfs/app/local_modules/registry.py iqfanda-agent/rootfs/app/local_modules/host.py iqfanda-agent/rootfs/app/local_modules/battery_recovery_policy.py iqfanda-agent/rootfs/app/local_modules/battery_pin_transition.py iqfanda-agent/rootfs/app/startup.py
