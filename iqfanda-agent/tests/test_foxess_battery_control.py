@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import sys
@@ -261,6 +262,94 @@ class FoxessBatteryControlTests(unittest.TestCase):
                 self.assertTrue(self.apply().verified)
                 self.assertFalse(self.marker.exists())
         self.assertTrue(all(address != 44003 for address, _ in self.inverter.writes))
+
+    def test_f57_identical_power_is_not_rewritten_every_ten_seconds(self):
+        """Local safety checks continue, while identical 44002 is throttled."""
+        for action in ("charge_grid", "discharge_grid"):
+            with self.subTest(action=action):
+                self.inverter.writes.clear()
+                start = self.apply(action)
+                self.assertTrue(start.verified)
+                self.assertTrue(start.write_performed)
+                writes_before = list(self.inverter.writes)
+                again = self.apply(action)
+                self.assertTrue(again.verified)
+                self.assertFalse(again.write_performed)
+                self.assertEqual(self.inverter.writes, writes_before)
+                self.assertEqual(sum(address == 44002 for address, _ in writes_before), 1)
+                self.apply()  # AUTO cleanup must remain immediate
+
+    def test_f57_renewal_refreshes_remote_power_well_before_180s_watchdog(self):
+        self.apply("discharge_grid")
+        marker = json.loads(self.marker.read_text())
+        self.assertEqual(marker["remote_power_last_write_w"], 500)
+        self.assertEqual(sum(a == 44002 for a, _ in self.inverter.writes), 1)
+        marker["remote_power_last_write_utc"] = (
+            datetime.now(timezone.utc) - timedelta(seconds=61)).isoformat()
+        self.marker.write_text(json.dumps(marker), encoding="utf-8")
+        renewed = self.apply("discharge_grid")
+        self.assertTrue(renewed.verified)
+        self.assertTrue(renewed.write_performed)
+        self.assertEqual(sum(a == 44002 for a, _ in self.inverter.writes), 2)
+        self.assertFalse(self.apply("discharge_grid").write_performed)
+
+    def test_f57_power_change_rearms_immediately_even_with_fresh_lease(self):
+        self.apply("charge_grid")
+        altered = self.apply("charge_grid", allowed_charge_power_w=700)
+        self.assertTrue(altered.write_performed)
+        self.assertEqual(self.inverter.registers[44002], 65536 - 700)
+        self.assertEqual(
+            [(a, v) for a, v in self.inverter.writes if a == 44002][-2:],
+            [(44002, 65536 - 500), (44002, 65536 - 700)],
+        )
+        self.assertFalse(self.apply("charge_grid", allowed_charge_power_w=700).write_performed)
+
+    def test_f57_remote_enable_rearm_forces_setpoint_write(self):
+        self.apply("discharge_grid")
+        self.inverter.registers[44000] = 0
+        recovered = self.apply("discharge_grid")
+        self.assertTrue(recovered.write_performed)
+        self.assertEqual(self.inverter.registers[44000], 1)
+        self.assertEqual(sum(a == 44002 for a, _ in self.inverter.writes), 2)
+
+    def test_f57_work_mode_and_timeout_repair_force_setpoint(self):
+        self.apply("charge_grid")
+        self.inverter.registers[41000] = 0
+        self.inverter.registers[44001] = 3600
+        recovered = self.apply("charge_grid")
+        self.assertTrue(recovered.write_performed)
+        self.assertEqual(self.inverter.registers[41000], 2)
+        self.assertEqual(self.inverter.registers[44001], 180)
+        self.assertEqual(sum(a == 44002 for a, _ in self.inverter.writes), 2)
+
+    def test_f57_malformed_or_future_lease_never_suppresses_refresh(self):
+        self.apply("discharge_grid")
+        for stamp in ("not-a-date", (datetime.now(timezone.utc)
+                                      + timedelta(minutes=3)).isoformat()):
+            marker = json.loads(self.marker.read_text())
+            marker["remote_power_last_write_utc"] = stamp
+            self.marker.write_text(json.dumps(marker), encoding="utf-8")
+            before = sum(a == 44002 for a, _ in self.inverter.writes)
+            result = self.apply("discharge_grid")
+            self.assertTrue(result.write_performed)
+            self.assertEqual(sum(a == 44002 for a, _ in self.inverter.writes), before + 1)
+
+    def test_f57_stop_is_not_delayed_by_renewal_lease(self):
+        self.apply("charge_grid")
+        self.assertFalse(self.apply("charge_grid").write_performed)
+        stop = self.apply()
+        self.assertTrue(stop.verified)
+        self.assertTrue(stop.write_performed)
+        self.assertFalse(self.marker.exists())
+        self.assertEqual(self.inverter.registers[44000], 0)
+        self.assertEqual(self.inverter.registers[44002], 0)
+
+    def test_f57_unverified_setpoint_never_commits_renewal_proof(self):
+        self.inverter.ignored.add(44002)
+        with self.assertRaises(RuntimeError):
+            self.apply("charge_grid")
+        # A failed START must attempt AUTO, never return verified START.
+        self.assertFalse(self.marker.exists())
 
     def test_foreign_remote_owner_cannot_be_taken_over_for_charge(self):
         self.inverter.registers[44000] = 1
