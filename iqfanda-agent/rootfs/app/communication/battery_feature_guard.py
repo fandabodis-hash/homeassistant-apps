@@ -69,6 +69,41 @@ def _file(root: Path, relative: str) -> Path:
     return path
 
 
+# F58 0.1.175: the FoxESS physical certificate is based on the exact
+# implementation it tested. Other inverter profiles preserve the old guard.
+# VERSION alone is not proof of a change in physical charge/discharge behavior.
+FOXESS_CERTIFIED_CODE = {
+    "communication/foxess_ems_controller.py",
+    "communication/battery_feature_guard.py",
+    "communication/battery_control_safety.py",
+    "communication/inverter_control_adapter.py",
+    "communication/inverter_adapter.py",
+    "communication/modbus_bus_lock.py",
+    "communication/goodwe_probe.py",  # shared serial-transport discovery
+    "communication/inverter_profiles/catalog.json",
+    "communication/inverter_profiles/foxess_h3_10_0_e.json",
+    "manual_battery_runtime.py",
+    "spot_battery_intent.py",
+    "battery_control_canary.py",
+}
+
+
+def foxess_certified_source_fingerprint(files: dict) -> str:
+    """Hash only the reviewed FoxESS control sources, not the release number.
+
+    Always call verify_battery_feature first to validate the complete release.
+    This function alone never grants physical operating permission.
+    """
+    _require(isinstance(files, dict) and FOXESS_CERTIFIED_CODE <= set(files),
+             "FoxESS certified source list incomplete")
+    selected = {name: files[name] for name in sorted(FOXESS_CERTIFIED_CODE)}
+    _require(all(isinstance(value, str) and HEX64.fullmatch(value)
+                 for value in selected.values()), "invalid FoxESS source hash")
+    return hashlib.sha256(_canonical({
+        "schema_version": 1, "profile_id": "foxess_h3_10_0_e", "files": selected,
+    })).hexdigest()
+
+
 def verify_battery_feature(profile_id: str | None = None) -> str:
     """Return the current verified runtime fingerprint, or raise RuntimeError.
 
@@ -155,7 +190,16 @@ def verify_battery_feature(profile_id: str | None = None) -> str:
                      "physical pin has no evidence reference")
             _require(isinstance(pin.get("report_sha256"), str)
                      and HEX64.fullmatch(pin["report_sha256"]) is not None, "physical pin has no report hash")
-            _require(pin.get("runtime_fingerprint") == fingerprint
-                     and pin.get("agent_version") == version,
-                     "runtime differs from the physically verified pin; reviewed revalidation is required")
+            if profile_id == "foxess_h3_10_0_e" and pin.get("foxess_control_fingerprint") is not None:
+                certified = pin["foxess_control_fingerprint"]
+                _require(isinstance(certified, str) and HEX64.fullmatch(certified) is not None,
+                         "invalid FoxESS certified control fingerprint")
+                _require(certified == foxess_certified_source_fingerprint(files),
+                         "FoxESS control source differs from the physically tested version")
+            else:
+                # Preserve legacy exact-version pins, especially the 00007 0.1.169
+                # evidence, and the unchanged safeguards of all other inverters.
+                _require(pin.get("runtime_fingerprint") == fingerprint
+                         and pin.get("agent_version") == version,
+                         "runtime differs from the physically verified pin; reviewed revalidation is required")
     return fingerprint
