@@ -113,11 +113,16 @@ def decide(snapshot: BatteryRecoverySnapshot) -> BatteryRecoveryDecision:
     if snapshot.cloud_action not in ("charge_grid", "discharge_grid"):
         return _decision("investigate", "unsupported_cloud_action")
     if snapshot.export_forbidden is True and snapshot.cloud_action == "discharge_grid":
-        # Zero export is mandatory: fail closed rather than forcing grid export.
+        # Export prohibition is never removed. A matched old cloud session may
+        # be RETIRED after verified AUTO, but may never be restarted.
+        same_session = bool(snapshot.cloud_session_id and snapshot.local_session_id and
+                            snapshot.cloud_session_id == snapshot.local_session_id)
         if (snapshot.local_grid_import_w is None or snapshot.meter_age_seconds is None
                 or snapshot.meter_age_seconds > 30):
-            return _decision("export_risk", "export_forbidden_meter_missing_stale")
-        return _decision("export_risk", "grid_discharge_not_authorized_for_zero_export")
+            return _decision("export_risk", "export_forbidden_meter_missing_stale",
+                             retire=same_session)
+        return _decision("export_risk", "grid_discharge_not_authorized_for_zero_export",
+                         retire=same_session)
     if (not snapshot.cloud_session_id or not snapshot.local_session_id or
         snapshot.cloud_session_id != snapshot.local_session_id):
         return _decision("stale_manual_replay", "session_id_unmatched_no_blind_retirement")
