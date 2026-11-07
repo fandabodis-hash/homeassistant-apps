@@ -1,0 +1,28 @@
+name: F58 manual STOP latch regression (candidate only)
+on:
+  push:
+    branches: [f58/172-manual-stop-latch-regression-20261107]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  stop-latch:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Local manual STOP and repeated Spot AUTO safety regressions
+        env:
+          PYTHONPATH: iqfanda-agent/rootfs/app
+        run: |
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_manual_battery_runtime.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_foxess_battery_control.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_manual_battery_feature_guard.py'
+      - name: Compile local battery owner
+        run: python -m py_compile iqfanda-agent/rootfs/app/manual_battery_runtime.py
