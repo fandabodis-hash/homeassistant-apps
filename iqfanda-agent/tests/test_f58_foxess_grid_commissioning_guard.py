@@ -123,6 +123,19 @@ class LocalGridSafetyTests(unittest.TestCase):
             identity_path=self.identity,config_path=self.root/"nonexistent.json"
         )
 
+    def test_initial_requires_800_but_renewal_only_300_reserve(self):
+        self.watts = 450
+        meter=self.guard()
+        with patch("local_modules.foxess_commissioning_grid_guard.LocalGridImportGuard",
+                   return_value=meter):
+            with self.assertRaises(GridGuardUnavailable):
+                require_protected_00007_discharge_safety(
+                    identity_path=self.identity,config_path=self.mapping,renewal=False
+                )
+            require_protected_00007_discharge_safety(
+                identity_path=self.identity,config_path=self.mapping,renewal=True
+            )
+
     def test_00007_enforces_local_mapping_before_discharge(self):
         self.mapping.unlink()
         with self.assertRaises(GridGuardUnavailable):
