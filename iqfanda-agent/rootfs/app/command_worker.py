@@ -1920,7 +1920,7 @@ def execute_manual_battery_canary(
         if (read_installed_agent_version() == "0.1.174" and (
                 identity.get("device_uuid") != expected_uuid or
                 command_payload.get("expected_device_uuid") != expected_uuid or
-                command_payload.get("explicit_technician_approval") is not True):
+                command_payload.get("explicit_technician_approval") is not True)):
             raise ValueError("Agent 0.1.174 physical canary requires 00007 UUID and explicit technician approval.")
         fingerprint = command_payload.get("expected_runtime_fingerprint")
         if not isinstance(fingerprint, str) or len(fingerprint) != 64 or any(c not in "0123456789abcdef" for c in fingerprint):
