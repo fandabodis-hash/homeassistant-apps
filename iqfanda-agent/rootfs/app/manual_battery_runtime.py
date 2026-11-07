@@ -502,8 +502,11 @@ class LocalBatteryRuntime:
         pin = json.loads(pin_path.read_text()) if pin_path.exists() else {"schema_version": 1, "profiles": {}}
         if pin.get("schema_version") != 1 or not isinstance(pin.get("profiles"), dict):
             raise RuntimeError("Existing physical verification registry is invalid; it was not replaced.")
+        from communication.battery_feature_guard import profile_control_fingerprint
+        control_fp = profile_control_fingerprint(result["profile_id"])
         pin["profiles"][result["profile_id"]] = {
             "status": "physically_verified", "runtime_fingerprint": fingerprint,
+            "control_feature_fingerprint": control_fp,
             "agent_version": (Path(__file__).parent / "VERSION").read_text().strip(),
             "evidence_id": result["command_id"], "report_sha256": report_hash,
             "verification_scope": result["verification_scope"], "verified_at": result["finished_at"],
@@ -520,7 +523,9 @@ class LocalBatteryRuntime:
             if os.path.exists(temporary):
                 os.unlink(temporary)
         return {"status": "locked", "profile_id": result["profile_id"],
-                "runtime_fingerprint": fingerprint, "report_sha256": report_hash,
+                "runtime_fingerprint": fingerprint,
+                "control_feature_fingerprint": control_fp,
+                "report_sha256": report_hash,
                 "verification_scope": result["verification_scope"]}
 
 
