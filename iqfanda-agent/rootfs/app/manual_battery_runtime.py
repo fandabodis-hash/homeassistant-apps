@@ -171,7 +171,10 @@ class LocalBatteryRuntime:
                 GridGuardUnavailable, require_protected_00007_discharge_safety,
             )
             try:
-                require_protected_00007_discharge_safety()
+                require_protected_00007_discharge_safety(
+                    renewal=(state.get("state") == "active" or
+                             state.get("reused_active_verified") is True)
+                )
             except GridGuardUnavailable as exc:
                 raise BatteryControlSafetyStop(
                     reason="zero_export_grid_safety_not_verified",
@@ -338,7 +341,8 @@ class LocalBatteryRuntime:
                      "started_at": started.isoformat(), "expires_at": deadline.isoformat(),
                      "reason": intent.get("reason"), "verified": False, "error": None,
                      "profile_id": profile["profile_id"],
-                     "feature_fingerprint": state.get("feature_fingerprint") if same else None}
+                     "feature_fingerprint": state.get("feature_fingerprint") if same else None,
+                     "reused_active_verified": bool(same and state.get("verified"))}
             # Reject a corrupted/newly unapproved implementation before the first
             # hardware change. During an existing session, _activate will STOP it.
             if not same:
