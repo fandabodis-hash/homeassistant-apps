@@ -204,6 +204,7 @@ class LocalRuntimeTests(unittest.TestCase):
                            command_id="replayed-start", cloud_config=self.config)
         another.submit(payload=self.payload("auto"),
                        command_id="user-auto", cloud_config=self.config)
+        self.clock.advance(1)  # a fresh command is created after the stop barrier
         another.submit(payload=self.payload("charge_grid"),
                        command_id="fresh-start", cloud_config=self.config)
         self.assertEqual(another.status()["state"], "active")
