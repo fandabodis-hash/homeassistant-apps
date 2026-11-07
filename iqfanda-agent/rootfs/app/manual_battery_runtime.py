@@ -184,6 +184,15 @@ class LocalBatteryRuntime:
         return verify_battery_feature(profile_id=state.get("profile_id"))
 
     def _stop(self, state: dict, reason: str, *, clear_latch: bool = False) -> dict:
+        # F58: a background AUTO must never re-latch a previously cleared
+        # manual request when the hardware was already safely stopped.
+        # The replay latch is required only when an ACTIVE manual request is
+        # genuinely terminated by safety/expiry/restart. Preserve any
+        # pre-existing latch and always perform the physical AUTO readback.
+        ended_active_manual = (
+            state.get("manual") is True
+            and state.get("state") in {"preparing", "active", "stop_pending"}
+        )
         state.update(state="stop_pending", reason=reason, verified=False)
         try:
             self._save(state)
@@ -207,7 +216,7 @@ class LocalBatteryRuntime:
         if clear_latch:
             state["blocked_signature"] = None
             state["blocked_manual_signatures"] = []
-        elif state.get("manual"):
+        elif ended_active_manual:
             state["blocked_signature"] = state.get("signature")
             blocked = list(state.get("blocked_manual_signatures") or [])
             if state.get("signature") and state["signature"] not in blocked:
