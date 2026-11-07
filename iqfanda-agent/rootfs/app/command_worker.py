@@ -1914,14 +1914,13 @@ def execute_manual_battery_canary(
             raise ValueError("Canary power is fixed at 500 W.")
         if command_payload.get("expected_agent_version") != read_installed_agent_version():
             raise ValueError("Canary requires the exact installed agent version.")
-        # F58 0.1.175 pilot is restricted to 00007. Never re-pin 00018
-        # or any other installation via a reused cloud commissioning request.
-        if read_installed_agent_version() == "0.1.175":
-            only_uuid = "1c25a8d4-b986-43ee-b2fc-eaa152e9bdf8"
-            if (identity.get("device_uuid") != only_uuid
-                    or command_payload.get("expected_device_uuid") != only_uuid
-                    or command_payload.get("explicit_technician_approval") is not True):
-                raise ValueError("FoxESS 0.1.175 commissioning requires explicit 00007 approval.")
+        # Keep the universal worker free of hardcoded installation identities;
+        # a separate pure FoxESS-only guard reviews the 00007 pilot canary.
+        from communication.foxess_175_00007_commissioning import require_foxess_175_pilot
+        require_foxess_175_pilot(
+            identity=identity, payload=command_payload,
+            installed_version=read_installed_agent_version(),
+        )
         fingerprint = command_payload.get("expected_runtime_fingerprint")
         if not isinstance(fingerprint, str) or len(fingerprint) != 64 or any(c not in "0123456789abcdef" for c in fingerprint):
             raise ValueError("Canary requires the explicit expected runtime fingerprint.")
