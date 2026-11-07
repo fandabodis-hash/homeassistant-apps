@@ -335,6 +335,79 @@ class LocalRuntimeTests(unittest.TestCase):
         self.assertEqual(saved["goodwe_et"], {"status": "pending"})
         self.assertEqual(saved["foxess_h3_10_0_e"]["verification_scope"], "bidirectional_500w_and_stop")
 
+    def _f58_old_00007_pin(self):
+        previous = {"schema_version": 1, "profiles": {
+            "foxess_h3_10_0_e": {
+                "status": "physically_verified", "agent_version": "0.1.169",
+                "runtime_fingerprint": "a" * 64,
+                "evidence_id": "old-physically-verified-00007",
+                "report_sha256": "b" * 64,
+            },
+            "goodwe_et": {"status": "pending"},
+        }}
+        path = self.path.parent / "manual_battery_verified_fingerprint.json"
+        original = json.dumps(previous,sort_keys=True).encode()
+        path.write_bytes(original)
+        import hashlib
+        return path, original, hashlib.sha256(original).hexdigest()
+
+    def test_f58_old_00007_pin_never_overwritten_without_exact_approval(self):
+        path, original, digest = self._f58_old_00007_pin()
+        commands=[]
+        with self.assertRaisesRegex(RuntimeError, "exact SHA256"):
+            self.runtime.canary(callback=lambda **kw:commands.append(kw),
+                cloud_config=self.foxess_config(), command_id="c175",
+                expected_runtime_fingerprint="feature-1")
+        self.assertEqual(commands, [])
+        self.assertEqual(path.read_bytes(), original)
+        with self.assertRaisesRegex(RuntimeError, "exact SHA256"):
+            self.runtime.canary(callback=lambda **kw:commands.append(kw),
+                cloud_config=self.foxess_config(), command_id="c175",
+                expected_runtime_fingerprint="feature-1",
+                expected_previous_pin_sha256="0"*64,explicitly_approved=True)
+        self.assertEqual(commands, [])
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_f58_old_00007_pin_archives_before_test_and_new_pin_only_after_pass(self):
+        path, original, digest = self._f58_old_00007_pin()
+        result = self.runtime.canary(callback=lambda **kw: self.canary_result(),
+            cloud_config=self.foxess_config(), command_id="c175",
+            expected_runtime_fingerprint="feature-1",
+            expected_previous_pin_sha256=digest, explicitly_approved=True)
+        self.assertEqual(result["status"], "passed")
+        self.assertEqual(result["protection"]["status"], "locked")
+        archive=(path.parent/"manual_battery_acceptance"/"prior_pins"/("pin-registry-"+digest+".json"))
+        self.assertEqual(archive.read_bytes(), original)
+        new=json.loads(path.read_text())["profiles"]
+        self.assertEqual(new["goodwe_et"], {"status":"pending"})
+        self.assertEqual(new["foxess_h3_10_0_e"]["agent_version"], "0.1.175")
+        self.assertEqual(len(new["foxess_h3_10_0_e"]["foxess_control_fingerprint"]),64)
+
+    def test_f58_failed_175_canary_retains_original_pin_and_archive(self):
+        path, original, digest = self._f58_old_00007_pin()
+        result = self.runtime.canary(callback=lambda **kw:{"status":"failed","verified":False},
+            cloud_config=self.foxess_config(),command_id="failed175",
+            expected_runtime_fingerprint="feature-1",
+            expected_previous_pin_sha256=digest, explicitly_approved=True)
+        self.assertEqual(result["status"],"failed")
+        self.assertEqual(path.read_bytes(),original)
+        archive=(path.parent/"manual_battery_acceptance"/"prior_pins"/("pin-registry-"+digest+".json"))
+        self.assertEqual(archive.read_bytes(), original)
+
+    def test_f58_foxess_background_auto_no_longer_reblocks_stopped_manual(self):
+        fox=self.foxess_config()
+        for action in ("charge_grid","discharge_grid"):
+            self.runtime.submit(payload=self.payload(action), command_id="start-175",cloud_config=fox)
+            self.runtime.submit(payload=self.payload("auto"), command_id="stop-175",cloud_config=fox)
+            for j in range(3):
+                self.runtime.submit(payload=self.payload("auto",manual=False),
+                                    command_id="spot-auto-"+str(j),cloud_config=fox)
+                self.assertIsNone(self.runtime._load().get("blocked_signature"))
+            self.clock.advance(1)
+            self.runtime.submit(payload=self.payload(action),command_id="restarted-175",cloud_config=fox)
+            self.runtime.submit(payload=self.payload("auto"),command_id="stop2-175",cloud_config=fox)
+            self.clock.advance(1)
+
     def test_canary_fingerprint_mismatch_is_rejected_before_physical_io(self):
         calls = []
         with self.assertRaisesRegex(RuntimeError, "selected runtime fingerprint"):
