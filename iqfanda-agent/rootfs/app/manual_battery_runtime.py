@@ -164,6 +164,19 @@ class LocalBatteryRuntime:
     def _apply(self, state: dict, *, auto: bool = False):
         intent = state["intent"]
         action = "auto" if auto else intent["action"]
+        if action == "discharge_grid" and state.get("profile_id") == "foxess_h3_10_0_e":
+            # 00007 must keep the independently verified zero-export limiter.
+            # Never delay, deny or alter an explicit physical AUTO/STOP.
+            from local_modules.foxess_commissioning_grid_guard import (
+                GridGuardUnavailable, require_protected_00007_discharge_safety,
+            )
+            try:
+                require_protected_00007_discharge_safety()
+            except GridGuardUnavailable as exc:
+                raise BatteryControlSafetyStop(
+                    reason="zero_export_grid_safety_not_verified",
+                    observed_soc_percent=None,
+                ) from exc
         result = self.execute(
             cloud_config=state["control_config"], action=action,
             allowed_charge_power_w=0 if auto else intent["allowed_charge_power_w"],
@@ -362,7 +375,9 @@ class LocalBatteryRuntime:
             return self.status()
 
     def canary(self, *, callback, cloud_config: dict, command_id: str,
-               expected_runtime_fingerprint: str) -> dict:
+               expected_runtime_fingerprint: str,
+               expected_previous_pin_sha256: str | None = None,
+               explicitly_approved: bool = False) -> dict:
         """Reserve an idle local owner, retain recovery data, and test only FoxESS.
 
         A PASS pins this exact implementation for this profile and the recorded
@@ -383,6 +398,32 @@ class LocalBatteryRuntime:
             fingerprint = self.feature_guard() if self.feature_guard else verify_battery_feature()
             if expected_runtime_fingerprint != fingerprint:
                 raise RuntimeError("Canary implementation does not match the explicitly selected runtime fingerprint.")
+            # A change from a physically verified old build is NOT permission
+            # to silently overwrite its certificate. Archive the exact bytes
+            # before any Modbus actuation and require an explicit operator opt-in.
+            previous_pin_hash = None
+            pin_path = self.path.parent / "manual_battery_verified_fingerprint.json"
+            if pin_path.exists() or pin_path.is_symlink():
+                if pin_path.is_symlink() or not pin_path.is_file():
+                    raise RuntimeError("Physical pin registry is not a regular file.")
+                previous_bytes = pin_path.read_bytes()
+                registry = json.loads(previous_bytes.decode("utf-8-sig"))
+                if registry.get("schema_version") != 1 or not isinstance(registry.get("profiles"), dict):
+                    raise RuntimeError("Physical pin registry is malformed.")
+                prior = registry["profiles"].get(profile["profile_id"], {})
+                if prior.get("status") == "physically_verified" and (
+                        prior.get("agent_version") != (Path(__file__).parent / "VERSION").read_text().strip()
+                        or prior.get("runtime_fingerprint") != fingerprint):
+                    previous_pin_hash = hashlib.sha256(previous_bytes).hexdigest()
+                    if not explicitly_approved or expected_previous_pin_sha256 != previous_pin_hash:
+                        raise RuntimeError("Previous physical pin must be explicitly reviewed and hash-matched before commissioning.")
+                    from local_modules.battery_pin_transition import archive_previous_verified_pin
+                    archive_previous_verified_pin(
+                        pin_path=pin_path,
+                        archive_directory=self.path.parent / "manual_battery_acceptance" / "prior_pins",
+                        expected_file_sha256=previous_pin_hash,
+                        approved=True,
+                    )
             now = self.clock()
             state = {**previous, "state": "preparing", "action": "auto", "manual": True,
                 "command_id": command_id, "session_id": command_id,
@@ -409,6 +450,9 @@ class LocalBatteryRuntime:
                     result.update(status="failed", verified=False, local_final_auto_verified=False, final_auto_error=str(exc))
             result.update(runtime_fingerprint=fingerprint, command_id=command_id,
                           finished_at=self.clock().isoformat())
+            if previous_pin_hash is not None:
+                result["prior_pin_sha256"] = previous_pin_hash
+                result["prior_pin_archived"] = True
             if result.get("status") == "passed" and not _canary_evidence_complete(result):
                 result.update(status="failed", verified=False, error="Physical canary evidence is incomplete.")
             if result.get("status") == "passed" and result.get("local_final_auto_verified") is True:
@@ -416,7 +460,13 @@ class LocalBatteryRuntime:
                 if after != fingerprint:
                     result.update(status="failed", verified=False, error="Implementation changed during physical test.")
                 else:
-                    result["protection"] = self._pin_canary(result, fingerprint)
+                    try:
+                        result["protection"] = self._pin_canary(result, fingerprint)
+                    except Exception as exc:
+                        # Physical output was already independently stopped;
+                        # do not report success if durable proof was not saved.
+                        result.update(status="failed", verified=False,
+                                      error="Physical evidence lock failed: " + type(exc).__name__)
             if result.get("status") != "passed":
                 result["verified"] = False
             return result
@@ -433,6 +483,18 @@ class LocalBatteryRuntime:
             os.fsync(stream.fileno())
         _sync_directory(evidence_dir)
         pin_path = self.path.parent / "manual_battery_verified_fingerprint.json"
+        if pin_path.is_symlink():
+            raise RuntimeError("Existing physical registry is a symlink.")
+        if result.get("prior_pin_sha256"):
+            original = pin_path.read_bytes()
+            if hashlib.sha256(original).hexdigest() != result["prior_pin_sha256"]:
+                raise RuntimeError("Physical pin registry changed during commissioning.")
+            from local_modules.battery_pin_transition import archive_previous_verified_pin
+            archive_previous_verified_pin(
+                pin_path=pin_path,
+                archive_directory=self.path.parent / "manual_battery_acceptance" / "prior_pins",
+                expected_file_sha256=result["prior_pin_sha256"], approved=True,
+            )
         pin = json.loads(pin_path.read_text()) if pin_path.exists() else {"schema_version": 1, "profiles": {}}
         if pin.get("schema_version") != 1 or not isinstance(pin.get("profiles"), dict):
             raise RuntimeError("Existing physical verification registry is invalid; it was not replaced.")
@@ -470,9 +532,13 @@ def get_local_battery_status() -> dict:
 
 
 def run_exclusive_battery_canary(*, callback, cloud_config: dict, command_id: str,
-                                 expected_runtime_fingerprint: str) -> dict:
+                                 expected_runtime_fingerprint: str,
+                                 expected_previous_pin_sha256: str | None = None,
+                                 explicitly_approved: bool = False) -> dict:
     return _RUNTIME.canary(callback=callback, cloud_config=cloud_config, command_id=command_id,
-                          expected_runtime_fingerprint=expected_runtime_fingerprint)
+                          expected_runtime_fingerprint=expected_runtime_fingerprint,
+                          expected_previous_pin_sha256=expected_previous_pin_sha256,
+                          explicitly_approved=explicitly_approved)
 
 
 def main() -> None:
