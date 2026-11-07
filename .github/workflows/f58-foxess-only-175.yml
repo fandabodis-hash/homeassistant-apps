@@ -33,6 +33,8 @@ jobs:
           changed=subprocess.check_output(['git','diff','--name-only',base,'HEAD'],text=True).splitlines()
           allowed={
             '.github/workflows/f58-foxess-only-175.yml',
+            '.github/workflows/f57-foxess-renewal-candidate.yml',
+            'iqfanda-agent/rootfs/app/communication/foxess_175_00007_commissioning.py',
             'iqfanda-agent/config.yaml',
             'iqfanda-agent/rootfs/app/VERSION',
             'iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py',
