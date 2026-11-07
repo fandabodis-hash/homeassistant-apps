@@ -442,6 +442,7 @@ class LocalRuntimeTests(unittest.TestCase):
         now=json.loads(pin_path.read_text())["profiles"]
         self.assertEqual(now["foxess_h3_10_0_e"]["agent_version"],
             (APP/"VERSION").read_text().strip())
+        self.assertEqual(len(now["foxess_h3_10_0_e"]["control_feature_fingerprint"]), 64)
         self.assertEqual(now["goodwe_et"],{"status":"pending"})
         self.assertNotEqual(pin_path.read_bytes(), old_bytes)
 
