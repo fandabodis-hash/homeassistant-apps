@@ -44,7 +44,7 @@ class LocalBatteryFeatureGuardTests(unittest.TestCase):
     def refresh(self):
         files = {relative: hashlib.sha256((self.root / relative).read_bytes()).hexdigest()
                  for relative in sorted(guard.REQUIRED_FILES)}
-        payload = {"agent_version": "0.1.168", "files": files,
+        payload = {"agent_version": (self.root / "VERSION").read_text().strip(), "files": files,
                    "rootfs_files": {relative: hashlib.sha256((self.root.parent / relative).read_bytes()).hexdigest()
                                      for relative in sorted(guard.REQUIRED_ROOTFS_FILES)},
                    "build_inputs": {"Dockerfile": "a" * 64, "config.yaml": "b" * 64}}
@@ -64,6 +64,51 @@ class LocalBatteryFeatureGuardTests(unittest.TestCase):
     def test_matching_manifest_allows_pending_candidate(self):
         self.assertEqual(guard.verify_battery_feature("foxess_h3_10_0_e"), self.manifest["runtime_fingerprint"])
         self.assertFalse(self.pin_path.exists())
+
+    def write_profile_scoped_pin(self, profile="foxess_h3_10_0_e"):
+        self.write_pin(profile=profile)
+        registry=json.loads(self.pin_path.read_text())
+        registry["profiles"][profile]["control_feature_fingerprint"]=(
+            guard.profile_control_fingerprint(profile)
+        )
+        self.pin_path.write_text(json.dumps(registry))
+
+    def test_new_physical_profile_pin_survives_version_only_update(self):
+        self.write_profile_scoped_pin()
+        old_runtime=self.manifest["runtime_fingerprint"]
+        (self.root / "VERSION").write_text("0.1.169\n")
+        updated=self.refresh()
+        self.assertNotEqual(old_runtime, updated["runtime_fingerprint"])
+        self.assertEqual(guard.verify_battery_feature("foxess_h3_10_0_e"),
+                         updated["runtime_fingerprint"])
+
+    def test_old_version_only_pin_still_requires_revalidation(self):
+        self.write_pin()
+        (self.root / "VERSION").write_text("0.1.169\n")
+        self.refresh()
+        with self.assertRaisesRegex(RuntimeError, "runtime differs from the physically verified pin"):
+            guard.verify_battery_feature("foxess_h3_10_0_e")
+
+    def test_control_source_change_invalidates_physical_profile_pin(self):
+        self.write_profile_scoped_pin()
+        (self.root / "communication/foxess_ems_controller.py").write_text("changed protected driver")
+        self.refresh()
+        with self.assertRaisesRegex(RuntimeError, "profile control changed"):
+            guard.verify_battery_feature("foxess_h3_10_0_e")
+
+    def test_unrelated_goodwe_driver_change_does_not_invalidate_foxess_pin(self):
+        self.write_profile_scoped_pin()
+        (self.root / "communication/goodwe_ems_controller.py").write_text("reviewed other profile driver")
+        refreshed=self.refresh()
+        self.assertEqual(guard.verify_battery_feature("foxess_h3_10_0_e"),
+                         refreshed["runtime_fingerprint"])
+
+    def test_foxess_control_change_does_not_revoke_goodwe_physical_pin(self):
+        self.write_profile_scoped_pin(profile="goodwe_et")
+        (self.root / "communication/foxess_ems_controller.py").write_text("reviewed foxess driver")
+        refreshed=self.refresh()
+        self.assertEqual(guard.verify_battery_feature("goodwe_et"),
+                         refreshed["runtime_fingerprint"])
 
     def test_changed_source_is_detected(self):
         (self.root / "command_worker.py").write_text("accidental older dispatcher\n")

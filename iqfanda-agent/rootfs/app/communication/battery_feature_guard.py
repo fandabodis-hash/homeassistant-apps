@@ -32,6 +32,8 @@ REQUIRED_FILES = {
     "communication/goodwe_probe.py", "communication/inverter_profiles/catalog.json",
     "communication/foxess_ems_controller.py",
     "communication/foxess_remote_control_probe.py",
+    "local_modules/foxess_commissioning_grid_guard.py",
+    "local_modules/battery_pin_transition.py",
     "communication/goodwe_ems_controller.py",
     "communication/solax_ems_controller.py",
     "communication/modbus_bus_lock.py",
@@ -69,12 +71,69 @@ def _file(root: Path, relative: str) -> Path:
     return path
 
 
+# Stable, profile-specific proof. A VERSION / unrelated telemetry update must
+# not erase a physically verified charge/discharge capability. Changes to
+# actual control code, driver routing or the selected inverter profile DO.
+PROFILE_CONTROL_COMMON_FILES = {
+    "manual_battery_runtime.py", "battery_control_canary.py",
+    "spot_battery_intent.py", "command_worker.py", "startup.py",
+    "communication/battery_feature_guard.py",
+    "communication/battery_control_safety.py",
+    "communication/inverter_control_adapter.py",
+    "communication/inverter_adapter.py",
+    "communication/json_utils.py",
+    "communication/goodwe_probe.py",
+    "communication/inverter_profiles/catalog.json",
+    "communication/modbus_bus_lock.py",
+}
+
+
+def profile_control_fingerprint(profile_id: str, *, files: dict | None = None) -> str:
+    """Exact code/driver/profile fingerprint with no artificial version lock.
+
+    Does NOT itself attest that the physical canary passed. Call the normal
+    verify_battery_feature() integrity check before creating or using a pin.
+    """
+    _require(isinstance(profile_id, str) and profile_id in PROFILE_IDS,
+             "unknown selected profile")
+    if files is None:
+        files = _load(MANIFEST_PATH).get("files")
+    _require(isinstance(files, dict), "control manifest files missing")
+    profile_path = "communication/inverter_profiles/" + profile_id + ".json"
+    profile = _load(_file(APP_ROOT, profile_path))
+    cap = profile.get("control_capabilities", {}).get("battery_charge_control")
+    selected = set(PROFILE_CONTROL_COMMON_FILES) | {profile_path}
+    if isinstance(cap, dict) and cap.get("driver_module"):
+        module = cap["driver_module"]
+        _require(isinstance(module, str) and module.startswith("communication.")
+                 and all(part.isidentifier() for part in module.split(".")),
+                 "invalid selected driver")
+        selected.add(module.replace(".", "/") + ".py")
+    if profile_id == "foxess_h3_10_0_e":
+        selected |= {
+            "communication/foxess_ems_controller.py",
+            "communication/foxess_remote_control_probe.py",
+            "foxess_zero_remote_release.py",
+            "local_modules/foxess_commissioning_grid_guard.py",
+            "local_modules/battery_pin_transition.py",
+        }
+    _require(selected <= set(files), "selected control manifest is incomplete")
+    values = {key: files[key] for key in sorted(selected)}
+    _require(all(isinstance(v, str) and HEX64.fullmatch(v) for v in values.values()),
+             "invalid selected control digest")
+    return hashlib.sha256(_canonical({
+        "schema_version": 1, "profile_id": profile_id, "files": values,
+    })).hexdigest()
+
+
 def verify_battery_feature(profile_id: str | None = None) -> str:
     """Return the current verified runtime fingerprint, or raise RuntimeError.
 
-    No physical success is inferred. An absent/pending pin permits candidate
-    tests when all source bytes match. A physically verified pin requires its
-    exact runtime. Callers must still be able to attempt safe STOP after failure.
+    No physical success is inferred. A legacy verified pin requires its exact
+    full runtime; after explicit 0.1.174 physical canary the new pin uses the
+    protected profile-specific control fingerprint. Non-control version-only
+    updates preserve proof, while control-source changes fail closed. STOP never
+    depends on this guard.
     """
     manifest = _load(MANIFEST_PATH)
     _require(manifest.get("schema_version") == 1
@@ -155,7 +214,18 @@ def verify_battery_feature(profile_id: str | None = None) -> str:
                      "physical pin has no evidence reference")
             _require(isinstance(pin.get("report_sha256"), str)
                      and HEX64.fullmatch(pin["report_sha256"]) is not None, "physical pin has no report hash")
-            _require(pin.get("runtime_fingerprint") == fingerprint
-                     and pin.get("agent_version") == version,
-                     "runtime differs from the physically verified pin; reviewed revalidation is required")
+            control_pin = pin.get("control_feature_fingerprint")
+            if control_pin is None:
+                # Old exact-version certificate (00007 0.1.169): keep blocking
+                # on a changed runtime; never treat a hash field as physical proof.
+                _require(pin.get("runtime_fingerprint") == fingerprint
+                         and pin.get("agent_version") == version,
+                         "runtime differs from the physically verified pin; reviewed revalidation is required")
+            else:
+                _require(isinstance(control_pin, str)
+                         and HEX64.fullmatch(control_pin) is not None,
+                         "physical pin has an invalid profile control fingerprint")
+                expected_control = profile_control_fingerprint(profile_id, files=files)
+                _require(control_pin == expected_control,
+                         "profile control changed since physical verification; reviewed revalidation is required")
     return fingerprint

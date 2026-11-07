@@ -147,6 +147,23 @@ class SerialInverter:
         raise AssertionError("Canary must not introduce multiword control writes")
 
 
+class VerifiedMeterFixture:
+    def __init__(self):
+        self.initial_import = 1250.0
+        self.live_import = 550.0
+        self.reads = []
+    def check_before_discharge(self):
+        self.reads.append("preflight")
+        if self.initial_import < 800:
+            raise canary.GridGuardUnavailable("insufficient incoming grid power")
+        return self.initial_import
+    def check_during_discharge(self):
+        self.reads.append("running")
+        if self.live_import < 300:
+            raise canary.GridGuardUnavailable("grid import below zero-export reserve")
+        return self.live_import
+
+
 class BatteryCanaryTests(unittest.TestCase):
     def setUp(self):
         self.temporary = TemporaryDirectory()
@@ -155,6 +172,7 @@ class BatteryCanaryTests(unittest.TestCase):
         self.clock = Clock()
         self.lock = BusLock()
         self.device = SerialInverter(self.lock)
+        self.grid_guard = VerifiedMeterFixture()
         self.factory_calls = []
         def factory(**kwargs):
             self.factory_calls.append(kwargs)
@@ -177,7 +195,8 @@ class BatteryCanaryTests(unittest.TestCase):
         }]}
 
     def run_canary(self):
-        result = canary.run_foxess_battery_canary(cloud_config=self.config, command_id="fixture-command")
+        result = canary.run_foxess_battery_canary(cloud_config=self.config, command_id="fixture-command",
+                                                   export_guard=self.grid_guard)
         self.assertNotIn("PRIVATE_", json.dumps(result))
         return result
 
@@ -195,6 +214,30 @@ class BatteryCanaryTests(unittest.TestCase):
         self.assertFalse(self.marker.exists())
         self.assertTrue(self.device.closed)
         self.assertFalse(self.lock.held)
+
+    def test_production_without_verified_grid_meter_cannot_start_canary(self):
+        with patch.object(canary, "LocalGridImportGuard", side_effect=canary.GridGuardUnavailable("no verified meter")):
+            result = canary.run_foxess_battery_canary(
+                cloud_config=self.config, command_id="fixture-command")
+        self.assertEqual(result["error"]["code"], "independent_grid_meter_missing")
+        self.assertEqual(self.device.writes, [])
+        self.assertEqual(self.factory_calls, [])
+
+    def test_insufficient_grid_import_blocks_discharge_before_power_write(self):
+        self.grid_guard.initial_import = 450.0
+        result = self.run_canary()
+        self.assertEqual(result["error"]["code"], "grid_import_preflight_failed")
+        self.assertEqual(self.device.writes, [])
+        self.assertTrue(result["final_auto"]["verified"])
+        self.assert_stopped()
+
+    def test_drop_in_grid_import_forces_auto_and_never_passes(self):
+        self.grid_guard.live_import = -200.0
+        result = self.run_canary()
+        self.assertEqual(result["error"]["code"], "grid_import_during_discharge_failed")
+        self.assertTrue(result["final_auto"]["verified"])
+        self.assertFalse(result["verified"])
+        self.assert_stopped()
 
     def test_pass_requires_both_measured_directions_and_restored_auto(self):
         result = self.run_canary()

@@ -1,0 +1,87 @@
+name: F58 F59 Agent 0.1.174 cross-module regression - candidate only
+
+on:
+  push:
+    branches:
+      - feature/f58-f59-agent-0-1-174-unified-revalidation-20261107
+  pull_request:
+    branches:
+      - main
+      - feature/f59-local-first-agent-0-1-173-candidate-20261107
+
+permissions:
+  contents: read
+
+jobs:
+  existing-function-regressions:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Check build metadata, protected sources and physical evidence history
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python iqfanda-agent/scripts/check_agent_version.py --minimum 0.1.174
+          python iqfanda-agent/scripts/check_manual_battery_release.py
+      - name: FoxESS GoodWe SolaX DEYE + manual START STOP AUTO and guards
+        env:
+          PYTHONPATH: iqfanda-agent/rootfs/app
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_*battery*.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_foxess_remote_control_probe.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_foxess_zero_remote_release.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_deye_control_support.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_solax_battery_control.py'
+      - name: Protect 00012 TUV bivalence and relay safety
+        env:
+          PYTHONPATH: iqfanda-agent/rootfs/app
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python iqfanda-agent/tests/test_f48_r10_00012_off_readback.py
+          python iqfanda-agent/tests/test_f48_r14_00012_tuv_off_all.py
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_dual_channel_capabilities.py'
+      - name: Protect 00013 local mixing and all servo protections
+        env:
+          PYTHONPATH: iqfanda-agent/rootfs/app
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f47_local_mixer_00013.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_servo_*.py'
+      - name: Weekly thermostat single-owner and Reset OS isolation
+        env:
+          PYTHONPATH: iqfanda-agent/rootfs/app
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f43_weekly_relay_owner.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_reset_os.py'
+      - name: Local-only new modules no duplicate owner or stale rearm
+        env:
+          PYTHONPATH: iqfanda-agent/rootfs/app
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f59_local_modules.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f58_recovery_policy.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f58_battery_pin_transition.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f58_foxess_grid_commissioning_guard.py'
+          python -m py_compile iqfanda-agent/rootfs/app/startup.py iqfanda-agent/rootfs/app/command_worker.py iqfanda-agent/rootfs/app/manual_battery_runtime.py
+
+# This workflow is CI only: no Docker publish, no agent update, no HA/Modbus access.
+# A green workflow DOES NOT authorize production deployment.
+# Live production source, frontend smart card & HP DOM/screenshot acceptance,
+# full immutable VPS seal, device-specific physical canary, and manual release
+# approval are separate and mandatory for each actual field deployment.
