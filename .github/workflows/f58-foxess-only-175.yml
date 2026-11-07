@@ -42,6 +42,7 @@ jobs:
             'iqfanda-agent/rootfs/app/protection/manual_battery_manifest.json',
             'iqfanda-agent/contracts/manual_battery_release.json',
             'iqfanda-agent/tests/test_manual_battery_runtime.py',
+            'iqfanda-agent/tests/test_foxess_battery_control.py',
             'iqfanda-agent/tests/test_manual_battery_feature_guard.py',
             'iqfanda-agent/tests/test_f58_foxess_only_175.py',
             'iqfanda-agent/docs/F58_FOXESS_ONLY_0_1_175_RELEASE.md',
