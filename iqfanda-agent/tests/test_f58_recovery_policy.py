@@ -50,10 +50,13 @@ class RecoveryPolicyTests(unittest.TestCase):
 
     def test_zero_export_blocks_manual_grid_discharge(self):
         x=self.check("export_risk",export_forbidden=True)
-        self.assertFalse(x.cloud_session_retirement_allowed)
+        self.assertTrue(x.cloud_session_retirement_allowed)
 
     def test_zero_export_meter_stale_blocks_manual_grid_discharge(self):
-        self.check("export_risk",export_forbidden=True,meter_age_seconds=100)
+        self.assertTrue(self.check("export_risk",export_forbidden=True,meter_age_seconds=100).cloud_session_retirement_allowed)
+
+    def test_zero_export_mismatched_session_does_not_retire(self):
+        self.assertFalse(self.check("export_risk",export_forbidden=True,cloud_session_id="different").cloud_session_retirement_allowed)
 
     def test_bms_fault_cannot_be_bypassed(self):
         self.check("safety_lockout",bms_ok=False)
