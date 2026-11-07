@@ -77,6 +77,7 @@ jobs:
           python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f59_local_modules.py'
           python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f58_recovery_policy.py'
           python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f58_battery_pin_transition.py'
+          python -m unittest discover -v -s iqfanda-agent/tests -p 'test_f58_foxess_grid_commissioning_guard.py'
           python -m py_compile iqfanda-agent/rootfs/app/startup.py iqfanda-agent/rootfs/app/command_worker.py iqfanda-agent/rootfs/app/manual_battery_runtime.py
 
 # This workflow is CI only: no Docker publish, no agent update, no HA/Modbus access.
