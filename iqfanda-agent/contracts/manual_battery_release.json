@@ -1,5 +1,5 @@
 {
-  "agent_version": "0.1.175",
+  "agent_version": "0.1.176",
   "change_history": [
     {
       "agent_version": "0.1.168",
@@ -70,6 +70,13 @@
       "revision": 10,
       "runtime_fingerprint": "26e9859279bbf51002410796c7bede1076cfdfed695a2bddf958d7b40e469af1",
       "source_fingerprint": "cc9ae69878556bbed7794d995b0825d9de92854ff545b6fd0a70f9556ddbf1d7"
+    },
+    {
+      "agent_version": "0.1.176",
+      "revision": 11,
+      "reason": "F99 candidate ONLY 00018: stable-zero remote 44000 release, exact 223/103/407 firmware, audit-before-one-write, no bypass of physical START",
+      "runtime_fingerprint": "6bb71411c6f011b3439589b6c0b17667e01b416ca7b59bc26ee8dcb4cbf4bf2c",
+      "source_fingerprint": "8bdce88af092b0a6894110e13ed064485971cc9b2afc0496f4b7a3ae4b88134e"
     }
   ],
   "feature": "local_manual_battery",
@@ -79,9 +86,9 @@
     ".github/workflows/manual-battery-release-guard.yml": "385b1d05f7da7a049e57ea4397f2260acf77f86a107aa6c3818e1d4ea3eabe3b",
     "iqfanda-agent/Dockerfile": "3807f87277deedde6d16cdd90814eb27f23eec4b25e06341a6a2a8e91e8ddc82",
     "iqfanda-agent/MANUAL_BATTERY_RELEASE.md": "0af74076c43d28bd5cb94e9f312f95fed2aebe6f7ce794de4ee5e80c34fdc65d",
-    "iqfanda-agent/config.yaml": "b5186c6513167adbb98c7ef43228ed34bc2680da8badd74844939411785b0f6e",
+    "iqfanda-agent/config.yaml": "7782628b1bf1963d9d005e6a215782a166e2a971cc51f4cdd39bfb86e14decad",
     "iqfanda-agent/docs/F58_FOXESS_ONLY_0_1_175_RELEASE.md": "0cebdcbb0432fbea4a5962b5848a86ed2530c8a41201bb66c57f239c84959c06",
-    "iqfanda-agent/rootfs/app/VERSION": "f3bad46978f2215a721e815f2e4c9398ab3dfc9bdce25a29ff24e5149c63d62f",
+    "iqfanda-agent/rootfs/app/VERSION": "b0e40f060ef48424278043b1d80e4d4af6ce4875a2ec288259f4732d30f7bac0",
     "iqfanda-agent/rootfs/app/battery_control_canary.py": "27d4538b8388bd8ca065c26f1cab4fc9e26d026e603a338c3f79a4b667f07a9d",
     "iqfanda-agent/rootfs/app/command_worker.py": "143ea6027224c0bb96830db9c106050993e203077131fde9b1a36cbf57d5ab2e",
     "iqfanda-agent/rootfs/app/communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
@@ -104,7 +111,7 @@
     "iqfanda-agent/rootfs/app/communication/modbus_bus_lock.py": "a5b1e7366e816545e0e3eefbfb1c99c609f85271144d21727b54acbfff4da00c",
     "iqfanda-agent/rootfs/app/communication/solax_ems_controller.py": "af3afcb244585aaf56c322f38cf2f644119f331832b8e24d4af2e8d770c97277",
     "iqfanda-agent/rootfs/app/device_config.py": "28a39b57044a81b9d920bd5afe1344584e246ceee8f9afaac5b922b84e4995dc",
-    "iqfanda-agent/rootfs/app/foxess_zero_remote_release.py": "d9dc930130857c190d19e10e61667c4c129ffd5149ffcd4a4541d9c16c1f4866",
+    "iqfanda-agent/rootfs/app/foxess_zero_remote_release.py": "be53097b8d74433c0d51276b5d53c52fb3af515a4376b7d8c8aa76ee6705abac",
     "iqfanda-agent/rootfs/app/heartbeat.py": "2b63d18618c5529d2a3ca25d9a488152777426821c6363d308f8de1cb94defa7",
     "iqfanda-agent/rootfs/app/manual_battery_runtime.py": "bd55f70ea8c31da76c00b0b43a3a2320e594b6a32ac1e7d89291f40570756558",
     "iqfanda-agent/rootfs/app/spot_battery_intent.py": "9614747ec7a5e246c9bff2c18527c741f75c2453251baeaacea813bdc0fdcc02",
@@ -132,7 +139,9 @@
     "iqfanda-agent/tests/test_manual_battery_r14_lab.py": "723135724ef2a383e4887284cc60ab83dadbcf38a01eb17b09d6a524671ffec1",
     "iqfanda-agent/tests/test_manual_battery_release_guard.py": "439f323d91290e05ddf14524506041c7933a136499051991cdf59e4bdf7977fd",
     "iqfanda-agent/tests/test_manual_battery_runtime.py": "fb02a8c8be7088074fe9fd6a28193d0e3e0d66df3c0e4ac2a2c9cdd0a05ac44e",
-    "iqfanda-agent/tests/test_solax_battery_control.py": "086600e4c65c2b698e6779d30ac47254facd970c61c21fde72fd72831d846bf8"
+    "iqfanda-agent/tests/test_solax_battery_control.py": "086600e4c65c2b698e6779d30ac47254facd970c61c21fde72fd72831d846bf8",
+    "iqfanda-agent/rootfs/app/foxess_00018_owner_recovery.py": "ccdce2c0ba98ee80b8b447a8242797c86aba2064bcff843995866760e4c1cf9c",
+    "iqfanda-agent/tests/test_f99_00018_owner_recovery.py": "d9e1247d89e53e6c4cb9bea63a2f06ef7f514e9b73ac9fbbaa44a89d61b11a78"
   },
   "profiles": {
     "deye_3x_lv_off_grid": {
@@ -196,7 +205,7 @@
       "unavailable_reason": null
     }
   },
-  "runtime_fingerprint": "26e9859279bbf51002410796c7bede1076cfdfed695a2bddf958d7b40e469af1",
+  "runtime_fingerprint": "6bb71411c6f011b3439589b6c0b17667e01b416ca7b59bc26ee8dcb4cbf4bf2c",
   "schema_version": 1,
-  "source_fingerprint": "cc9ae69878556bbed7794d995b0825d9de92854ff545b6fd0a70f9556ddbf1d7"
+  "source_fingerprint": "8bdce88af092b0a6894110e13ed064485971cc9b2afc0496f4b7a3ae4b88134e"
 }
