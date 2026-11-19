@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - fix/f99-00018-foxess-owner-recovery-20261119
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
