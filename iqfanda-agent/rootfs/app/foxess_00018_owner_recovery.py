@@ -220,7 +220,9 @@ def release(services, checked, evidence):
         valid_now(checked)
         require(services.serial() == SERIAL and services.version() == VERSION,
                 "RECOVERY_IDENTITY_OR_VERSION_CHANGED")
-        certified = services.guard(profile_id=PROFILE)
+        # A safety STOP must not require a new physical START pin after update.
+        # The complete source manifest is still enforced (no profile pin bypass for START).
+        certified = services.guard()
         require(certified == checked["expected_runtime_fingerprint"],
                 "RECOVERY_RELEASE_FINGERPRINT_MISMATCH")
         config = services.config()
