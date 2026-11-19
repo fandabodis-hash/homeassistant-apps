@@ -295,6 +295,13 @@ def _release(services, checked, evidence):
 
 
 def execute_foxess_zero_remote_release(*, identity, command_id, command_payload, submit_result):
+    """Dispatch exactly scoped FoxESS release; preserve 00007 legacy as-is."""
+    if (isinstance(command_payload, dict)
+            and command_payload.get("serial_number") == "F800711-TNG-00018"):
+        from foxess_00018_owner_recovery import execute_foxess_00018_owner_recovery
+        return execute_foxess_00018_owner_recovery(
+            identity=identity, command_id=command_id,
+            command_payload=command_payload, submit_result=submit_result)
     """Execute only the fixed, short-lived, manufacturing-identity-bound service request."""
     evidence = {"executor": COMMAND_TYPE, "phase": "rejected_or_uncertain", "recovery_id": RECOVERY_ID,
         "serial_number": SERIAL, "agent_version": EXPECTED_VERSION, "verified": False,
