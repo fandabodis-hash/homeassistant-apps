@@ -380,7 +380,7 @@ class LocalRuntimeTests(unittest.TestCase):
         self.assertEqual(archive.read_bytes(), original)
         new=json.loads(path.read_text())["profiles"]
         self.assertEqual(new["goodwe_et"], {"status":"pending"})
-        self.assertEqual(new["foxess_h3_10_0_e"]["agent_version"], "0.1.175")
+        self.assertEqual(new["foxess_h3_10_0_e"]["agent_version"], (APP / "VERSION").read_text().strip())
         self.assertEqual(len(new["foxess_h3_10_0_e"]["foxess_control_fingerprint"]),64)
 
     def test_f58_failed_175_canary_retains_original_pin_and_archive(self):
