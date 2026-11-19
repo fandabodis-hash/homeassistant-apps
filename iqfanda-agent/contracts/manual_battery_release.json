@@ -84,12 +84,19 @@
       "reason": "F99 reviewed version-independent 00007 physical pin regression assertion, no production control change",
       "runtime_fingerprint": "6bb71411c6f011b3439589b6c0b17667e01b416ca7b59bc26ee8dcb4cbf4bf2c",
       "source_fingerprint": "4e120e93ffd24f9e6e1fb6c639917088825f01fc13a5c391ccd6d82afd851b17"
+    },
+    {
+      "agent_version": "0.1.176",
+      "revision": 13,
+      "reason": "F99 candidate: narrow historical F58-only GitHub CI job to 0.1.175 branch; keep global safety tests",
+      "runtime_fingerprint": "6bb71411c6f011b3439589b6c0b17667e01b416ca7b59bc26ee8dcb4cbf4bf2c",
+      "source_fingerprint": "75c5b722a87b9fe4c58f3b7c469199ab50b526962d09c92426025e0b3000f07e"
     }
   ],
   "feature": "local_manual_battery",
   "files": {
     ".github/workflows/f57-foxess-renewal-candidate.yml": "bc723927ef9bbd88ce1cfde5e602afab888abe21fc1ea944e770782a295b6860",
-    ".github/workflows/f58-foxess-only-175.yml": "0f10ff8c69e0e40c5bc03f8493dd669c193fbf04203d3d5fa58c6ac8ea47a472",
+    ".github/workflows/f58-foxess-only-175.yml": "75c6cdc4cfbc0b00f729d7ae18f847e4384a946e52857603a3c62ed632566c9e",
     ".github/workflows/manual-battery-release-guard.yml": "385b1d05f7da7a049e57ea4397f2260acf77f86a107aa6c3818e1d4ea3eabe3b",
     "iqfanda-agent/Dockerfile": "3807f87277deedde6d16cdd90814eb27f23eec4b25e06341a6a2a8e91e8ddc82",
     "iqfanda-agent/MANUAL_BATTERY_RELEASE.md": "0af74076c43d28bd5cb94e9f312f95fed2aebe6f7ce794de4ee5e80c34fdc65d",
@@ -214,5 +221,5 @@
   },
   "runtime_fingerprint": "6bb71411c6f011b3439589b6c0b17667e01b416ca7b59bc26ee8dcb4cbf4bf2c",
   "schema_version": 1,
-  "source_fingerprint": "4e120e93ffd24f9e6e1fb6c639917088825f01fc13a5c391ccd6d82afd851b17"
+  "source_fingerprint": "75c5b722a87b9fe4c58f3b7c469199ab50b526962d09c92426025e0b3000f07e"
 }
