@@ -91,6 +91,13 @@
       "reason": "F99 candidate: narrow historical F58-only GitHub CI job to 0.1.175 branch; keep global safety tests",
       "runtime_fingerprint": "6bb71411c6f011b3439589b6c0b17667e01b416ca7b59bc26ee8dcb4cbf4bf2c",
       "source_fingerprint": "75c5b722a87b9fe4c58f3b7c469199ab50b526962d09c92426025e0b3000f07e"
+    },
+    {
+      "agent_version": "0.1.176",
+      "revision": 14,
+      "reason": "F99 offline service orchestrator tests: exactly one 44000 zero write, stable readback, and no replay",
+      "runtime_fingerprint": "6bb71411c6f011b3439589b6c0b17667e01b416ca7b59bc26ee8dcb4cbf4bf2c",
+      "source_fingerprint": "a0b5654301079b67897b4ab420ddb615d7c39412bdfd442b4dd6e356bc343042"
     }
   ],
   "feature": "local_manual_battery",
@@ -155,7 +162,7 @@
     "iqfanda-agent/tests/test_manual_battery_runtime.py": "b34e1cf8a3590513156ffaf96d17e841d20b3aac9b8bbcf703e0e53528b91384",
     "iqfanda-agent/tests/test_solax_battery_control.py": "086600e4c65c2b698e6779d30ac47254facd970c61c21fde72fd72831d846bf8",
     "iqfanda-agent/rootfs/app/foxess_00018_owner_recovery.py": "ccdce2c0ba98ee80b8b447a8242797c86aba2064bcff843995866760e4c1cf9c",
-    "iqfanda-agent/tests/test_f99_00018_owner_recovery.py": "d9e1247d89e53e6c4cb9bea63a2f06ef7f514e9b73ac9fbbaa44a89d61b11a78"
+    "iqfanda-agent/tests/test_f99_00018_owner_recovery.py": "1f19a80ab04c2e738063c5c60341c69949b379aab491ee26028ae30e573c2fc9"
   },
   "profiles": {
     "deye_3x_lv_off_grid": {
@@ -221,5 +228,5 @@
   },
   "runtime_fingerprint": "6bb71411c6f011b3439589b6c0b17667e01b416ca7b59bc26ee8dcb4cbf4bf2c",
   "schema_version": 1,
-  "source_fingerprint": "75c5b722a87b9fe4c58f3b7c469199ab50b526962d09c92426025e0b3000f07e"
+  "source_fingerprint": "a0b5654301079b67897b4ab420ddb615d7c39412bdfd442b4dd6e356bc343042"
 }
