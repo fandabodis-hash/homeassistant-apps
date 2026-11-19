@@ -77,6 +77,13 @@
       "reason": "F99 candidate ONLY 00018: stable-zero remote 44000 release, exact 223/103/407 firmware, audit-before-one-write, no bypass of physical START",
       "runtime_fingerprint": "6bb71411c6f011b3439589b6c0b17667e01b416ca7b59bc26ee8dcb4cbf4bf2c",
       "source_fingerprint": "8bdce88af092b0a6894110e13ed064485971cc9b2afc0496f4b7a3ae4b88134e"
+    },
+    {
+      "agent_version": "0.1.176",
+      "revision": 12,
+      "reason": "F99 reviewed version-independent 00007 physical pin regression assertion, no production control change",
+      "runtime_fingerprint": "6bb71411c6f011b3439589b6c0b17667e01b416ca7b59bc26ee8dcb4cbf4bf2c",
+      "source_fingerprint": "4e120e93ffd24f9e6e1fb6c639917088825f01fc13a5c391ccd6d82afd851b17"
     }
   ],
   "feature": "local_manual_battery",
@@ -138,7 +145,7 @@
     "iqfanda-agent/tests/test_manual_battery_r13_recovery.py": "8da9fd008e8bf8f818d4218136d92719b9da4242d517fd05b520bbb934b09945",
     "iqfanda-agent/tests/test_manual_battery_r14_lab.py": "723135724ef2a383e4887284cc60ab83dadbcf38a01eb17b09d6a524671ffec1",
     "iqfanda-agent/tests/test_manual_battery_release_guard.py": "439f323d91290e05ddf14524506041c7933a136499051991cdf59e4bdf7977fd",
-    "iqfanda-agent/tests/test_manual_battery_runtime.py": "fb02a8c8be7088074fe9fd6a28193d0e3e0d66df3c0e4ac2a2c9cdd0a05ac44e",
+    "iqfanda-agent/tests/test_manual_battery_runtime.py": "b34e1cf8a3590513156ffaf96d17e841d20b3aac9b8bbcf703e0e53528b91384",
     "iqfanda-agent/tests/test_solax_battery_control.py": "086600e4c65c2b698e6779d30ac47254facd970c61c21fde72fd72831d846bf8",
     "iqfanda-agent/rootfs/app/foxess_00018_owner_recovery.py": "ccdce2c0ba98ee80b8b447a8242797c86aba2064bcff843995866760e4c1cf9c",
     "iqfanda-agent/tests/test_f99_00018_owner_recovery.py": "d9e1247d89e53e6c4cb9bea63a2f06ef7f514e9b73ac9fbbaa44a89d61b11a78"
@@ -207,5 +214,5 @@
   },
   "runtime_fingerprint": "6bb71411c6f011b3439589b6c0b17667e01b416ca7b59bc26ee8dcb4cbf4bf2c",
   "schema_version": 1,
-  "source_fingerprint": "8bdce88af092b0a6894110e13ed064485971cc9b2afc0496f4b7a3ae4b88134e"
+  "source_fingerprint": "4e120e93ffd24f9e6e1fb6c639917088825f01fc13a5c391ccd6d82afd851b17"
 }
