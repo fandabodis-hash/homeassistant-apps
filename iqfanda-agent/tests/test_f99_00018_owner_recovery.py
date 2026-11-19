@@ -113,5 +113,168 @@ class OwnerRecoveryTests(unittest.TestCase):
                 self.assertEqual(json.loads(audit_path.read_text())["state"], "write_intent")
 
 
+    def test_scoped_one_write_then_normal_auto_no_repeat(self):
+        """Exercise the real recovery coordinator with an in-memory Modbus fake."""
+        from contextlib import nullcontext
+        from datetime import timedelta
+        from threading import RLock
+        from types import SimpleNamespace
+        import foxess_00018_owner_recovery as mod
+
+        class Reply:
+            def isError(self):
+                return False
+
+        class Port:
+            def __init__(self):
+                self.registers = {
+                    30028: 115, 30016: 223, 30017: 103, 30018: 407,
+                    41000: 0, 41010: 100, 44000: 1,
+                    44001: 20804, 44002: 0,
+                }
+                self.writes = []
+            def connect(self):
+                return True
+            def close(self):
+                pass
+            def write_register(self, *, address, value, device_id):
+                self.writes.append((address, value, device_id))
+                self.registers[address] = value
+                return Reply()
+
+        cfg = {"module_runtime_configurations": [{
+            "module_key": "photovoltaic", "manufacturer": "foxess",
+            "model": "H3-10.0-E", "communicator_id": "comm",
+            "modbus_device_id": 247,
+        }]}
+        local = {
+            "state": "stop_pending", "manual": True, "profile_id": PROFILE,
+            "control_config": cfg,
+            "expires_at": (mod.now()-timedelta(days=1)).isoformat(),
+            "intent": {
+                "current_soc_percent": 98.0, "target_soc_percent": 10.0,
+                "minimum_discharge_soc_percent": 10.0,
+                "battery_capacity_kwh": 20.0,
+            },
+        }
+        port = Port()
+        calls = []
+        rt_obj = SimpleNamespace(
+            _load=lambda: local,
+            submit=lambda **kw: (
+                calls.append(kw) or {
+                    "local_runtime": {
+                        "state": "stopped", "action": "auto",
+                        "verified": True, "applied_power_w": 0,
+                    },
+                    "applied": {
+                        "action": "auto", "verified": True,
+                        "write_performed": False,
+                    },
+                }
+            )
+        )
+        runtime = SimpleNamespace(
+            _LOCK=RLock(), _RUNTIME=rt_obj, _route=lambda cfg: "exact-route")
+        driver = SimpleNamespace(
+            OWNER_MARKER_PATH=None,
+            _select_runtime=lambda cfg: cfg["module_runtime_configurations"][0],
+            _find_communicator=lambda cid: (None, "/dev/serial/by-id/usb-mock"),
+            ziskej_zamek_modbus_sbernice=lambda path: nullcontext(),
+            ModbusSerialClient=lambda **kw: port,
+            _read_one=lambda *, client, device_id, address: client.registers[address],
+            MODBUS_WRITE_SETTLE_SECONDS=0,
+        )
+        services = SimpleNamespace(
+            runtime=runtime, driver=driver,
+            serial=lambda: SERIAL, version=lambda: VERSION,
+            guard=lambda: "a"*64,
+            config=lambda: cfg,
+            probe=lambda *, cloud_config: {
+                "read_only": True, "write_performed": False,
+                "owner_marker": {"present": False, "status": "missing"},
+                "firmware_versions_raw": dict(EXPECTED_FIRMWARE),
+                "registers": {
+                    "work_mode_41000": 0, "max_soc_41010": 100,
+                    "remote_enable_44000": port.registers[44000],
+                    "remote_timeout_44001": 20804,
+                    "remote_active_power_w_44002": 0,
+                },
+            },
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            driver.OWNER_MARKER_PATH = Path(tmp) / "no-owner.json"
+            with patch.object(mod, "AUDIT_PATH", Path(tmp) / "attempt.json"):
+                result = {}
+                mod.release(services, self.checked(), result)
+                self.assertEqual(port.writes, [(44000, 0, 247)])
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(calls[0]["payload"]["action"], "auto")
+                self.assertEqual(calls[0]["payload"]["allowed_discharge_power_w"], 0)
+                self.assertEqual(json.loads(mod.AUDIT_PATH.read_text())["state"], "completed")
+                self.assertTrue(result["verified"])
+                self.assertEqual(port.registers[44000], 0)
+                # Even when a later actor toggles enable, old approval cannot repeat.
+                port.registers[44000] = 1
+                with self.assertRaises(RecoveryRejected):
+                    mod.release(services, self.checked(), {})
+                self.assertEqual(port.writes, [(44000, 0, 247)])
+
+    def test_changed_hardware_blocks_before_first_write(self):
+        """A changed inverter or nonzero setpoint must fail before the write."""
+        from contextlib import nullcontext
+        from datetime import timedelta
+        from threading import RLock
+        from types import SimpleNamespace
+        import foxess_00018_owner_recovery as mod
+        with tempfile.TemporaryDirectory() as tmp:
+            registers = {
+                30028: 115, 30016: 223, 30017: 103, 30018: 407,
+                41000: 0, 41010: 100, 44000: 1, 44001: 20804,
+                44002: 500,
+            }
+            writes = []
+            port = SimpleNamespace(
+                connect=lambda: True, close=lambda: None,
+                write_register=lambda **kw: writes.append(kw),
+                registers=registers,
+            )
+            cfg={"module_runtime_configurations": [{
+                "module_key":"photovoltaic", "manufacturer":"foxess",
+                "model":"H3-10.0-E", "communicator_id":"comm",
+                "modbus_device_id":247,
+            }]}
+            state={
+                "state":"stop_pending", "manual":True,
+                "profile_id":PROFILE, "control_config":cfg,
+                "expires_at":(mod.now()-timedelta(days=1)).isoformat(),
+                "intent": {
+                    "current_soc_percent":98.0, "target_soc_percent":10.0,
+                    "minimum_discharge_soc_percent":10.0,
+                    "battery_capacity_kwh":20.0
+                },
+            }
+            drv=SimpleNamespace(
+                OWNER_MARKER_PATH=Path(tmp)/"no-marker.json",
+                _select_runtime=lambda conf:conf["module_runtime_configurations"][0],
+                _find_communicator=lambda _: (None,"/dev/serial/by-id/mock"),
+                ziskej_zamek_modbus_sbernice=lambda _:nullcontext(),
+                ModbusSerialClient=lambda **kw:port,
+                _read_one=lambda *,client,device_id,address:client.registers[address],
+            )
+            services=SimpleNamespace(
+                runtime=SimpleNamespace(
+                    _LOCK=RLock(),_RUNTIME=SimpleNamespace(_load=lambda:state),
+                    _route=lambda _: "same-route",
+                ),driver=drv,serial=lambda:SERIAL,version=lambda:VERSION,
+                guard=lambda:"a"*64,config=lambda:cfg,
+            )
+            with patch.object(mod,"AUDIT_PATH",Path(tmp)/"attempt.json"):
+                with self.assertRaises(RecoveryRejected):
+                    mod.release(services,self.checked(),{})
+                self.assertEqual(writes, [])
+                self.assertFalse(mod.AUDIT_PATH.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
