@@ -10,6 +10,9 @@ permissions:
   contents: read
 jobs:
   foxess-only-source-and-regression:
+    # Historical F58 0.1.175 certification is scoped to its own branch.
+    # Future versions have their own SHA and physical review gates.
+    if: github.event_name != 'pull_request' || github.head_ref == 'fix/f58-foxess-only-agent-0-1-175-00007-from-00018-20261107'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
