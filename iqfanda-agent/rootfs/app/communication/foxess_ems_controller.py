@@ -1040,6 +1040,25 @@ def apply_foxess_h3_action(
                 "FoxESS active power final readback selhal."
             )
 
+        # F63: the real 00018 failure involved work mode 41000 reverting
+        # to Self Use after a seemingly accepted 44002 request. An ACK for
+        # 44000/44002 alone must NOT be reported as verified control.
+        # Never auto-rearm 41000 here: another controller, firmware, or a
+        # safety constraint may have changed it deliberately. The existing
+        # exception handler attempts the owner's safe AUTO restoration.
+        if (
+            _read_one(
+                client=client,
+                device_id=device_id,
+                address=WORK_MODE_REGISTER,
+            )
+            != WORK_MODE_BACK_UP
+        ):
+            raise RuntimeError(
+                "FoxESS work_mode final readback selhal; "
+                "remote setpoint is not physically proven."
+            )
+
     except Exception:
         try:
             _restore_auto(

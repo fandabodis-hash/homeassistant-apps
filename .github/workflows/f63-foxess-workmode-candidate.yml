@@ -1,0 +1,64 @@
+name: F63 FoxESS fail-closed workmode candidate (not release)
+on:
+  push:
+    branches:
+      - fix/f63-foxess-post-setpoint-workmode-check-20261108
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+jobs:
+  candidate-only-safety-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: No GoodWe/other-module edits, no version, manifest or pin updates
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          import subprocess
+          base='3f8920131725ab8bbe810279a178d3019cd5192f'
+          changed=set(subprocess.check_output(['git','diff','--name-only',base,'HEAD'],text=True).splitlines())
+          allowed={
+            '.github/workflows/f63-foxess-workmode-candidate.yml',
+            'iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py',
+            'iqfanda-agent/tests/test_foxess_battery_control.py',
+          }
+          assert changed and changed <= allowed, 'F63_OUT_OF_SCOPE='+str(sorted(changed-allowed))
+          assert 'iqfanda-agent/rootfs/app/protection/manual_battery_manifest.json' not in changed
+          assert 'iqfanda-agent/rootfs/app/VERSION' not in changed
+          print('F63_SCOPE_PASS=FOXESS_ONLY; VERSION_AND_VERIFIED_PINS_UNCHANGED')
+          PY
+          git diff --check 3f8920131725ab8bbe810279a178d3019cd5192f HEAD
+      - name: Compile candidate
+        run: |
+          python -m py_compile iqfanda-agent/rootfs/app/communication/foxess_ems_controller.py
+          python -m py_compile iqfanda-agent/tests/test_foxess_battery_control.py
+      - name: Existing physical-protocol simulations and F63 false-ACK regression
+        env:
+          PYTHONPATH: iqfanda-agent/rootfs/app
+        run: |
+          python -m unittest discover -s iqfanda-agent/tests -p 'test_foxess_battery_control.py' -v
+          python -m unittest discover -s iqfanda-agent/tests -p 'test_manual_battery_runtime.py' -v
+      - name: Explicit block on accidental release of unpinned candidate
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          root=Path('iqfanda-agent/rootfs/app')
+          m=json.loads((root/'protection/manual_battery_manifest.json').read_text())
+          live=hashlib.sha256((root/'communication/foxess_ems_controller.py').read_bytes()).hexdigest()
+          pinned=m['files']['communication/foxess_ems_controller.py']
+          assert live!=pinned, 'F63 candidate must not falsely look like released proven 0.1.175'
+          print('F63_RELEASE_BLOCKED_EXPECTED=PASS; DO_NOT_BUILD_OR_DEPLOY_ON_CUSTOMER')
+          PY

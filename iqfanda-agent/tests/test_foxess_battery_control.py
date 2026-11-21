@@ -329,6 +329,42 @@ class FoxessBatteryControlTests(unittest.TestCase):
             self.assertTrue(result.write_performed)
             self.assertEqual(sum(a == 44002 for a, _ in self.inverter.writes), before + 1)
 
+    def test_f63_reverted_work_mode_after_power_write_is_not_false_success(self):
+        """Simulate 00018: 44000/44002 appear correct, but 41000 becomes 0."""
+        # The inverter or another controller changes mode after accepting
+        # remote setpoint. The driver must refuse success and return to AUTO.
+        def external_mode_override(address, value):
+            if address == 44002 and value == 500:
+                self.inverter.registers[41000] = 0
+
+        self.inverter.after_write = external_mode_override
+        with self.assertRaisesRegex(RuntimeError, "work_mode final readback selhal"):
+            self.apply("discharge_grid")
+
+        self.assertEqual(self.inverter.registers[41000], 0)
+        self.assertEqual(self.inverter.registers[44000], 0)
+        self.assertEqual(self.inverter.registers[44002], 0)
+        self.assertFalse(self.marker.exists())
+
+    def test_f63_normal_500w_charge_discharge_preserves_verified_AUTO(self):
+        """F63 must not weaken the physically verified 00018 control path."""
+        for action, expected_raw in (
+            ("charge_grid", 0x10000 - 500),
+            ("discharge_grid", 500),
+        ):
+            with self.subTest(action=action):
+                result = self.apply(action)
+                self.assertTrue(result.verified)
+                self.assertEqual(self.inverter.registers[41000], 2)
+                self.assertEqual(self.inverter.registers[44000], 1)
+                self.assertEqual(self.inverter.registers[44002], expected_raw)
+                stop = self.apply()
+                self.assertTrue(stop.verified)
+                self.assertEqual(self.inverter.registers[41000], 0)
+                self.assertEqual(self.inverter.registers[44000], 0)
+                self.assertEqual(self.inverter.registers[44002], 0)
+                self.assertFalse(self.marker.exists())
+
     def test_f57_stop_is_not_delayed_by_renewal_lease(self):
         self.apply("charge_grid")
         self.assertTrue(self.apply("charge_grid").write_performed)
