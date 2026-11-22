@@ -7,6 +7,9 @@ on:
     paths:
       - "iqfanda-agent/rootfs/app/communication/midea_00019_readonly.py"
       - "iqfanda-agent/tests/test_f106_midea_00019_readonly.py"
+      - "iqfanda-agent/rootfs/app/communication/midea_00019_cloud_probe.py"
+      - "iqfanda-agent/rootfs/app/command_worker.py"
+      - "iqfanda-agent/tests/test_f107_midea_00019_cloud_probe.py"
       - ".github/workflows/f106-midea-00019-readonly.yml"
 jobs:
   test-model-only:
@@ -14,4 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Python tests (no hardware, no Modbus I/O)
-        run: python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f106_midea_00019_readonly.py' -v
+        run: |
+          python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f106_midea_00019_readonly.py' -v
+          python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f107_midea_00019_cloud_probe.py' -v
+          python3 -m py_compile iqfanda-agent/rootfs/app/command_worker.py
