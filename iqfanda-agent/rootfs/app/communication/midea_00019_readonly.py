@@ -94,6 +94,8 @@ def probe_once(
     lock = lock_factory(port_path)
     raw = {}
     blocks = []
+    holding_status = None
+    holding_mode = None
     with lock:
         try:
             if client.connect() is not True:
@@ -117,6 +119,23 @@ def probe_once(
                     # Preserve only type to avoid leaking low-level driver/port details.
                     blocks.append({"address": address, "count": count, "status": type(error).__name__})
                 time.sleep(0.12)
+            # F114: FC03 holding 0/1 (power bit and requested mode), read-only.
+            # A failed optional holding read does not erase valid input values.
+            try:
+                status_response = client.read_holding_registers(
+                    address=0, count=2, device_id=unit_id
+                )
+                if status_response is not None and not status_response.isError():
+                    got = getattr(status_response, "registers", None)
+                    if isinstance(got, list) and len(got) == 2:
+                        holding_status, holding_mode = map(u16, got)
+                        blocks.append({"address": 0, "count": 2, "function_code": 3, "status": "ok"})
+                    else:
+                        blocks.append({"address": 0, "count": 2, "function_code": 3, "status": "invalid_count"})
+                else:
+                    blocks.append({"address": 0, "count": 2, "function_code": 3, "status": "no_response"})
+            except Exception as error:
+                blocks.append({"address": 0, "count": 2, "function_code": 3, "status": type(error).__name__})
         finally:
             client.close()
     # No physical verification if the supply/return water block did not respond.
@@ -134,5 +153,10 @@ def probe_once(
         "blocks": blocks,
         "read_register_count": len(raw),
         "raw_registers": {str(k): v for k, v in sorted(raw.items()) if k in SENSOR_ADDRESSES},
-        "measurements": decode(raw),
+        "holding_status_available": holding_status is not None,
+        "measurements": {
+            **decode(raw),
+            "zone1_enabled": None if holding_status is None else bool(holding_status & 0x0002),
+            "mode_setting": holding_mode,
+        },
     }

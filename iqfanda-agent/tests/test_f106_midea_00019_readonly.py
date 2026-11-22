@@ -21,7 +21,7 @@ class FakeClient:
     def connect(self): return True
     def _read(self, mode, *, address, count, device_id):
         self.reads.append((mode, address, count, device_id))
-        vals = {100: 43, 101: 3, 104: 37, 105: 45, 107: 65531,
+        vals = {0: 2, 1: 3, 100: 43, 101: 3, 104: 37, 105: 45, 107: 65531,
                 124: 0, 129: 8, 138: 225, 143: 0, 144: 1377,
                 150: 720, 151: 312, 199: 3}
         return FakeResponse([vals.get(address + i, 0) for i in range(count)])
@@ -61,10 +61,27 @@ class TestMideaR290ReadOnly(unittest.TestCase):
         self.assertEqual(result["measurements"]["internal_pump_on"], True)
         self.assertEqual(result["measurements"]["energy_total_kwh"], 13.77)
         self.assertEqual(result["measurements"]["electric_power_kw_candidate"], 7.2)
-        self.assertEqual(len(created[0].reads), len(midea.BLOCKS))
-        self.assertTrue(all(x[0] == 4 and x[3] == 1 for x in created[0].reads))
+        self.assertEqual(len(created[0].reads), len(midea.BLOCKS) + 1)
+        self.assertTrue(all(x[0] == 4 and x[3] == 1 for x in created[0].reads[:-1]))
+        self.assertEqual(created[0].reads[-1], (3, 0, 2, 1))
+        self.assertTrue(result["measurements"]["zone1_enabled"])
+        self.assertEqual(result["measurements"]["mode_setting"], 3)
         self.assertTrue(created[0].closed)
         self.assertEqual(FakeClient.writes, 0)
+
+
+    def test_missing_holding_status_never_pretends_zone_off(self):
+        class MissingHolding(FakeClient):
+            def read_holding_registers(self, **kwargs):
+                return None
+        result = midea.probe_once(serial_number=midea.SERIAL,
+                                  port_path=midea.FTDI_PORT, unit_id=16, function_code=4,
+                                  client_factory=MissingHolding, lock_factory=lambda _: nullcontext(),
+                                  check_path=False)
+        self.assertIsNone(result["measurements"]["zone1_enabled"])
+        self.assertIsNone(result["measurements"]["mode_setting"])
+        self.assertEqual(result["measurements"]["water_flow_c"], 45)
+        self.assertFalse(result["writes_performed"])
 
     def test_official_map_is_not_claimed_verified_without_water_block(self):
         class NoResponseClient(FakeClient):
