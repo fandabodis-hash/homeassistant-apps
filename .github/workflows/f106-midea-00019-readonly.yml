@@ -1,0 +1,17 @@
+name: F106 Midea 00019 read-only contract
+on:
+  push:
+    branches:
+      - feature/f106-midea-00019-readonly-modbus
+  pull_request:
+    paths:
+      - "iqfanda-agent/rootfs/app/communication/midea_00019_readonly.py"
+      - "iqfanda-agent/tests/test_f106_midea_00019_readonly.py"
+      - ".github/workflows/f106-midea-00019-readonly.yml"
+jobs:
+  test-model-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python tests (no hardware, no Modbus I/O)
+        run: python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f106_midea_00019_readonly.py' -v
