@@ -3,8 +3,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from midea_00019_ftdi_inventory import enrich_if_verified, DEVICE_UUID, FTDI_PATH
+ROOT = Path(__file__).resolve().parents[1] / "rootfs" / "app"
+sys.path.insert(0, str(ROOT))
+from communication.midea_00019_ftdi_inventory import enrich_if_verified, DEVICE_UUID, FTDI_PATH
 
 GOOD = {"devices": [{"inventory_id": "ftdi-only-00019", "vid": "0403", "pid": "6001", "serial_number": "BG02YF7T", "connected": True, "serial_ports": [{"port": "/dev/ttyUSB1", "stable_path": FTDI_PATH}]}]}
 
