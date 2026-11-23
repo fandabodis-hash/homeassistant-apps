@@ -36,3 +36,10 @@ Statický source diff ani CI **nedokazují absolutní neexistenci runtime regres
 
 ## Mimo rozsah
 V tomto kroku nejsou povolené produkční zásahy, Agent 0.1.177 se nikde nenainstaloval, Modbus RTU se fyzicky nečetl a cloudový backend PR #42 nebyl nasazen.
+
+## Závěrečný výsledek GitHub Actions (23. 11. 2026)
+- PR #47 commit `e42800d00860c0cca4ecc9df46d90d43ba1c0a43`: workflow `F106 Midea 00019 read-only contract` **SUCCESS**.
+- V jeho logu je F133 **6/6 PASS**, F132 5/5, F107 5/5 a F106 4/4 (celkem 20/20 mockovaných/zdrojových testů); žádné fyzické RTU I/O.
+- `Agent universal Smart Control / version consistency`, `F47 R18C`, `F48 R13`, `F52`, `F43` a `F47 R111` jsou SUCCESS.
+- Historické vydávací workflow `F99 FoxESS 00018 service recovery candidate` a `Manual battery release contract` zůstávají **FAIL výhradně na release-contract drift `agent_version`** (`0.1.176` → `0.1.177`). Jejich přímé jednotkové testy/F99 fyzická důkazní historie nejsou tímto selháním prokázané jako vadné; u F99 9/9 unit testů prošlo před release guardem.
+- Tyto dvě vydávací pojistky **neobcházet, neodstraňovat a neslibovat globální 0.1.177 release**. Vývojový PR je draft; kompatibilita zdrojů je prokázána, fyzická regresní zkouška na 00019 ještě ne.
