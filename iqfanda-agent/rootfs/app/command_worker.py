@@ -4268,7 +4268,13 @@ def execute_command(
         return
 
     # F107: strictly one device, read-only Midea RTU. No universal Modbus writes.
-    if command_type == "midea_00019_modbus_readonly_v1":
+    if (
+        command_type == "midea_00019_modbus_readonly_v1"
+        and str(identity.get("device_uuid") or "").lower()
+        == "648d4229-7c17-400f-bbed-ffe5ab04b844"
+        and str(identity.get("site_id") or "").lower()
+        == "980e5e5e-76b4-4cac-9b6c-1f31fa5fd6e1"
+    ):
         from communication.midea_00019_cloud_probe import execute_readonly_command
         execute_readonly_command(
             identity=identity,
