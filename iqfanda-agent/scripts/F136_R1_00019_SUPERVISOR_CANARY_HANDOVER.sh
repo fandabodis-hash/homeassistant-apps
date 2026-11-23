@@ -15,15 +15,9 @@ EXPECTED_SERIAL='F800711-TNG-00019'
 CANARY_ID="$(printf %s "$CANARY_REPO" | sha1sum | cut -c1-8)_tng_iq_fanda_agent"
 VERSION_OLD='0.1.176'; VERSION_NEW='0.1.177'
 STAMP="$(date +%Y%m%d-%H%M%S)"
-if [[ "${F136_LOCAL_TEST:-}" == 'YES' ]]; then
-  ROOT_CONFIGS="${F136_TEST_CONFIG_ROOT:?}"
-  SUPERVISOR_URL="${F136_TEST_SUPERVISOR_URL:?}"
-  LOG_ROOT="${F136_TEST_LOG_ROOT:?}"
-else
-  ROOT_CONFIGS='/addon_configs'; [[ -d "$ROOT_CONFIGS" ]] || ROOT_CONFIGS='/app_configs'
-  SUPERVISOR_URL='http://supervisor'
-  LOG_ROOT='/share'
-fi
+ROOT_CONFIGS='/addon_configs'; [[ -d "$ROOT_CONFIGS" ]] || ROOT_CONFIGS='/app_configs'
+SUPERVISOR_URL='http://supervisor'
+LOG_ROOT='/share'
 for c in jq curl sha1sum sha256sum find cp date tee wc du awk sed grep tr sleep; do command -v "$c" >/dev/null || { echo "F136_STOP|REQUIRED_BINARY_MISSING_$c"; exit 3; }; done
 [[ -n "${SUPERVISOR_TOKEN:-}" ]] || { echo 'F136_STOP|SUPERVISOR_TOKEN_UNAVAILABLE_RUN_INSIDE_AUTHORIZED_HA_TERMINAL'; exit 3; }
 [[ -d "$ROOT_CONFIGS" ]] || { echo 'F136_STOP|APP_CONFIG_FOLDERS_NOT_MAPPED_RUN_TERMINAL_WITH_ALL_ADDON_CONFIGS_ACCESS'; exit 3; }
@@ -90,7 +84,6 @@ original_slug(){
 }
 repo_config_check(){
   local base='https://raw.githubusercontent.com/fandabodis-hash/homeassistant-apps/canary/f135-00019-agent-0.1.177-20261123/iqfanda-agent'
-  if [[ "${F136_LOCAL_TEST:-}" == 'YES' ]]; then base="${F136_TEST_RAW_BASE:?}"; fi
   local path expected data n actual
   while IFS='|' read -r path expected; do
     [[ -n "$path" ]] || continue
