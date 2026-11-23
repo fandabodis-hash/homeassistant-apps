@@ -9,7 +9,8 @@ arch:
   - aarch64
 
 startup: application
-boot: auto
+# F136: migration canary must NEVER autostart beside existing 0.1.176.
+boot: manual
 init: false
 
 ingress: true
