@@ -91,23 +91,36 @@ original_slug(){
 repo_config_check(){
   local base='https://raw.githubusercontent.com/fandabodis-hash/homeassistant-apps/canary/f135-00019-agent-0.1.177-20261123/iqfanda-agent'
   if [[ "${F136_LOCAL_TEST:-}" == 'YES' ]]; then base="${F136_TEST_RAW_BASE:?}"; fi
-  local cfg probe cfgsha probesha
-  cfg="$(curl -fsSL --connect-timeout 10 --max-time 35 "$base/config.yaml")" || fail 'CANARY_GITHUB_CONFIG_NOT_PUBLICLY_AVAILABLE'
-  probe="$(curl -fsSL --connect-timeout 10 --max-time 35 "$base/rootfs/app/communication/midea_00019_cloud_probe.py")" || fail 'CANARY_GITHUB_PROBE_NOT_AVAILABLE'
-  grep -q '^version: "0.1.177"' <<<"$cfg" || fail 'CANARY_SOURCE_VERSION_WRONG'
-  grep -q '^boot: manual' <<<"$cfg" || fail 'CANARY_MUST_HAVE_BOOT_MANUAL'
-  grep -q "$EXPECTED_UUID" <<<"$probe" || fail 'CANARY_MIDEA_UUID_MISSING'
-  # GitHub blob SHA-1 = SHA1("blob " + decimal byte length + NUL + exact bytes).
-  # Pinning exact upstream content without importing or logging private code.
-  local cfg_bytes probe_bytes
-  cfg_bytes="$(printf '%s\n' "$cfg" | wc -c | tr -d ' ')"
-  probe_bytes="$(printf '%s\n' "$probe" | wc -c | tr -d ' ')"
-  cfgsha="$( { printf 'blob %s\0' "$cfg_bytes"; printf '%s\n' "$cfg"; } | sha1sum | cut -d' ' -f1)"
-  probesha="$( { printf 'blob %s\0' "$probe_bytes"; printf '%s\n' "$probe"; } | sha1sum | cut -d' ' -f1)"
-  [[ "$cfgsha" == '7d69edfe69b9d624a308730790ba32446a50bd6b' ]] || fail 'CANARY_CONFIG_BLOB_DRIFT'
-  [[ "$probesha" == 'c013312d22f027deef226456c85a2f7526c6356a' ]] || fail 'CANARY_PROBE_BLOB_DRIFT'
-  echo 'F136_CANARY_GITHUB|PASS_PINNED_BOOT_MANUAL_0177_AND_MIDEA_READONLY'
+  local path expected data n actual
+  while IFS='|' read -r path expected; do
+    [[ -n "$path" ]] || continue
+    data="$(curl --silent --show-error --fail --location --connect-timeout 10 --max-time 55 "$base/$path")" || fail "CANARY_GITHUB_FILE_UNAVAILABLE_$path"
+    [[ -n "$data" ]] || fail "CANARY_GITHUB_EMPTY_FILE_$path"
+    if [[ "$path" == 'config.yaml' ]]; then
+      grep -q '^version: "0.1.177"' <<<"$data" || fail 'CANARY_SOURCE_VERSION_WRONG'
+      grep -q '^boot: manual' <<<"$data" || fail 'CANARY_MUST_HAVE_BOOT_MANUAL'
+    fi
+    if [[ "$path" == 'rootfs/app/communication/midea_00019_cloud_probe.py' ]]; then
+      grep -q "$EXPECTED_UUID" <<<"$data" || fail 'CANARY_MIDEA_UUID_MISSING'
+    fi
+    # Exact git blob hash = SHA1("blob <byte_count>\0" + exact content).
+    # Pinned eight agent files, including the entire original worker/heartbeat.
+    n="$(printf '%s\n' "$data" | wc -c | tr -d ' ')"
+    actual="$( { printf 'blob %s\0' "$n"; printf '%s\n' "$data"; } | sha1sum | cut -d' ' -f1)"
+    [[ "$actual" == "$expected" ]] || fail "CANARY_PINNED_SOURCE_BLOB_DRIFT_$path"
+  done <<'F136_SOURCE_PINS'
+config.yaml|7d69edfe69b9d624a308730790ba32446a50bd6b
+rootfs/app/VERSION|dfb8b6438c1affd001ecde64fea1a22504917731
+Dockerfile|33aaa1f13f69524d5ab28204c76f80255714293f
+rootfs/app/command_worker.py|d97079f5d9162612b42482a8ed5c2714c99067c4
+rootfs/app/heartbeat.py|f89f14f7b6811df0b424fc7949e5ca60bfe3b97f
+rootfs/app/communication/midea_00019_readonly.py|2374722be173dd3335ef84f34af83e2d9e891d9e
+rootfs/app/communication/midea_00019_cloud_probe.py|c013312d22f027deef226456c85a2f7526c6356a
+rootfs/app/communication/midea_00019_ftdi_inventory.py|fed614d8a8f2763248aacfe9ffeb9dd654797f8d
+F136_SOURCE_PINS
+  echo 'F136_CANARY_GITHUB|PASS_ALL_8_PINNED_AGENT_SOURCES_BOOT_MANUAL_AND_MIDEA_READONLY'
 }
+
 old_boot='manual'; old_autoupdate='false'; old_slug=''; new_slug="$CANARY_ID"; switched=0
 rollback_internal(){
   local why="$1"
