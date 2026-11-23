@@ -322,6 +322,17 @@ def send_heartbeat(config: dict) -> dict:
 
     communication_state = build_communication_state()
 
+    # F132: exclusively for FANDA 00019 and only from real USB inventory.
+    # No serial reads, device commands, configuration writes or side effects.
+    if str(config.get("device_uuid") or "").lower() == "648d4229-7c17-400f-bbed-ffe5ab04b844":
+        try:
+            from communication.midea_00019_ftdi_inventory import enrich_if_verified
+            communication_state = enrich_if_verified(
+                communication_state, device_uuid=config["device_uuid"]
+            )
+        except (OSError, ValueError, TypeError) as exc:
+            logging.warning("F132 Midea FTDI inventory unavailable: %s", type(exc).__name__)
+
     # Observation only: the local battery loop never waits for the heartbeat.
     try:
         from manual_battery_runtime import get_local_battery_status
