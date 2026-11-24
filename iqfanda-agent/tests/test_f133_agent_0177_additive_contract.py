@@ -31,8 +31,12 @@ ADDED_ONLY = {
     "iqfanda-agent/tests/test_f107_midea_00019_cloud_probe.py",
     "iqfanda-agent/tests/test_f132_midea_00019_ftdi_inventory.py",
     "iqfanda-agent/tests/test_f133_agent_0177_additive_contract.py",
+    "iqfanda-agent/CHANGELOG.md",
 }
-MODIFIED_ONLY = {WORKER, HEARTBEAT, CONFIG, VERSION}
+# F137: reviewed release metadata, no changes in protected control algorithms.
+MANIFEST_RELEASE = "iqfanda-agent/contracts/manual_battery_release.json"
+MANIFEST_RUNTIME = "iqfanda-agent/rootfs/app/protection/manual_battery_manifest.json"
+MODIFIED_ONLY = {WORKER, HEARTBEAT, CONFIG, VERSION, MANIFEST_RELEASE, MANIFEST_RUNTIME}
 
 
 def git(*args: str) -> bytes:
@@ -87,9 +91,19 @@ class TestAgent0177OnlyAddsMidea(unittest.TestCase):
         )
         self.assertEqual(content, baseline(HEARTBEAT), "F133_176_HEARTBEAT_CHANGED")
 
+    def test_177_can_only_be_manually_installed_not_automatically(self):
+        config = local(CONFIG)
+        guard = b'breaking_versions:\n  - "0.1.177"\n'
+        self.assertEqual(config.count(guard), 1, "F137_AUTO_UPDATE_NOT_BLOCKED")
+        self.assertIn(b'boot: auto\n', config, "F137_EXISTING_BOOT_CHANGED")
+        self.assertNotIn(b'boot: manual\n', config)
+
     def test_version_metadata_only_and_other_settings_unmodified(self):
         self.assertEqual(
-            local(CONFIG).replace(b"0.1.177", b"0.1.176"), baseline(CONFIG),
+            local(CONFIG).replace(
+                b'# F137: manual-only for the fleet; auto-update MUST NOT cross 0.1.177.\n'
+                b'breaking_versions:\n  - "0.1.177"\n', b""
+            ).replace(b"0.1.177", b"0.1.176"), baseline(CONFIG),
             "F133_UNRELATED_ADDON_CONFIG_CHANGED"
         )
         self.assertEqual(local(VERSION).strip(), b"0.1.177")
