@@ -333,6 +333,19 @@ def send_heartbeat(config: dict) -> dict:
         except (OSError, ValueError, TypeError) as exc:
             logging.warning("F132 Midea FTDI inventory unavailable: %s", type(exc).__name__)
 
+    # F152: the exact existing Midea identity starts a separate local reader.
+    # The heartbeat only copies a cached snapshot and never waits for Modbus.
+    if (str(config.get("device_uuid") or "").lower() == "648d4229-7c17-400f-bbed-ffe5ab04b844"
+            and str(config.get("site_id") or "").lower() == "980e5e5e-76b4-4cac-9b6c-1f31fa5fd6e1"):
+        communication_state.pop("midea_00019_live", None)
+        try:
+            from communication.midea_00019_live import get_or_start_snapshot
+            snapshot = get_or_start_snapshot(config)
+            if snapshot is not None:
+                communication_state["midea_00019_live"] = snapshot
+        except Exception as exc:
+            logging.warning("F152 Midea live snapshot unavailable: %s", type(exc).__name__)
+
     # Observation only: the local battery loop never waits for the heartbeat.
     try:
         from manual_battery_runtime import get_local_battery_status
