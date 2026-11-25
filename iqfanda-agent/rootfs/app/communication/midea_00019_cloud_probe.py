@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from communication.midea_00019_readonly import (
-    FTDI_PORT, MideaProbeError, SERIAL, probe_diagnostic_once,
+    FTDI_PORT, MideaProbeError, SERIAL, probe_diagnostic_once, probe_bms1_diagnostic_once,
 )
 
 DEVICE_UUID = "648d4229-7c17-400f-bbed-ffe5ab04b844"
@@ -24,6 +24,9 @@ EXPECTED = {
 }
 
 
+EXPECTED_BMS1 = {**EXPECTED, "unit_id": 1, "scope": "single_probe_bms1_no_writes"}
+
+
 def validate_command(identity: dict[str, Any], payload: dict[str, Any]) -> None:
     if not isinstance(identity, dict) or str(identity.get("device_uuid", "")).lower() != DEVICE_UUID:
         raise MideaProbeError("MIDEA_AGENT_IDENTITY_MISMATCH")
@@ -31,7 +34,8 @@ def validate_command(identity: dict[str, Any], payload: dict[str, Any]) -> None:
         raise MideaProbeError("MIDEA_AGENT_SITE_MISMATCH")
     if not isinstance(payload, dict) or set(payload) != set(EXPECTED):
         raise MideaProbeError("MIDEA_EXACT_READ_ONLY_FIELDS_REQUIRED")
-    for key, expected in EXPECTED.items():
+    contract = EXPECTED_BMS1 if payload.get("scope") == EXPECTED_BMS1["scope"] else EXPECTED
+    for key, expected in contract.items():
         value = payload.get(key)
         if key in ("unit_id", "function_code"):
             if type(value) is not int or value != expected:
@@ -46,13 +50,17 @@ def validate_command(identity: dict[str, Any], payload: dict[str, Any]) -> None:
 def execute_readonly_command(
     *, identity: dict[str, Any], command_id: str,
     command_payload: dict[str, Any], submit_result: Callable[..., Any],
-    probe: Callable[..., dict[str, Any]] = probe_diagnostic_once,
+    probe: Callable[..., dict[str, Any]] | None = None,
 ) -> None:
     try:
         validate_command(identity, command_payload)
-        result = probe(
+        requested_unit = command_payload["unit_id"]
+        driver = probe if probe is not None else (
+            probe_bms1_diagnostic_once if requested_unit == 1 else probe_diagnostic_once
+        )
+        result = driver(
             serial_number=SERIAL, port_path=FTDI_PORT,
-            unit_id=16, function_code=4,
+            unit_id=requested_unit, function_code=4,
         )
         if not isinstance(result, dict) or result.get("read_only") is not True:
             raise MideaProbeError("MIDEA_DRIVER_INVALID_RESULT")
