@@ -346,6 +346,16 @@ def send_heartbeat(config: dict) -> dict:
         except Exception as exc:
             logging.warning("F152 Midea live snapshot unavailable: %s", type(exc).__name__)
 
+        # F169: cached durable capability only; no new RTU I/O from heartbeat.
+        communication_state.pop("midea_00019_power", None)
+        try:
+            from communication.midea_00019_power import heartbeat_status
+            power = heartbeat_status(config)
+            if power is not None:
+                communication_state["midea_00019_power"] = power
+        except Exception as exc:
+            logging.warning("F169 Midea capability unavailable: %s", type(exc).__name__)
+
     # Observation only: the local battery loop never waits for the heartbeat.
     try:
         from manual_battery_runtime import get_local_battery_status

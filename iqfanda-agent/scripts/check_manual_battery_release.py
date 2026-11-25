@@ -178,7 +178,7 @@ def profile_snapshot(root):
 def expected_snapshot(root, protected_paths):
     profiles = profile_snapshot(root)
     paths = set(protected_paths)
-    paths.update(str(path.relative_to(root)) for path in (Path(root) / "iqfanda-agent/tests").glob("test_*battery*.py"))
+    paths.update(path.relative_to(root).as_posix() for path in (Path(root) / "iqfanda-agent/tests").glob("test_*battery*.py"))
     require(PRODUCTION_MANIFEST_PATH not in paths, "Derived production manifest cannot hash itself")
     for profile in profiles.values():
         if profile["control_available"]:
@@ -350,11 +350,11 @@ def refresh(root, reason):
               "change_history": history}
     validate_history(result, previous or None)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
     production_path = safe_path(root, PRODUCTION_MANIFEST_PATH)
     production_path.parent.mkdir(parents=True, exist_ok=True)
     production_path.write_text(json.dumps(production_manifest(snapshot["agent_version"], snapshot["files"]),
-                                          indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                                          indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
     # Never create, edit, or promote physical evidence here.
     return result
 

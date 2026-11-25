@@ -4284,6 +4284,19 @@ def execute_command(
         )
         return
 
+    # F169: exact Midea zone 1 heating command; other devices remain unchanged.
+    if command_type == "midea_00019_zone1_power_v1":
+        if (str(identity.get("device_uuid") or "").lower() == "648d4229-7c17-400f-bbed-ffe5ab04b844"
+                and str(identity.get("site_id") or "").lower() == "980e5e5e-76b4-4cac-9b6c-1f31fa5fd6e1"):
+            from communication.midea_00019_power import execute_power_command
+            execute_power_command(identity=identity, command_id=command_id,
+                                  command_payload=command_payload, submit_result=submit_command_result)
+            return
+        submit_command_result(identity=identity, command_id=command_id, status="failed",
+                              result={"phase": "rejected", "reason": "IDENTITY_MISMATCH"},
+                              error_message="IDENTITY_MISMATCH")
+        return
+
     if command_type == "photovoltaic_modbus_probe":
         execute_photovoltaic_modbus_probe(
             identity=identity,
