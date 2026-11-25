@@ -93,5 +93,104 @@ class TestMideaR290ReadOnly(unittest.TestCase):
                              lock_factory=lambda _: nullcontext(), check_path=False)
         self.assertEqual(FakeClient.writes, 0)
 
+
+class FakeException:
+    def __init__(self, fc, code):
+        self.function_code = fc | 128
+        self.exception_code = code
+    def isError(self): return True
+
+
+class TestF144DualRead(unittest.TestCase):
+    def run_case(self, reply):
+        from unittest.mock import patch
+        created = []
+        class Client(FakeClient):
+            def _read(self, mode, *, address, count, device_id):
+                self.reads.append((mode, address, count, device_id))
+                return reply(mode, address, count)
+        def factory(**kw):
+            client = Client(**kw)
+            created.append(client)
+            return client
+        with patch.object(midea.time, "sleep"):
+            result = midea.probe_diagnostic_once(
+                serial_number=midea.SERIAL, port_path=midea.FTDI_PORT,
+                unit_id=16, function_code=4, client_factory=factory,
+                lock_factory=lambda _: nullcontext(), check_path=False)
+        client = created[0]
+        self.assertTrue(client.closed)
+        self.assertTrue(all(x[0] in (3,4) and x[3] == 16 for x in client.reads))
+        self.assertLessEqual(len(client.reads), 9)
+        self.assertFalse(result["writes_performed"])
+        self.assertFalse(result["profile_verified"])
+        self.assertEqual(FakeClient.writes, 0)
+        return result, client.reads
+
+    def test_fc03_works_when_fc04_rejected(self):
+        def reply(fc, a, n):
+            if fc == 4:
+                return FakeException(fc, 1)
+            if a == 104:
+                return FakeResponse([37,45])
+            if a == 138:
+                return FakeResponse(list(range(n)))
+            return FakeResponse([0] * n)
+        result, reads = self.run_case(reply)
+        self.assertEqual(reads[:2], [(4,104,2,16),(3,104,2,16)])
+        self.assertEqual(result["modbus_function_code"], 3)
+        self.assertEqual(result["measurements"]["water_return_c"],37)
+        self.assertEqual(result["measurements"]["water_flow_c"],45)
+        self.assertIn("148", result["raw_registers"])
+        self.assertEqual(result["raw_by_fc"]["4"], {})
+        self.assertEqual(result["blocks"][0]["exception_code"],1)
+
+    def test_both_spaces_retained_never_mixed(self):
+        def reply(fc, a, n):
+            if a == 104:
+                return FakeResponse([31,40] if fc == 4 else [32,41])
+            if a == 138:
+                return None
+            return FakeResponse([0] * n)
+        result, _ = self.run_case(reply)
+        self.assertTrue(result["probe_success"])
+        self.assertEqual(result["modbus_function_code"],4)
+        self.assertEqual(result["raw_by_fc"]["3"]["104"],32)
+        self.assertEqual(result["raw_by_fc"]["4"]["104"],31)
+        self.assertEqual(result["measurements"]["water_return_c"],31)
+        self.assertIsNone(result["measurements"]["electric_power_kw_candidate"])
+
+    def test_failed_pair_preserves_independent_response(self):
+        def reply(fc, a, n):
+            if fc == 4 and a == 104:
+                return FakeException(4,2)
+            if fc == 3 and a == 100:
+                return FakeResponse([43,3])
+            return None
+        result, _ = self.run_case(reply)
+        self.assertFalse(result["probe_success"])
+        self.assertTrue(result["physical_modbus_read"])
+        self.assertTrue(result["rtu_exception_received"])
+        self.assertEqual(result["raw_by_fc"]["3"],{"100":43,"101":3})
+        self.assertEqual(result["measurements"],{})
+        self.assertEqual(result["raw_registers"],{})
+
+    def test_no_responses_is_not_a_physical_read(self):
+        result, _ = self.run_case(lambda *_: None)
+        self.assertFalse(result["probe_success"])
+        self.assertFalse(result["physical_modbus_read"])
+        self.assertFalse(result["rtu_exception_received"])
+        self.assertTrue(all(b["status"] == "no_response" for b in result["blocks"]))
+
+    def test_wrong_unit_or_primary_fc_stops_before_opening(self):
+        for unit, fc in ((1,4),(16,3),(2,4),(16,6)):
+            with self.assertRaises(midea.MideaProbeError):
+                midea.probe_diagnostic_once(
+                    serial_number=midea.SERIAL, port_path=midea.FTDI_PORT,
+                    unit_id=unit, function_code=fc,
+                    client_factory=lambda **kw: self.fail("port opened"),
+                    check_path=False)
+
+
 if __name__ == "__main__":
     unittest.main()
