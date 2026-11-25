@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from communication.midea_00019_readonly import (
-    FTDI_PORT, MideaProbeError, SERIAL, probe_once,
+    FTDI_PORT, MideaProbeError, SERIAL, probe_diagnostic_once,
 )
 
 DEVICE_UUID = "648d4229-7c17-400f-bbed-ffe5ab04b844"
@@ -46,7 +46,7 @@ def validate_command(identity: dict[str, Any], payload: dict[str, Any]) -> None:
 def execute_readonly_command(
     *, identity: dict[str, Any], command_id: str,
     command_payload: dict[str, Any], submit_result: Callable[..., Any],
-    probe: Callable[..., dict[str, Any]] = probe_once,
+    probe: Callable[..., dict[str, Any]] = probe_diagnostic_once,
 ) -> None:
     try:
         validate_command(identity, command_payload)
@@ -60,18 +60,29 @@ def execute_readonly_command(
             raise MideaProbeError("MIDEA_DRIVER_WRITE_GUARD")
         if result.get("serial_number") != SERIAL:
             raise MideaProbeError("MIDEA_RESULT_TARGET_DRIFT")
+        # F144 R2: never replace failure or partial reads with success.
+        success = result.get("probe_success")
+        physical = result.get("physical_modbus_read")
+        if type(success) is not bool or type(physical) is not bool:
+            raise MideaProbeError("MIDEA_DRIVER_MISSING_READ_EVIDENCE")
+        if success and not physical:
+            raise MideaProbeError("MIDEA_DRIVER_INVALID_READ_EVIDENCE")
         result = dict(result)
+        reason = None if success else "NO_WATER_TEMPERATURE_RESPONSE_NO_PROFILE_VERIFICATION"
         result.update({
             "executor": "midea_00019_cloud_probe",
-            "probe_success": True, "physical_modbus_read": True,
+            "probe_success": success, "physical_modbus_read": physical,
             "profile_verified": False,
             "read_only": True, "writes_performed": False,
             "control_enabled": False,
-            "phase": "candidate_registers_read_only_no_actuation",
+            "phase": ("candidate_registers_read_only_no_actuation" if success
+                      else "read_only_probe_failed_with_block_evidence"),
+            "reason": reason,
         })
         submit_result(
-            identity=identity, command_id=command_id, status="succeeded",
-            result=result, error_message=None,
+            identity=identity, command_id=command_id,
+            status="succeeded" if success else "failed",
+            result=result, error_message=reason,
         )
     except Exception as exc:
         code = str(exc) if isinstance(exc, MideaProbeError) else type(exc).__name__
