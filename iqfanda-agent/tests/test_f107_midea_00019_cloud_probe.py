@@ -117,5 +117,31 @@ class TestMideaCloudBridge(unittest.TestCase):
         self.assertNotIn("secret-should-not-be-reported", str(result))
 
 
+    def test_exact_bms1_scope_calls_only_unit_1(self):
+        result=self.send(command_payload=dict(probe.EXPECTED_BMS1))
+        self.assertEqual(result["status"],"succeeded")
+        self.assertEqual(self.calls,[{"serial_number":probe.SERIAL,
+            "port_path":probe.FTDI_PORT,"unit_id":1,"function_code":4}])
+
+    def test_bms1_scope_requires_exact_identity_parameters(self):
+        for key,value in (("unit_id",16),("unit_id",2),("unit_id",True),
+                          ("function_code",6),("function_code",3),("read_only",False),
+                          ("port_path","/dev/ttyUSB0"),("scope",probe.EXPECTED["scope"])):
+            data=dict(probe.EXPECTED_BMS1);data[key]=value
+            self.assertEqual(self.send(command_payload=data)["status"],"failed")
+        self.assertEqual(self.calls,[])
+
+    def test_bms1_default_dispatch_uses_correct_driver(self):
+        from unittest.mock import patch
+        with patch.object(probe,"probe_bms1_diagnostic_once",side_effect=self.fake_probe) as bms, \
+             patch.object(probe,"probe_diagnostic_once") as legacy:
+            probe.execute_readonly_command(identity=self.identity,command_id="test-bms",
+                command_payload=dict(probe.EXPECTED_BMS1),
+                submit_result=lambda **x:self.events.append(x))
+            bms.assert_called_once()
+            legacy.assert_not_called()
+        self.assertEqual(self.events[-1]["status"],"succeeded")
+
+
 if __name__ == "__main__":
     unittest.main()
