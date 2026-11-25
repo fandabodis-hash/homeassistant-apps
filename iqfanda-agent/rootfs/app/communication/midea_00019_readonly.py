@@ -160,3 +160,129 @@ def probe_once(
             "mode_setting": holding_mode,
         },
     }
+
+
+def probe_diagnostic_once(
+    *,
+    serial_number: str,
+    port_path: str,
+    unit_id: int,
+    function_code: int,
+    client_factory: Callable[..., Any] | None = None,
+    lock_factory: Callable[[str], Any] | None = None,
+    check_path: bool = True,
+) -> dict[str, Any]:
+    """F144 R2 draft: explicit 00019 read-only FC04/FC03 comparison.
+
+    The cloud request stays the same exact FC04/unit-16 whitelist. The local
+    diagnostic compares only two known read functions on the same device.
+    All block outcomes and every returned word are kept even on failure.
+    Never scan other units, write a register, or start a polling loop.
+    """
+    validate_target(serial_number=serial_number, port_path=port_path,
+                    unit_id=unit_id, function_code=function_code)
+    if unit_id != 16 or function_code != 4:
+        raise MideaProbeError("F144_EXACT_UNIT_16_PRIMARY_FC04_REQUIRED")
+    if check_path and not Path(port_path).exists():
+        raise MideaProbeError("FTDI_SERIAL_DEVICE_NOT_PRESENT")
+    if client_factory is None:
+        from pymodbus.client import ModbusSerialClient
+        client_factory = ModbusSerialClient
+    if lock_factory is None:
+        from communication.modbus_bus_lock import ziskej_zamek_modbus_sbernice
+        lock_factory = ziskej_zamek_modbus_sbernice
+    raw = {3: {}, 4: {}}
+    blocks = []
+    selected = None
+    client = client_factory(port=port_path, baudrate=BAUDRATE, bytesize=8,
+                            parity=PARITY, stopbits=STOP_BITS, timeout=1.2, retries=0)
+
+    def read(fc, address, count):
+        block = {"address": address, "count": count, "function_code": fc,
+                 "unit_id": 16, "status": "unknown"}
+        try:
+            method = (client.read_holding_registers if fc == 3
+                      else client.read_input_registers)
+            response = method(address=address, count=count, device_id=16)
+            if response is None:
+                block["status"] = "no_response"
+            elif response.isError():
+                # An actual Modbus exception is distinct from a client-side
+                # timeout/transport error. Do not expose exception strings.
+                exception = getattr(response, "exception_code", None)
+                response_fc = getattr(response, "function_code", None)
+                if (isinstance(exception, int) and not isinstance(exception, bool)
+                        and 1 <= exception <= 255 and response_fc == (fc | 0x80)):
+                    block.update(status="modbus_exception", exception_code=int(exception))
+                else:
+                    block.update(status="transport_or_protocol_error",
+                                 error_type=type(response).__name__)
+            else:
+                values = getattr(response, "registers", None)
+                if not isinstance(values, list) or len(values) != count:
+                    block["status"] = "invalid_register_count"
+                else:
+                    checked = [u16(v) for v in values]
+                    raw[fc].update({address + i: v for i, v in enumerate(checked)})
+                    block["status"] = "ok"
+        except Exception as exc:
+            block.update(status="read_error", error_type=type(exc).__name__)
+        blocks.append(block)
+        time.sleep(0.12)
+        return block["status"] == "ok"
+
+    with lock_factory(port_path):
+        try:
+            if client.connect() is not True:
+                raise MideaProbeError("PORT_NOT_OPEN")
+            # Direct pair avoids a rejected larger block. Compare both FCs,
+            # and never combine words from two different register spaces.
+            fc04_ok = read(4, 104, 2)
+            fc03_ok = read(3, 104, 2)
+            selected = 4 if fc04_ok else 3 if fc03_ok else None
+            if selected is not None:
+                for address, count in ((100, 4), (106, 5), (124, 1),
+                                       (129, 1), (138, 14), (199, 1)):
+                    read(selected, address, count)
+            else:
+                # Independent small blocks: preserve a partial response or
+                # a device exception, but do not call a failed profile a success.
+                read(4, 100, 2)
+                read(3, 100, 2)
+            read(3, 0, 2)
+        finally:
+            client.close()
+
+    values = {} if selected is None else {
+        k: v for k, v in raw[selected].items() if k >= 100
+    }
+    holding = raw[3]
+    measurements = {}
+    if selected is not None:
+        measurements = decode(values)
+        measurements["zone1_enabled"] = (
+            bool(holding[0] & 0x0002) if 0 in holding else None)
+        measurements["mode_setting"] = holding.get(1)
+    return {
+        "serial_number": SERIAL,
+        "model": MODEL,
+        "port_identity_verified": True,
+        "modbus_unit_id": 16,
+        "requested_function_code": 4,
+        "modbus_function_code": selected,
+        "read_only": True,
+        "writes_performed": False,
+        "no_auto_control": True,
+        "probe_success": selected is not None,
+        "physical_modbus_read": bool(raw[3] or raw[4]),
+        "rtu_exception_received": any(b["status"] == "modbus_exception" for b in blocks),
+        "reason": None if selected is not None else "NO_WATER_TEMPERATURE_RESPONSE_NO_PROFILE_VERIFICATION",
+        "blocks": blocks,
+        "read_register_count": len(values),
+        "raw_registers": {str(k): v for k, v in sorted(values.items())},
+        "raw_by_fc": {str(fc): {str(k): v for k, v in sorted(words.items())}
+                      for fc, words in sorted(raw.items())},
+        "holding_status_available": 0 in holding and 1 in holding,
+        "measurements": measurements,
+        "profile_verified": False,
+    }
