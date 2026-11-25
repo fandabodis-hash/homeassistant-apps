@@ -93,7 +93,7 @@ class TestAgent0177OnlyAddsMidea(unittest.TestCase):
 
     def test_177_can_only_be_manually_installed_not_automatically(self):
         config = local(CONFIG)
-        guard = b'breaking_versions:\n  - "0.1.177"\n  - "0.1.178"\n'
+        guard = b'breaking_versions:\n  - "0.1.177"\n  - "0.1.178"\n  - "0.1.179"\n'
         self.assertEqual(config.count(guard), 1, "F137_AUTO_UPDATE_NOT_BLOCKED")
         self.assertIn(b'boot: auto\n', config, "F137_EXISTING_BOOT_CHANGED")
         self.assertNotIn(b'boot: manual\n', config)
@@ -102,11 +102,11 @@ class TestAgent0177OnlyAddsMidea(unittest.TestCase):
         self.assertEqual(
             local(CONFIG).replace(
                 b'# F137: manual-only for the fleet; auto-update MUST NOT cross 0.1.177.\n'
-                b'breaking_versions:\n  - "0.1.177"\n  - "0.1.178"\n', b""
-            ).replace(b"0.1.178", b"0.1.176"), baseline(CONFIG),
+                b'breaking_versions:\n  - "0.1.177"\n  - "0.1.178"\n  - "0.1.179"\n', b""
+            ).replace(b"0.1.179", b"0.1.176"), baseline(CONFIG),
             "F133_UNRELATED_ADDON_CONFIG_CHANGED"
         )
-        self.assertEqual(local(VERSION).strip(), b"0.1.178")
+        self.assertEqual(local(VERSION).strip(), b"0.1.179")
         self.assertEqual(baseline(VERSION).strip(), b"0.1.176")
 
     def test_only_exact_midea_identity_enters_new_command_handler(self):
