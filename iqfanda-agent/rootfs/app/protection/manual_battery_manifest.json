@@ -1,12 +1,12 @@
 {
-  "agent_version": "0.1.178",
+  "agent_version": "0.1.179",
   "build_inputs": {
     "Dockerfile": "3807f87277deedde6d16cdd90814eb27f23eec4b25e06341a6a2a8e91e8ddc82",
-    "config.yaml": "99aeb2d83f5b02ff493da885e8ad0746617f2e1ab7055f502b3e816fdaafe54c"
+    "config.yaml": "e2f4e8e1feb412f717ff65ec8431c07e2c9f32e18d6fdfce07eda2dceff89da9"
   },
   "feature": "local_manual_battery",
   "files": {
-    "VERSION": "6ef7a85b483fdd02ce398e2ad564cb050628ab3babe86f1e1b53d9be40641d2e",
+    "VERSION": "019516f2543ea096de2ea5bece38a308b259360e9df6b0271a305931edd495bd",
     "battery_control_canary.py": "27d4538b8388bd8ca065c26f1cab4fc9e26d026e603a338c3f79a4b667f07a9d",
     "command_worker.py": "2d1f3aece4c000d6f2906704c05787e47f290cd01409664e06f1c8f830a8eb8d",
     "communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
@@ -39,6 +39,6 @@
   "rootfs_files": {
     "etc/services.d/iqfanda/run": "14f3f2fbe262d2884bf40082a75876b25c300085995d69c4d3e67e4c670fe735"
   },
-  "runtime_fingerprint": "1737ed7421aa2ccf02e345fa657cf10982345017fc99da5ddb910bfd031a48f5",
+  "runtime_fingerprint": "5353d11a888386b5fa42f3589020d7df4a38db117ebbfabeab9724a285e06067",
   "schema_version": 1
 }
