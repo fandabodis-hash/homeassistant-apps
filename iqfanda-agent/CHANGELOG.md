@@ -1,5 +1,11 @@
 # TNG IQ FANDA Agent – poznámky k vydání
 
+## 0.1.178 – F144 R2, pouze Midea 00019
+
+- Cílená jednorázová FC04/FC03 diagnostika slave 16, přímé čtení 104–105, nejvýše devět čtecích požadavků; oddělené raw registry podle FC a evidence chyb.
+- Žádné zápisy do Midea, žádné Zigbee, automatické sondování nebo změny regulace. Zdroj ostatních modelů je shodný s 0.1.177.
+- Fyzická odezva Midea zatím nepotvrzena. Ruční aktualizace pouze 00019; zachovat 0.1.177 i 0.1.178 jako breaking_versions. Nevydávat bez úspěšného CI a cloudové kompatibility.
+
 ## 0.1.177 – Midea 00019, pouze ruční aktualizace
 
 **Základ:** fyzicky ověřený Agent 0.1.176 (F99, commit `6a722bac445cb571e26048a88df75a01f34f8c16`).
