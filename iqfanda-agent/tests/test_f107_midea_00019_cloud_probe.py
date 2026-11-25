@@ -21,6 +21,7 @@ class TestMideaCloudBridge(unittest.TestCase):
         return {
             "serial_number": probe.SERIAL,
             "read_only": True, "writes_performed": False,
+            "probe_success": True, "physical_modbus_read": True,
             "measurements": {"water_flow_c": 40, "water_return_c": 35},
             "blocks": [{"address": 100, "count": 11, "status": "ok"}],
         }
@@ -79,6 +80,33 @@ class TestMideaCloudBridge(unittest.TestCase):
         result = self.send(driver=unsafe_driver)
         self.assertEqual(result["status"], "failed")
         self.assertEqual(result["result"]["reason"], "MIDEA_DRIVER_WRITE_GUARD")
+
+    def test_failed_water_pair_keeps_partial_read_evidence(self):
+        def partial_probe(**kwargs):
+            return {
+                "serial_number": probe.SERIAL, "read_only": True,
+                "writes_performed": False, "probe_success": False,
+                "physical_modbus_read": True,
+                "raw_by_fc": {"3": {"0": 2}, "4": {}},
+                "blocks": [{"function_code": 4, "address": 104,
+                            "status": "modbus_exception", "exception_code": 1}],
+            }
+        event = self.send(driver=partial_probe)
+        self.assertEqual(event["status"], "failed")
+        self.assertTrue(event["result"]["physical_modbus_read"])
+        self.assertFalse(event["result"]["probe_success"])
+        self.assertFalse(event["result"]["control_enabled"])
+        self.assertEqual(event["result"]["raw_by_fc"], {"3": {"0": 2}, "4": {}})
+        self.assertEqual(event["result"]["blocks"][0]["exception_code"], 1)
+
+    def test_missing_read_evidence_does_not_claim_success(self):
+        def missing_probe(**kwargs):
+            return {"serial_number": probe.SERIAL, "read_only": True,
+                    "writes_performed": False}
+        event = self.send(driver=missing_probe)
+        self.assertEqual(event["status"], "failed")
+        self.assertEqual(event["result"]["reason"], "MIDEA_DRIVER_MISSING_READ_EVIDENCE")
+
 
     def test_driver_exception_is_redacted(self):
         def unsafe_exception(**kwargs):
