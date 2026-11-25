@@ -6,6 +6,8 @@ on:
   pull_request:
     paths:
       - "iqfanda-agent/rootfs/app/communication/midea_00019_readonly.py"
+      - "iqfanda-agent/rootfs/app/communication/midea_00019_live.py"
+      - "iqfanda-agent/tests/test_f152_midea_00019_live.py"
       - "iqfanda-agent/tests/test_f106_midea_00019_readonly.py"
       - "iqfanda-agent/rootfs/app/communication/midea_00019_cloud_probe.py"
       - "iqfanda-agent/rootfs/app/command_worker.py"
@@ -29,4 +31,5 @@ jobs:
           python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f107_midea_00019_cloud_probe.py' -v
           python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f132_midea_00019_ftdi_inventory.py' -v
           python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f133_agent_0177_additive_contract.py' -v
+          python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f152_midea_00019_live.py' -v
           python3 -m py_compile iqfanda-agent/rootfs/app/command_worker.py iqfanda-agent/rootfs/app/heartbeat.py iqfanda-agent/rootfs/app/communication/midea_00019_ftdi_inventory.py
