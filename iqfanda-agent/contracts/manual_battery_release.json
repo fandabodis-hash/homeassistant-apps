@@ -1,5 +1,5 @@
 {
-  "agent_version": "0.1.178",
+  "agent_version": "0.1.179",
   "change_history": [
     {
       "agent_version": "0.1.168",
@@ -112,6 +112,13 @@
       "revision": 16,
       "runtime_fingerprint": "1737ed7421aa2ccf02e345fa657cf10982345017fc99da5ddb910bfd031a48f5",
       "source_fingerprint": "8f5ae394a72d1bf4f923400897952c9d27ad6be93af6cb9361e2349a48dc8e69"
+    },
+    {
+      "agent_version": "0.1.179",
+      "reason": "F148 manual-only Midea 00019 exact BMS default address 1 read-only diagnostic; existing 16 command, shared worker and battery/other control implementation preserved; no new physical evidence.",
+      "revision": 17,
+      "runtime_fingerprint": "5353d11a888386b5fa42f3589020d7df4a38db117ebbfabeab9724a285e06067",
+      "source_fingerprint": "6764cae96443b7aca52fb07c02143783ae31107a11f8dac3b51cae32fcc0b2e5"
     }
   ],
   "feature": "local_manual_battery",
@@ -121,9 +128,9 @@
     ".github/workflows/manual-battery-release-guard.yml": "385b1d05f7da7a049e57ea4397f2260acf77f86a107aa6c3818e1d4ea3eabe3b",
     "iqfanda-agent/Dockerfile": "3807f87277deedde6d16cdd90814eb27f23eec4b25e06341a6a2a8e91e8ddc82",
     "iqfanda-agent/MANUAL_BATTERY_RELEASE.md": "0af74076c43d28bd5cb94e9f312f95fed2aebe6f7ce794de4ee5e80c34fdc65d",
-    "iqfanda-agent/config.yaml": "99aeb2d83f5b02ff493da885e8ad0746617f2e1ab7055f502b3e816fdaafe54c",
+    "iqfanda-agent/config.yaml": "e2f4e8e1feb412f717ff65ec8431c07e2c9f32e18d6fdfce07eda2dceff89da9",
     "iqfanda-agent/docs/F58_FOXESS_ONLY_0_1_175_RELEASE.md": "0cebdcbb0432fbea4a5962b5848a86ed2530c8a41201bb66c57f239c84959c06",
-    "iqfanda-agent/rootfs/app/VERSION": "6ef7a85b483fdd02ce398e2ad564cb050628ab3babe86f1e1b53d9be40641d2e",
+    "iqfanda-agent/rootfs/app/VERSION": "019516f2543ea096de2ea5bece38a308b259360e9df6b0271a305931edd495bd",
     "iqfanda-agent/rootfs/app/battery_control_canary.py": "27d4538b8388bd8ca065c26f1cab4fc9e26d026e603a338c3f79a4b667f07a9d",
     "iqfanda-agent/rootfs/app/command_worker.py": "2d1f3aece4c000d6f2906704c05787e47f290cd01409664e06f1c8f830a8eb8d",
     "iqfanda-agent/rootfs/app/communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
@@ -240,7 +247,7 @@
       "unavailable_reason": null
     }
   },
-  "runtime_fingerprint": "1737ed7421aa2ccf02e345fa657cf10982345017fc99da5ddb910bfd031a48f5",
+  "runtime_fingerprint": "5353d11a888386b5fa42f3589020d7df4a38db117ebbfabeab9724a285e06067",
   "schema_version": 1,
-  "source_fingerprint": "8f5ae394a72d1bf4f923400897952c9d27ad6be93af6cb9361e2349a48dc8e69"
+  "source_fingerprint": "6764cae96443b7aca52fb07c02143783ae31107a11f8dac3b51cae32fcc0b2e5"
 }
