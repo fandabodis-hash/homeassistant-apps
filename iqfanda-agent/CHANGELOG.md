@@ -1,5 +1,11 @@
 # TNG IQ FANDA Agent – poznámky k vydání
 
+## 0.1.180 – F152, živé hodnoty Midea pouze 00019
+
+- Samostatný lokální reader pro přesný UUID/site/FTDI, FC03 Slave 1, pouze šest bloků z fyzicky úspěšného F151; interval 30 sekund, nezávislý na cloudu a bez zápisu.
+- Sdílený neblokující Modbus lock; výpadek hodnoty nevymýšlí, chybějící blok není nula. Heartbeat předává jen kopii snapshotu. Význam registrů zůstává kandidátní.
+- Ruční aktualizace výhradně 00019, před zveřejněním vyžaduje cloudový F152 PASS. Ostatní regulace a zařízení beze změn.
+
 ## 0.1.179 – F148, pouze Midea 00019, výchozí BMS adresa 1
 
 - Zachovává přesný dřívější příkaz Slave 16 a přidává samostatný explicitní příkaz Slave 1. Příkazy FC03/FC04 pouze čtení, bez skenování adres, bez změny parametrů Midea.
