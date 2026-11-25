@@ -1,10 +1,11 @@
 name: "TNG IQ FANDA Agent"
-version: "0.1.179"
+version: "0.1.180"
 # F137: manual-only for the fleet; auto-update MUST NOT cross 0.1.177.
 breaking_versions:
   - "0.1.177"
   - "0.1.178"
   - "0.1.179"
+  - "0.1.180"
 stage: "experimental"
 slug: "tng_iq_fanda_agent"
 description: "Lokální runtime a cloudová komunikace TNG IQ FANDA"
@@ -68,7 +69,7 @@ options:
   device_model: "IQ FANDA PI5"
   hardware_revision: "Raspberry Pi 5"
   device_hostname: "iqfanda"
-  software_version: "0.1.179"
+  software_version: "0.1.180"
   log_level: "INFO"
 
 schema:
