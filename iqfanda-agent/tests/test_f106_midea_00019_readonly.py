@@ -192,5 +192,58 @@ class TestF144DualRead(unittest.TestCase):
                     check_path=False)
 
 
+class TestF148Bms1Read(unittest.TestCase):
+    def run_case(self, response):
+        from unittest.mock import patch
+        created = []
+        class Client(FakeClient):
+            def _read(self, mode, *, address, count, device_id):
+                self.reads.append((mode,address,count,device_id))
+                return response(mode,address,count)
+        def factory(**kwargs):
+            client = Client(**kwargs)
+            created.append(client)
+            return client
+        with patch.object(midea.time,"sleep"):
+            result = midea.probe_bms1_diagnostic_once(
+                serial_number=midea.SERIAL, port_path=midea.FTDI_PORT,
+                unit_id=1, function_code=4, client_factory=factory,
+                lock_factory=lambda _: nullcontext(),check_path=False)
+        self.assertEqual(len(created),1)
+        self.assertTrue(created[0].closed)
+        self.assertTrue(all(r[3]==1 and r[0] in (3,4) for r in created[0].reads))
+        self.assertLessEqual(len(created[0].reads),9)
+        self.assertEqual(result["modbus_unit_id"],1)
+        self.assertTrue(all(b["unit_id"]==1 for b in result["blocks"]))
+        self.assertFalse(result["writes_performed"])
+        self.assertFalse(result["profile_verified"])
+        return result,created[0].reads
+
+    def test_documented_default_bms1_fc03_success(self):
+        def reply(fc,address,count):
+            if fc==4:return FakeException(4,1)
+            if address==104:return FakeResponse([35,40])
+            return FakeResponse([0]*count)
+        result,reads=self.run_case(reply)
+        self.assertEqual(reads[:2],[(4,104,2,1),(3,104,2,1)])
+        self.assertTrue(result["probe_success"])
+        self.assertEqual(result["measurements"]["water_return_c"],35)
+        self.assertEqual(result["measurements"]["water_flow_c"],40)
+
+    def test_no_response_on_bms1_does_not_scan_or_retry_other_unit(self):
+        result,reads=self.run_case(lambda *_:None)
+        self.assertEqual(len(reads),5)
+        self.assertFalse(result["physical_modbus_read"])
+        self.assertFalse(result["probe_success"])
+
+    def test_rejects_other_units_and_write_functions(self):
+        for unit,fc in ((16,4),(2,4),(0,4),(1,6),(True,4),(1,3)):
+            with self.assertRaises(midea.MideaProbeError):
+                midea.probe_bms1_diagnostic_once(
+                    serial_number=midea.SERIAL,port_path=midea.FTDI_PORT,
+                    unit_id=unit,function_code=fc,check_path=False,
+                    client_factory=lambda **kw:self.fail("unexpected port access"))
+
+
 if __name__ == "__main__":
     unittest.main()
