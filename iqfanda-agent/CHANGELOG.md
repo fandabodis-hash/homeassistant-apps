@@ -1,5 +1,11 @@
 # TNG IQ FANDA Agent – poznámky k vydání
 
+## 0.1.179 – F148, pouze Midea 00019, výchozí BMS adresa 1
+
+- Zachovává přesný dřívější příkaz Slave 16 a přidává samostatný explicitní příkaz Slave 1. Příkazy FC03/FC04 pouze čtení, bez skenování adres, bez změny parametrů Midea.
+- Ostatní regulace a sdílený worker/heartbeat beze změn. Ruční aktualizace pouze 00019; před publikací vyžaduje cloudovou kompatibilitu a úspěšné CI.
+- Skutečný BMS parametr na místě zatím neověřen; 0.1.178 na adrese 16 nezískal žádnou platnou odpověď. Knihovna registrů stále kandidátní.
+
 ## 0.1.178 – F144 R2, pouze Midea 00019
 
 - Cílená jednorázová FC04/FC03 diagnostika slave 16, přímé čtení 104–105, nejvýše devět čtecích požadavků; oddělené raw registry podle FC a evidence chyb.
