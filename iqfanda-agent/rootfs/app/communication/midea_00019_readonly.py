@@ -162,7 +162,7 @@ def probe_once(
     }
 
 
-def probe_diagnostic_once(
+def _probe_diagnostic_unit_once(
     *,
     serial_number: str,
     port_path: str,
@@ -174,15 +174,15 @@ def probe_diagnostic_once(
 ) -> dict[str, Any]:
     """F144 R2 draft: explicit 00019 read-only FC04/FC03 comparison.
 
-    The cloud request stays the same exact FC04/unit-16 whitelist. The local
+    The bridge explicitly selects the approved address 1 or 16. The local
     diagnostic compares only two known read functions on the same device.
     All block outcomes and every returned word are kept even on failure.
     Never scan other units, write a register, or start a polling loop.
     """
     validate_target(serial_number=serial_number, port_path=port_path,
                     unit_id=unit_id, function_code=function_code)
-    if unit_id != 16 or function_code != 4:
-        raise MideaProbeError("F144_EXACT_UNIT_16_PRIMARY_FC04_REQUIRED")
+    if unit_id not in (1, 16) or function_code != 4:
+        raise MideaProbeError("F148_EXACT_UNIT_1_OR_16_PRIMARY_FC04_REQUIRED")
     if check_path and not Path(port_path).exists():
         raise MideaProbeError("FTDI_SERIAL_DEVICE_NOT_PRESENT")
     if client_factory is None:
@@ -199,11 +199,11 @@ def probe_diagnostic_once(
 
     def read(fc, address, count):
         block = {"address": address, "count": count, "function_code": fc,
-                 "unit_id": 16, "status": "unknown"}
+                 "unit_id": unit_id, "status": "unknown"}
         try:
             method = (client.read_holding_registers if fc == 3
                       else client.read_input_registers)
-            response = method(address=address, count=count, device_id=16)
+            response = method(address=address, count=count, device_id=unit_id)
             if response is None:
                 block["status"] = "no_response"
             elif response.isError():
@@ -267,7 +267,7 @@ def probe_diagnostic_once(
         "serial_number": SERIAL,
         "model": MODEL,
         "port_identity_verified": True,
-        "modbus_unit_id": 16,
+        "modbus_unit_id": unit_id,
         "requested_function_code": 4,
         "modbus_function_code": selected,
         "read_only": True,
@@ -286,3 +286,40 @@ def probe_diagnostic_once(
         "measurements": measurements,
         "profile_verified": False,
     }
+
+
+def probe_diagnostic_once(
+    *, serial_number: str, port_path: str, unit_id: int, function_code: int,
+    client_factory: Callable[..., Any] | None = None,
+    lock_factory: Callable[[str], Any] | None = None,
+    check_path: bool = True,
+) -> dict[str, Any]:
+    """Retain the exact existing F144 address-16 contract."""
+    validate_target(serial_number=serial_number, port_path=port_path,
+                    unit_id=unit_id, function_code=function_code)
+    if unit_id != 16 or function_code != 4:
+        raise MideaProbeError("F144_EXACT_UNIT_16_PRIMARY_FC04_REQUIRED")
+    return _probe_diagnostic_unit_once(
+        serial_number=serial_number, port_path=port_path, unit_id=unit_id,
+        function_code=function_code, client_factory=client_factory,
+        lock_factory=lock_factory, check_path=check_path)
+
+
+def probe_bms1_diagnostic_once(
+    *, serial_number: str, port_path: str, unit_id: int, function_code: int,
+    client_factory: Callable[..., Any] | None = None,
+    lock_factory: Callable[[str], Any] | None = None,
+    check_path: bool = True,
+) -> dict[str, Any]:
+    """F148: explicitly authorized one-shot test of the documented BMS default.
+
+    No address sweep or fallback, no writes, no change to the heat pump.
+    """
+    validate_target(serial_number=serial_number, port_path=port_path,
+                    unit_id=unit_id, function_code=function_code)
+    if unit_id != 1 or function_code != 4:
+        raise MideaProbeError("F148_EXACT_UNIT_1_PRIMARY_FC04_REQUIRED")
+    return _probe_diagnostic_unit_once(
+        serial_number=serial_number, port_path=port_path, unit_id=unit_id,
+        function_code=function_code, client_factory=client_factory,
+        lock_factory=lock_factory, check_path=check_path)
