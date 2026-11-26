@@ -1,12 +1,12 @@
 {
-  "agent_version": "0.1.182",
+  "agent_version": "0.1.183",
   "build_inputs": {
     "Dockerfile": "663f98d078e3873a5ba253a9b1703dc3158f5b5840b974bb41b6a2737d91f1ef",
-    "config.yaml": "ea4a31ce809948d697b37f0157ade051e3e8c1d6b6bb0655c0c22346993c9d30"
+    "config.yaml": "a8bdbdcd68f04b837808be5d1733efc69ac81edf8819128a44deb85447b896ed"
   },
   "feature": "local_manual_battery",
   "files": {
-    "VERSION": "d350ec54ee92ed63d0a7d0beaf4fdeec09b70dbeab53c35f5ebc2a77b470c873",
+    "VERSION": "bfea5cf6f3ead8cdf50848e4eed72ded56d58c9fb12d7e8b13afe7056defadb7",
     "battery_control_canary.py": "27d4538b8388bd8ca065c26f1cab4fc9e26d026e603a338c3f79a4b667f07a9d",
     "command_worker.py": "d7fc76b3c40212ca438c318e27b0c1ff1dc93d4e39b12a7a3b5330925243b2c5",
     "communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
@@ -30,11 +30,11 @@
     "communication/modbus_bus_lock.py": "a5b1e7366e816545e0e3eefbfb1c99c609f85271144d21727b54acbfff4da00c",
     "communication/solax_ems_controller.py": "af3afcb244585aaf56c322f38cf2f644119f331832b8e24d4af2e8d770c97277",
     "device_config.py": "28a39b57044a81b9d920bd5afe1344584e246ceee8f9afaac5b922b84e4995dc",
-    "f114_heating_circuit_local.py": "b0cfcbf7e7510ff51157800ae4f747118e41178aec3d414fb2abfe1fd1b6076e",
+    "f114_heating_circuit_local.py": "e16af3d65e11976d5932bf32d8ccd094523b2606f917eb94c9acc5d2cb0009ad",
     "foxess_00018_owner_recovery.py": "ccdce2c0ba98ee80b8b447a8242797c86aba2064bcff843995866760e4c1cf9c",
     "foxess_zero_remote_release.py": "be53097b8d74433c0d51276b5d53c52fb3af515a4376b7d8c8aa76ee6705abac",
     "heartbeat.py": "55e1e401f35c6ec039235f98b7a83b9563c052318b59ef8c16f75a34a811b677",
-    "heating_circuit_controller.py": "50e7f0d1ada49d5ee222b7488b461e5bd04d2c8e47fdc167c6f5bd08b04b007f",
+    "heating_circuit_controller.py": "598fb366d4881991310bd4f00eef18b267d8a10334cbbee88da2f360dcb31691",
     "manual_battery_runtime.py": "bd55f70ea8c31da76c00b0b43a3a2320e594b6a32ac1e7d89291f40570756558",
     "spot_battery_intent.py": "9614747ec7a5e246c9bff2c18527c741f75c2453251baeaacea813bdc0fdcc02",
     "startup.py": "d2823c065cf6a98b48706e7bea09bf3a2051517b0a8fe855049357f622036be8",
@@ -43,6 +43,6 @@
   "rootfs_files": {
     "etc/services.d/iqfanda/run": "14f3f2fbe262d2884bf40082a75876b25c300085995d69c4d3e67e4c670fe735"
   },
-  "runtime_fingerprint": "0258d145f61957cbf1a46971e73e522e39402931de9cec04d6ed457c2fb53b84",
+  "runtime_fingerprint": "f9c11f33a5802e0b186885ebc93d3c8ae490c3dfdbdcafb73231f68dd9f04f85",
   "schema_version": 1
 }

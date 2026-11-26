@@ -4,6 +4,7 @@ on:
     branches:
       - feature/f106-midea-00019-readonly-modbus
       - feature/f114-00015-heating-0182
+      - feature/f114-00015-heating-er-0183
   pull_request:
     paths:
       - "iqfanda-agent/rootfs/app/communication/midea_00019_readonly.py"
@@ -52,6 +53,19 @@ jobs:
             trap 'git worktree remove --force "$old"' EXIT
             (cd "$old" && python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f133_agent_0177_additive_contract.py' -v)
             PYTHONPATH=iqfanda-agent/rootfs/app python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f114_00015_release_contract.py' -v
+            PYTHONPATH=iqfanda-agent/rootfs/app python3 -m unittest discover -s iqfanda-agent/tests -p 'test_heating_circuit_controller.py' -v
+            PYTHONPATH=iqfanda-agent/rootfs/app python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f114_heating_circuit_local.py' -v
+          elif [ "$version" = "0.1.183" ]; then
+            old=$(mktemp -d)
+            rmdir "$old"
+            git worktree add --detach "$old" a58969a904e9234e56912e9f9a30baa3d354b14a
+            old182=$(mktemp -d)
+            rmdir "$old182"
+            trap 'git worktree remove --force "$old"; if [ -d "$old182" ]; then git worktree remove --force "$old182"; fi' EXIT
+            (cd "$old" && python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f133_agent_0177_additive_contract.py' -v)
+            git worktree add --detach "$old182" 9e503531e545cb3bf3cacbaf732c561e9913fd0e
+            (cd "$old182" && python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f114_00015_release_contract.py' -v)
+            PYTHONPATH=iqfanda-agent/rootfs/app python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f114_00015_er_release_contract.py' -v
             PYTHONPATH=iqfanda-agent/rootfs/app python3 -m unittest discover -s iqfanda-agent/tests -p 'test_heating_circuit_controller.py' -v
             PYTHONPATH=iqfanda-agent/rootfs/app python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f114_heating_circuit_local.py' -v
           else

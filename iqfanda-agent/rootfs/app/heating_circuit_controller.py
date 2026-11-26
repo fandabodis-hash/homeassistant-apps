@@ -112,11 +112,13 @@ def validate_auto_config(cfg, limits):
 def decide(cfg, *, limits, now, room_c=None, outdoor_c=None, room_fresh=False,
            outdoor_fresh=False, pump_on=None, enabled=False, identity_ok=False,
            bindings_verified=False, exclusive_owner=False, safety_allows_on=False,
-           boost_authorized=False):
+           boost_authorized=False, room_fallback_allowed=False):
     """No calls, no file/DB writes. Adapter must distinguish desired from actual.
 
     enabled: explicit activation after verified install. No activation by default.
     pump_on: confirmed local read-back, not previous requested state.
+    room_fallback_allowed: explicit adapter-validated last numeric measurement;
+    does not represent a fresh reading. No fallback is enabled by default.
     safety_allows_on: verified independent equipment protections.
     Any mode with unverified relay/owner -> no command. On invalid AUTO sensor or
     config, request OFF only for a verified owned relay; future adapter must
@@ -150,7 +152,7 @@ def decide(cfg, *, limits, now, room_c=None, outdoor_c=None, room_fresh=False,
         if level=='boost' and boost_authorized is not True:
             return Decision(False,'fve_boost_not_authorized',season_allows_auto=True)
         target=scheduled_target(week,now) if level=='schedule' else values[level]
-        if room_fresh is not True:
+        if room_fresh is not True and room_fallback_allowed is not True:
             return Decision(False,'room_temperature_unavailable',float(target),True)
         actual=decimal_number(room_c)
         if actual<=target-HYSTERESIS_C:

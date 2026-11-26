@@ -34,12 +34,12 @@ ROOM_REG='a5f0288ddb2fb413906ad47b5bf11793'
 KEY='f114_heating_circuit_owner_v1'
 DRAFT='heating_circuit_draft_v1'
 STATUS_KEY='f114_heating_circuit_local_v1'
-VERSION='0.1.182'
+VERSION='0.1.183'
 STATE_PATH=Path('/config/f114-heating-circuit-00015-state.json')
 WEATHER_PATH=Path('/config/f114-heating-circuit-00015-weather.json')
 # These limits are commissioning safeguards, not displayed user settings.
 LIMITS={'room_min_c':5,'room_max_c':35,'outdoor_min_c':5,'outdoor_max_c':30}
-ROOM_MAX_AGE=1800
+ROOM_MAX_AGE=3600  # F114 R29: stale numeric fallback; UI shows ER after 60 min.
 WEATHER_MAX_AGE=7200
 POLL_SECONDS=15
 _LOCK=threading.RLock()
@@ -157,14 +157,53 @@ def parse_stamp(raw):
     require(dt.tzinfo is not None,'measurement_timestamp_no_timezone')
     return dt.astimezone(timezone.utc)
 
-def measured_room(obj,now):
+def validated_room_record(obj, now):
+    """Read an actual HA state for the exact mapped temperature entity.
+
+    Never substitute last_seen, humidity, polling time or heartbeat time for
+    the measurement timestamp. An old valid reading remains a last value.
+    """
     require(isinstance(obj,dict) and obj.get('entity_id')==ROOM,'room_state_identity_invalid')
     attrs=obj.get('attributes');require(isinstance(attrs,dict) and attrs.get('device_class')=='temperature' and attrs.get('unit_of_measurement')=='°C','room_unit_invalid')
-    try:v=float(obj['state']);stamp=parse_stamp(obj.get('last_reported') or obj.get('last_updated'))
-    except (KeyError,TypeError,ValueError,Hold):return None,False,None
-    age=(now-stamp).total_seconds()
-    if not math.isfinite(v) or not -20<=v<=60 or not -10<=age<=ROOM_MAX_AGE:return None,False,round(age)
-    return v,True,max(0,round(age))
+    value=obj.get('state');require(type(value) in (int,float,str),'room_state_not_numeric')
+    value=float(value); require(math.isfinite(value) and -20<=value<=60,'room_value_invalid')
+    stamp=parse_stamp(obj.get('last_reported') or obj.get('last_updated'))
+    require((now-stamp).total_seconds()>=-10,'room_timestamp_in_future')
+    return {'room_last_valid_c':value,'room_last_valid_utc':stamp.isoformat()}
+
+def previous_room_record(prev,now):
+    if not isinstance(prev,dict) or prev.get('identity')!=IDENTITY:return None
+    try:
+        value=number(prev.get('room_last_valid_c'),-20,60)
+        stamp=parse_stamp(prev.get('room_last_valid_utc'))
+        require((now-stamp).total_seconds()>=-10,'cached_room_timestamp_in_future')
+        return {'room_last_valid_c':value,'room_last_valid_utc':stamp.isoformat()}
+    except (TypeError,ValueError,OverflowError,Hold):return None
+
+def room_observation(obj,now,prev):
+    """Keep original timestamp, prefer newest valid reading, explicitly label ER.
+
+    A failed read does not erase the last known value. Cache only persists on
+    exact device identity, and caller must verify exact hardware/mapping first.
+    """
+    last=previous_room_record(prev,now)
+    direct=False
+    try:
+        current=validated_room_record(obj,now)
+        if last is None or parse_stamp(current['room_last_valid_utc'])>parse_stamp(last['room_last_valid_utc']):
+            last=current;direct=True
+        elif current==last:
+            direct=True
+        # Older data or contradictory values for the same timestamp are never
+        # accepted as new observations.
+    except (TypeError,ValueError,OverflowError,Hold):pass
+    if last is None:
+        return {'room_c':None,'room_age_s':None,'room_error':True,'room_display':'ER','room_using_last_value':False}
+    age=max(0,(now-parse_stamp(last['room_last_valid_utc'])).total_seconds())
+    fresh=direct and age<=ROOM_MAX_AGE
+    return {**last,'room_c':last['room_last_valid_c'],'room_age_s':int(age),
+            'room_error':not fresh,'room_display':last['room_last_valid_c'] if fresh else 'ER',
+            'room_using_last_value':not fresh}
 
 def relay_state(obj):
     require(isinstance(obj,dict) and obj.get('entity_id')==PUMP and obj.get('state') in ('on','off'),'relay_state_unknown')
@@ -288,7 +327,7 @@ def get_local_status(identity):
     if not matches(identity):return None
     s=load_json(STATE_PATH)
     if s.get('identity')!=IDENTITY:return None
-    allowed=('identity','version','commission_id','phase','updated_utc','status','reason','owns_relay','physical_control_active','shadow_ready','pump_mode','thermostat_mode','target_c','room_c','outdoor_c','room_age_s','outdoor_age_s','relay_on','desired_on','draft_sha256','readback_verified','service_called','locked')
+    allowed=('identity','version','commission_id','phase','updated_utc','status','reason','owns_relay','physical_control_active','shadow_ready','pump_mode','thermostat_mode','target_c','room_c','room_error','room_display','room_using_last_value','room_last_valid_c','room_last_valid_utc','outdoor_c','room_age_s','outdoor_age_s','relay_on','desired_on','draft_sha256','readback_verified','service_called','locked')
     return {k:s[k] for k in allowed if k in s}
 
 def cycle(identity,cloud,ha,*,now=None,state_path=None,weather=None,wait=time.sleep):
@@ -302,6 +341,11 @@ def cycle(identity,cloud,ha,*,now=None,state_path=None,weather=None,wait=time.sl
     with _LOCK:
         prev=load_json(state_path);old_owned=prev.get('identity')==IDENTITY and prev.get('owns_relay') is True
         s={'identity':dict(IDENTITY),'version':VERSION,'updated_utc':now.isoformat(),'phase':'uncommissioned','status':'not_commissioned','owns_relay':old_owned,'physical_control_active':False,'shadow_ready':False,'readback_verified':False,'service_called':False,'locked':False}
+        # Preserve the exact last valid record even if a subsequent config or
+        # hardware check holds the cycle. Never use it to bypass that hold.
+        last=previous_room_record(prev,now)
+        if last is not None:s.update(last)
+        s.update(room_error=True,room_display='ER',room_using_last_value=False)
         def done():atomic(state_path,s);return s
         try:
             owner,draft=config_parts(identity,cloud)
@@ -315,15 +359,18 @@ def cycle(identity,cloud,ha,*,now=None,state_path=None,weather=None,wait=time.sl
             s.update(pump_mode=draft['pump_mode'],thermostat_mode=draft['thermostat_mode'],draft_sha256=revision(draft))
             check_hardware(ha,require_room_online=owner['phase']=='shadow')
             pump_on=relay_state(ha.get_entity_state(PUMP));s['relay_on']=pump_on
-            try:room,room_ok,room_age=measured_room(ha.get_entity_state(ROOM),now)
-            except Exception:room,room_ok,room_age=None,False,None
-            s.update(room_c=room,room_age_s=room_age)
+            try:room_obj=ha.get_entity_state(ROOM)
+            except Exception:room_obj=None
+            observation=room_observation(room_obj,now,prev)
+            s.update(observation)
+            room=observation['room_c'];room_ok=not observation['room_error']
+            room_fallback=observation['room_using_last_value'] and room is not None
             # Establish weather proof even in shadow for a future Auto switch.
             out,out_ok,out_age=(weather(owner,now) if draft['pump_mode']=='auto' or owner['phase']=='shadow' else (None,False,None))
             s.update(outdoor_c=out,outdoor_age_s=out_age)
             # Named FVE boost is an explicit selected target, not automatic surplus detection.
             # The independently planned FVE surplus trigger is deliberately not introduced here.
-            decision=decide(draft,limits=LIMITS,now=now,room_c=room,outdoor_c=out,room_fresh=room_ok,outdoor_fresh=out_ok,pump_on=pump_on,enabled=True,identity_ok=True,bindings_verified=True,exclusive_owner=True,safety_allows_on=(owner['phase']=='shadow' or (owner['secondary_circuit_verified'] is True and owner['exclusive_ownership_confirmed'] is True)),boost_authorized=draft['thermostat_mode']=='boost')
+            decision=decide(draft,limits=LIMITS,now=now,room_c=room,outdoor_c=out,room_fresh=room_ok,room_fallback_allowed=room_fallback,outdoor_fresh=out_ok,pump_on=pump_on,enabled=True,identity_ok=True,bindings_verified=True,exclusive_owner=True,safety_allows_on=(owner['phase']=='shadow' or (owner['secondary_circuit_verified'] is True and owner['exclusive_ownership_confirmed'] is True)),boost_authorized=draft['thermostat_mode']=='boost')
             s.update(target_c=decision.target_c,desired_on=decision.desired_on,reason=decision.reason)
             require(decision.desired_on is not None,'decision_not_authorized')
             invalid={'invalid_config','invalid_pump_mode','invalid_auto_configuration_or_measurement','outdoor_temperature_unavailable','room_temperature_unavailable','equipment_safety_block'}
@@ -356,7 +403,7 @@ def cycle(identity,cloud,ha,*,now=None,state_path=None,weather=None,wait=time.sl
                     if actual==desired:confirmed=True;break
                     wait(.5)
                 if not confirmed:s['locked']=True;raise Hold('relay_readback_mismatch')
-            s.update(readback_verified=True,status='active',physical_control_active=True,shadow_ready=True)
+            s.update(readback_verified=True,status='active',physical_control_active=True,shadow_ready=room_ok and out_ok)
             return done()
         except Exception as exc:
             # No blind ON/OFF when identity, ownership, config or HA state is unknown.

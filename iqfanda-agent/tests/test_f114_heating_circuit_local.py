@@ -25,7 +25,7 @@ class HA:
     def get_entity_state(self,entity):
         if entity==r.PUMP:return {'entity_id':entity,'state':'on' if self.on else 'off'}
         if self.read_error:raise RuntimeError('sensor missing')
-        return {'entity_id':entity,'state':str(self.room),'attributes':{'device_class':'temperature','unit_of_measurement':'°C'},'last_reported':(NOW-timedelta(hours=1) if self.stale else NOW-timedelta(seconds=30)).isoformat()}
+        return {'entity_id':entity,'state':str(self.room),'attributes':{'device_class':'temperature','unit_of_measurement':'°C'},'last_reported':(NOW-timedelta(seconds=3601) if self.stale else NOW-timedelta(seconds=30)).isoformat()}
     def call_binary_power_output_service(self,*,entity_id,desired_on):
         self.calls.append((entity_id,desired_on))
         if self.fail:raise RuntimeError('HA timeout')
@@ -52,7 +52,10 @@ class Test(unittest.TestCase):
     def test_12_manual_without_room_after_arm(self):self.arm();self.cycle();self.h.calls.clear();self.d['pump_mode']='manual';self.h.room_online=False;self.h.read_error=True;self.out_fresh=False;s=self.cycle();self.assertTrue(s['relay_on']);self.assertEqual(self.h.calls,[(r.PUMP,True)])
     def test_13_outdoor_equal_off(self):self.h.room=20;self.out=17;self.arm();s=self.cycle();self.assertFalse(s['relay_on']);self.assertEqual(s['reason'],'outdoor_threshold_auto_block')
     def test_14_weather_stale_first_arm(self):self.arm();self.out_fresh=False;s=self.cycle();self.assertFalse(s['physical_control_active']);self.assertEqual(self.h.calls,[])
-    def test_15_stale_room_after_arm(self):self.h.room=20;self.arm();self.cycle();self.h.stale=True;s=self.cycle();self.assertFalse(s['relay_on']);self.assertEqual(s['reason'],'room_temperature_unavailable')
+    def test_15_stale_room_after_arm(self):
+        self.h.room=20;self.arm();self.cycle();self.h.stale=True;s=self.cycle()
+        self.assertTrue(s['relay_on']);self.assertTrue(s['room_error']);self.assertEqual(s['room_display'],'ER');self.assertEqual(s['room_c'],20)
+        self.assertTrue(s['room_using_last_value'])
     def test_16_stale_weather_after_arm(self):self.h.room=20;self.arm();self.cycle();self.out_fresh=False;s=self.cycle();self.assertFalse(s['relay_on']);self.assertEqual(s['reason'],'outdoor_temperature_unavailable')
     def test_17_conflict_map(self):self.cfg['f49_r28_optional_points_v1']['heating_switch_2']={'mode':'entity','entity_id':r.PUMP};self.assertEqual(self.cycle()['reason'],'legacy_heating_2_not_disabled');self.assertEqual(self.h.calls,[])
     def test_18_other_module(self):self.c['module_runtime_configurations'][1]['configuration']={'bad':r.PUMP};self.assertEqual(self.cycle()['reason'],'other_module_references_pump')
@@ -116,6 +119,62 @@ class Test(unittest.TestCase):
             t.join(2);self.assertFalse(t.is_alive())
         self.assertFalse(called.is_set());self.assertEqual(errors,['protected'])
     def test_35_version_status_matches_candidate(self):
-        self.assertEqual(r.VERSION,'0.1.182')
+        self.assertEqual(r.VERSION,'0.1.183')
+
+    def report(self,value=22.5,age=0,entity=None):
+        return {'entity_id':entity or r.ROOM,'state':str(value),'attributes':{'device_class':'temperature','unit_of_measurement':'°C'},'last_reported':(NOW-timedelta(seconds=age)).isoformat()}
+    def test_36_exact_60_min_is_numeric(self):
+        x=r.room_observation(self.report(age=3600),NOW,{})
+        self.assertFalse(x['room_error']);self.assertEqual(x['room_display'],22.5)
+    def test_37_60_min_plus_1_is_er_and_last_numeric(self):
+        x=r.room_observation(self.report(age=3601),NOW,{})
+        self.assertTrue(x['room_error']);self.assertEqual(x['room_display'],'ER');self.assertEqual(x['room_c'],22.5)
+        self.assertTrue(x['room_using_last_value']);self.assertEqual(x['room_age_s'],3601)
+    def test_38_no_data_no_synthetic_value(self):
+        x=r.room_observation(None,NOW,{})
+        self.assertEqual(x['room_display'],'ER');self.assertIsNone(x['room_c']);self.assertFalse(x['room_using_last_value'])
+    def test_39_cached_value_survives_missing_read(self):
+        p=r.room_observation(self.report(20,60),NOW,{})
+        x=r.room_observation(None,NOW+timedelta(hours=2),dict(p,identity=r.IDENTITY))
+        self.assertEqual(x['room_c'],20);self.assertEqual(x['room_display'],'ER');self.assertEqual(x['room_age_s'],7260)
+        self.assertEqual(x['room_last_valid_utc'],p['room_last_valid_utc'])
+    def test_40_new_measurement_automatically_clears_er(self):
+        p=r.room_observation(self.report(20,7200),NOW,{})
+        x=r.room_observation(self.report(22.5,0),NOW,dict(p,identity=r.IDENTITY))
+        self.assertFalse(x['room_error']);self.assertEqual(x['room_display'],22.5);self.assertFalse(x['room_using_last_value'])
+    def test_41_other_device_cache_never_used(self):
+        p=r.room_observation(self.report(),NOW,{})
+        x=r.room_observation(None,NOW,dict(p,identity={'serial_number':'foreign'}))
+        self.assertIsNone(x['room_c']);self.assertEqual(x['room_display'],'ER')
+    def test_42_wrong_entity_invalid_value_or_future_never_seed(self):
+        for obj in (self.report(entity='sensor.other'),self.report('nan'),self.report(age=-3600),self.report('unknown')):
+            self.assertIsNone(r.room_observation(obj,NOW,{})['room_c'])
+    def test_43_last_seen_or_heartbeat_never_substitutes_for_measurement(self):
+        p=self.report();p.pop('last_reported');p['last_seen']=NOW.isoformat()
+        self.assertIsNone(r.room_observation(p,NOW,{})['room_c'])
+    def test_44_older_or_contradictory_measurement_never_overwrites(self):
+        p=dict(r.room_observation(self.report(20,20),NOW,{}),identity=r.IDENTITY)
+        for obj in (self.report(30,30),self.report(30,20)):
+            x=r.room_observation(obj,NOW,p);self.assertEqual(x['room_c'],20);self.assertTrue(x['room_error'])
+    def test_45_stale_first_shadow_computes_but_never_arms(self):
+        self.h.room=22.5;self.h.stale=True;s=self.cycle()
+        self.assertEqual(s['room_display'],'ER');self.assertEqual(s['room_c'],22.5)
+        self.assertEqual(s['reason'],'target_reached');self.assertFalse(s['shadow_ready']);self.assertEqual(self.h.calls,[])
+        self.o['phase']='armed';s=self.cycle();self.assertFalse(s['physical_control_active']);self.assertEqual(self.h.calls,[])
+    def test_46_owned_cached_value_controls_new_target_with_er(self):
+        self.h.room=22.5;self.arm();self.cycle();self.h.calls.clear();self.h.read_error=True
+        self.d['thermostat_mode']='comfort';self.d['levels_c']['comfort']=24
+        s=self.cycle();self.assertEqual(s['room_display'],'ER');self.assertEqual(s['room_c'],22.5)
+        self.assertTrue(s['relay_on']);self.assertEqual(self.h.calls,[(r.PUMP,True)])
+    def test_47_weather_loss_policy_unchanged_even_with_room_cache(self):
+        self.h.room=20;self.arm();self.cycle();self.h.read_error=True;self.out_fresh=False;s=self.cycle()
+        self.assertEqual(s['room_display'],'ER');self.assertFalse(s['relay_on']);self.assertEqual(s['reason'],'outdoor_temperature_unavailable')
+    def test_48_cached_reading_preserved_on_hold_not_used_for_actuation(self):
+        self.h.room=20;self.shadow();self.h.wrong=True;s=self.cycle()
+        self.assertEqual(s['room_last_valid_c'],20);self.assertEqual(s['room_display'],'ER');self.assertEqual(self.h.calls,[])
+    def test_49_ui_status_exports_error_and_last_measurement(self):
+        self.h.stale=True;s=self.cycle()
+        with patch.object(r,'STATE_PATH',self.p):v=r.get_local_status(IDENT)
+        self.assertEqual(v['room_display'],'ER');self.assertEqual(v['room_c'],s['room_c']);self.assertTrue(v['room_error']);self.assertIn('room_last_valid_utc',v)
 
 if __name__=='__main__':unittest.main()

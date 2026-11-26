@@ -59,5 +59,11 @@ class Tests(unittest.TestCase):
     def test_38_timezone_summer(self): self.assertEqual(d(cfg(thermostat_mode='schedule'),now=datetime(2026,7,4,6,tzinfo=timezone.utc)).target_c,23)
     def test_39_other_guard(self): self.assertIsNone(d(cfg(pump_mode='manual'),enabled=False).desired_on)
     def test_40_safety_auto(self): self.assertFalse(d(safety_allows_on=False,pump_on=True).desired_on)
+    def test_41_explicit_fallback_below_target(self): self.assertTrue(d(room_c=21,room_fresh=False,room_fallback_allowed=True).desired_on)
+    def test_42_explicit_fallback_above_target(self): self.assertFalse(d(room_c=23,room_fresh=False,room_fallback_allowed=True,pump_on=True).desired_on)
+    def test_43_explicit_fallback_requires_numeric(self): self.assertFalse(d(room_c=None,room_fresh=False,room_fallback_allowed=True).desired_on)
+    def test_44_fallback_does_not_override_safety(self): self.assertFalse(d(room_c=20,room_fresh=False,room_fallback_allowed=True,safety_allows_on=False).desired_on)
+    def test_45_fallback_does_not_override_outdoor(self): self.assertFalse(d(room_c=20,room_fresh=False,room_fallback_allowed=True,outdoor_fresh=False).desired_on)
+    def test_46_fallback_preserves_hysteresis(self): self.assertTrue(d(room_c=21.9,room_fresh=False,room_fallback_allowed=True,pump_on=True).desired_on)
 
 if __name__=='__main__': unittest.main(verbosity=2)
