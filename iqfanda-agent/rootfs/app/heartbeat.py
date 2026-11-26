@@ -356,6 +356,16 @@ def send_heartbeat(config: dict) -> dict:
         except Exception as exc:
             logging.warning("F169 Midea capability unavailable: %s", type(exc).__name__)
 
+    # F114 R17: copy local readback/status only, never execute a relay command here.
+    if str(config.get("device_uuid") or "") == "ec77027b-fea4-464b-bb11-94ea790f2706":
+        try:
+            from f114_heating_circuit_local import get_local_status, STATUS_KEY
+            _f114_status = get_local_status(config)
+            if _f114_status is not None:
+                communication_state[STATUS_KEY] = _f114_status
+        except Exception as _f114_exc:
+            logging.warning("F114 local heating status unavailable: %s", type(_f114_exc).__name__)
+
     # Observation only: the local battery loop never waits for the heartbeat.
     try:
         from manual_battery_runtime import get_local_battery_status

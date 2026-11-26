@@ -9,6 +9,7 @@ RUN apk add --no-cache \
     jq \
     networkmanager-cli \
     python3 \
+    tzdata \
     py3-pip \
     py3-pyserial \
     py3-websocket-client \

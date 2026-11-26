@@ -424,6 +424,16 @@ def main() -> None:
         nazev="zha-bootstrap",
     )
 
+    # F114 R17: exact 00015 only. No other model starts this loop.
+    local_heating_thread = None
+    try:
+        from device_config import load_device_identity as _f114_identity
+        from f114_heating_circuit_local import matches as _f114_matches, run_forever as _f114_run
+        if _f114_matches(_f114_identity()):
+            local_heating_thread = vytvorit_vlakno(cil=_f114_run, nazev="f114-00015-heating")
+    except Exception as _f114_exc:
+        logging.warning("F114 pilot heating service not started: %s", type(_f114_exc).__name__)
+
     local_mixing_thread = vytvorit_vlakno(
         cil=spustit_lokalni_smesovani_00013,
         nazev="f47-00013-local-mixing",
@@ -438,6 +448,8 @@ def main() -> None:
     module_telemetry_thread.start()
     zha_bootstrap_thread.start()
     local_mixing_thread.start()
+    if local_heating_thread is not None:
+        local_heating_thread.start()
 
     kontrolovat_sluzby(
         {
@@ -453,6 +465,7 @@ def main() -> None:
             "module-telemetry": module_telemetry_thread,
             "zha-bootstrap": zha_bootstrap_thread,
             "f47-00013-local-mixing": local_mixing_thread,
+            **({"f114-00015-heating": local_heating_thread} if local_heating_thread is not None else {}),
         }
     )
 
