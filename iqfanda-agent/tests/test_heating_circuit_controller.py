@@ -66,4 +66,23 @@ class Tests(unittest.TestCase):
     def test_45_fallback_does_not_override_outdoor(self): self.assertFalse(d(room_c=20,room_fresh=False,room_fallback_allowed=True,outdoor_fresh=False).desired_on)
     def test_46_fallback_preserves_hysteresis(self): self.assertTrue(d(room_c=21.9,room_fresh=False,room_fallback_allowed=True,pump_on=True).desired_on)
 
+    def test_47_weather_expired_fresh_room_below_target(self):
+        self.assertTrue(d(outdoor_c=None,outdoor_fresh=False,outdoor_fallback_allowed=True,room_c=20).desired_on)
+    def test_48_weather_expired_room_above_target(self):
+        self.assertFalse(d(outdoor_c=None,outdoor_fresh=False,outdoor_fallback_allowed=True,room_c=23,pump_on=True).desired_on)
+    def test_49_weather_expired_both_stale_blocks(self):
+        self.assertFalse(d(outdoor_fresh=False,outdoor_fallback_allowed=True,room_fresh=False,room_fallback_allowed=True,room_c=20).desired_on)
+    def test_50_summer_still_blocks(self):
+        self.assertFalse(d(cfg(season_mode='summer'),outdoor_fresh=False,outdoor_fallback_allowed=True,room_c=20).desired_on)
+    def test_51_fresh_weather_threshold_restored(self):
+        self.assertFalse(d(outdoor_c=18,outdoor_fresh=True,outdoor_fallback_allowed=True,room_c=20).desired_on)
+    def test_52_outdoor_fallback_does_not_bypass_safety(self):
+        self.assertFalse(d(outdoor_fresh=False,outdoor_fallback_allowed=True,room_c=20,safety_allows_on=False).desired_on)
+    def test_53_outdoor_fallback_schedule_hysteresis(self):
+        for pump in (False,True):
+            v=d(cfg(thermostat_mode='schedule'),outdoor_fresh=False,outdoor_fallback_allowed=True,room_c=20.9,pump_on=pump)
+            self.assertEqual(v.target_c,21);self.assertIs(v.desired_on,pump)
+    def test_54_outdoor_fallback_boost_permission_preserved(self):
+        self.assertFalse(d(cfg(thermostat_mode='boost'),outdoor_fresh=False,outdoor_fallback_allowed=True,room_c=20,boost_authorized=False).desired_on)
+
 if __name__=='__main__': unittest.main(verbosity=2)

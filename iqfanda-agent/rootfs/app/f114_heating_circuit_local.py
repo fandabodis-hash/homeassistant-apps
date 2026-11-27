@@ -263,8 +263,12 @@ def weather_value(owner,now,*,fetch=None,cache_path=None,monotonic=time.monotoni
     try:
         require(cached.get('key')==key,'weather_location_changed')
         age=(now-parse_stamp(cached['observed_utc'])).total_seconds()
-        require(-900<=age<=WEATHER_MAX_AGE,'weather_cache_expired')
-        return number(cached['temperature_c'],-60,65),True,max(0,round(age))
+        require(age>=-900,'weather_cache_timestamp_in_future')
+        value=number(cached['temperature_c'],-60,65)
+        # Preserve the age of a genuinely expired, location-bound valid cache.
+        # Do not return its obsolete temperature or invent an age for no data.
+        if age>WEATHER_MAX_AGE:return None,False,math.ceil(age)
+        return value,True,max(0,round(age))
     except (KeyError,TypeError,ValueError,Hold):return None,False,None
 
 def owner_claimed():
@@ -327,7 +331,7 @@ def get_local_status(identity):
     if not matches(identity):return None
     s=load_json(STATE_PATH)
     if s.get('identity')!=IDENTITY:return None
-    allowed=('identity','version','commission_id','phase','updated_utc','status','reason','owns_relay','physical_control_active','shadow_ready','pump_mode','thermostat_mode','target_c','room_c','room_error','room_display','room_using_last_value','room_last_valid_c','room_last_valid_utc','outdoor_c','room_age_s','outdoor_age_s','relay_on','desired_on','draft_sha256','readback_verified','service_called','locked')
+    allowed=('identity','version','commission_id','phase','updated_utc','status','reason','owns_relay','physical_control_active','shadow_ready','pump_mode','thermostat_mode','target_c','room_c','room_error','room_display','room_using_last_value','room_last_valid_c','room_last_valid_utc','outdoor_c','room_age_s','outdoor_age_s','outdoor_policy','outdoor_fallback_active','relay_on','desired_on','draft_sha256','readback_verified','service_called','locked')
     return {k:s[k] for k in allowed if k in s}
 
 def cycle(identity,cloud,ha,*,now=None,state_path=None,weather=None,wait=time.sleep):
@@ -367,11 +371,22 @@ def cycle(identity,cloud,ha,*,now=None,state_path=None,weather=None,wait=time.sl
             room_fallback=observation['room_using_last_value'] and room is not None
             # Establish weather proof even in shadow for a future Auto switch.
             out,out_ok,out_age=(weather(owner,now) if draft['pump_mode']=='auto' or owner['phase']=='shadow' else (None,False,None))
-            s.update(outdoor_c=out,outdoor_age_s=out_age)
+            # R32: only the already verified, expired weather cache permits
+            # bypassing the outdoor threshold. A fresh indoor reading is
+            # mandatory. Commissioning still requires fresh weather and room.
+            weather_expired=(out_ok is False and out is None and
+                type(out_age) in (int,float) and math.isfinite(out_age) and out_age>WEATHER_MAX_AGE)
+            outdoor_fallback=weather_expired and room_ok
+            s.update(outdoor_c=out,outdoor_age_s=out_age,
+                     outdoor_policy=('weather_within_2h' if out_ok else
+                         'expired_cache' if weather_expired else 'weather_unavailable'),
+                     outdoor_fallback_active=False)
             # Named FVE boost is an explicit selected target, not automatic surplus detection.
             # The independently planned FVE surplus trigger is deliberately not introduced here.
-            decision=decide(draft,limits=LIMITS,now=now,room_c=room,outdoor_c=out,room_fresh=room_ok,room_fallback_allowed=room_fallback,outdoor_fresh=out_ok,pump_on=pump_on,enabled=True,identity_ok=True,bindings_verified=True,exclusive_owner=True,safety_allows_on=(owner['phase']=='shadow' or (owner['secondary_circuit_verified'] is True and owner['exclusive_ownership_confirmed'] is True)),boost_authorized=draft['thermostat_mode']=='boost')
-            s.update(target_c=decision.target_c,desired_on=decision.desired_on,reason=decision.reason)
+            decision=decide(draft,limits=LIMITS,now=now,room_c=room,outdoor_c=out,room_fresh=room_ok,room_fallback_allowed=room_fallback,outdoor_fresh=out_ok,outdoor_fallback_allowed=outdoor_fallback,pump_on=pump_on,enabled=True,identity_ok=True,bindings_verified=True,exclusive_owner=True,safety_allows_on=(owner['phase']=='shadow' or (owner['secondary_circuit_verified'] is True and owner['exclusive_ownership_confirmed'] is True)),boost_authorized=draft['thermostat_mode']=='boost')
+            s.update(target_c=decision.target_c,desired_on=decision.desired_on,reason=decision.reason,
+                     outdoor_fallback_active=(draft['pump_mode']=='auto' and outdoor_fallback
+                         and decision.season_allows_auto is True and decision.target_c is not None))
             require(decision.desired_on is not None,'decision_not_authorized')
             invalid={'invalid_config','invalid_pump_mode','invalid_auto_configuration_or_measurement','outdoor_temperature_unavailable','room_temperature_unavailable','equipment_safety_block'}
             if owner['phase']=='shadow':

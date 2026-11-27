@@ -112,13 +112,17 @@ def validate_auto_config(cfg, limits):
 def decide(cfg, *, limits, now, room_c=None, outdoor_c=None, room_fresh=False,
            outdoor_fresh=False, pump_on=None, enabled=False, identity_ok=False,
            bindings_verified=False, exclusive_owner=False, safety_allows_on=False,
-           boost_authorized=False, room_fallback_allowed=False):
+           boost_authorized=False, room_fallback_allowed=False,
+           outdoor_fallback_allowed=False):
     """No calls, no file/DB writes. Adapter must distinguish desired from actual.
 
     enabled: explicit activation after verified install. No activation by default.
     pump_on: confirmed local read-back, not previous requested state.
     room_fallback_allowed: explicit adapter-validated last numeric measurement;
     does not represent a fresh reading. No fallback is enabled by default.
+    outdoor_fallback_allowed: explicit adapter authorization after a verified
+    outdoor cache expires (2 h). Requires a fresh room reading, never two
+    stale inputs. Explicit summer block and all other guards still apply.
     safety_allows_on: verified independent equipment protections.
     Any mode with unverified relay/owner -> no command. On invalid AUTO sensor or
     config, request OFF only for a verified owned relay; future adapter must
@@ -143,12 +147,15 @@ def decide(cfg, *, limits, now, room_c=None, outdoor_c=None, room_fresh=False,
         level, values, week, threshold=validate_auto_config(cfg,limits)
         if cfg['season_mode']=='summer':
             return Decision(False,'summer_auto_block',season_allows_auto=False)
-        # Winter never bypasses the absolute threshold specified by the owner.
-        if outdoor_fresh is not True:
+        # With a valid outdoor reading, the threshold always remains in force.
+        # R32: after expiry of a verified weather cache, use a fresh indoor
+        # thermostat only. Never treat a missing reading as a cold temperature.
+        if outdoor_fresh is True:
+            outdoor=decimal_number(outdoor_c)
+            if outdoor>=threshold:
+                return Decision(False,'outdoor_threshold_auto_block',season_allows_auto=False)
+        elif outdoor_fallback_allowed is not True or room_fresh is not True:
             return Decision(False,'outdoor_temperature_unavailable',season_allows_auto=False)
-        outdoor=decimal_number(outdoor_c)
-        if outdoor>=threshold:
-            return Decision(False,'outdoor_threshold_auto_block',season_allows_auto=False)
         if level=='boost' and boost_authorized is not True:
             return Decision(False,'fve_boost_not_authorized',season_allows_auto=True)
         target=scheduled_target(week,now) if level=='schedule' else values[level]

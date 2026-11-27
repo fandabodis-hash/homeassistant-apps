@@ -177,4 +177,49 @@ class Test(unittest.TestCase):
         with patch.object(r,'STATE_PATH',self.p):v=r.get_local_status(IDENT)
         self.assertEqual(v['room_display'],'ER');self.assertEqual(v['room_c'],s['room_c']);self.assertTrue(v['room_error']);self.assertIn('room_last_valid_utc',v)
 
+    def expired_weather_cycle(self,age=7201):
+        return r.cycle(IDENT,self.c,self.h,now=NOW,state_path=self.p,weather=lambda o,n:(None,False,age),wait=lambda x:None)
+    def test_50_cache_exact_two_hours_and_expired_age(self):
+        q=Path(self.tmp.name)/'weather-r32.json'
+        r.atomic(q,{'key':r.revision(self.o['weather']),'temperature_c':18,'observed_utc':(NOW-timedelta(seconds=7200)).isoformat()})
+        with patch.object(r,'_weather_attempt',1000.0):
+            self.assertEqual(r.weather_value(self.o,NOW,cache_path=q,monotonic=lambda:1001),(18,True,7200))
+            self.assertEqual(r.weather_value(self.o,NOW+timedelta(microseconds=1),cache_path=q,monotonic=lambda:1001),(None,False,7201))
+    def test_51_no_cache_or_wrong_site_or_invalid_reading_not_expired_proof(self):
+        q=Path(self.tmp.name)/'weather-r32.json'
+        with patch.object(r,'_weather_attempt',1000.0):
+            self.assertEqual(r.weather_value(self.o,NOW,cache_path=q,monotonic=lambda:1001),(None,False,None))
+            for key,temp in [('foreign',18),(r.revision(self.o['weather']),999)]:
+                r.atomic(q,{'key':key,'temperature_c':temp,'observed_utc':(NOW-timedelta(hours=3)).isoformat()})
+                self.assertEqual(r.weather_value(self.o,NOW,cache_path=q,monotonic=lambda:1001),(None,False,None))
+    def test_52_expired_outdoor_after_arm_fresh_indoor_turn_on(self):
+        self.h.on=False;self.h.room=20;self.out=18;self.arm();self.cycle();self.h.calls.clear()
+        s=self.expired_weather_cycle();self.assertTrue(s['relay_on']);self.assertTrue(s['outdoor_fallback_active']);self.assertEqual(self.h.calls,[(r.PUMP,True)])
+        self.assertEqual(s['outdoor_policy'],'expired_cache');self.assertIsNone(s['outdoor_c'])
+    def test_53_expired_outdoor_above_target_no_heat(self):
+        self.h.room=22.5;self.arm();self.cycle();self.h.calls.clear();s=self.expired_weather_cycle()
+        self.assertTrue(s['outdoor_fallback_active']);self.assertFalse(s['relay_on']);self.assertEqual(self.h.calls,[])
+    def test_54_weather_recovers_threshold_applied(self):
+        self.h.room=20;self.arm();self.cycle();self.expired_weather_cycle();self.out=18;self.h.calls.clear();s=self.cycle()
+        self.assertFalse(s['relay_on']);self.assertFalse(s['outdoor_fallback_active']);self.assertEqual(self.h.calls,[(r.PUMP,False)])
+    def test_55_both_inputs_stale_no_fallback(self):
+        self.h.room=20;self.arm();self.cycle();self.h.read_error=True;s=self.expired_weather_cycle()
+        self.assertEqual(s['room_display'],'ER');self.assertFalse(s['outdoor_fallback_active']);self.assertFalse(s['relay_on'])
+        self.assertEqual(s['reason'],'outdoor_temperature_unavailable')
+    def test_56_expired_weather_cannot_authorize_first_arm(self):
+        self.h.room=20;s=self.expired_weather_cycle();self.assertTrue(s['outdoor_fallback_active']);self.assertFalse(s['shadow_ready']);self.assertEqual(self.h.calls,[])
+        self.o['phase']='armed';s=self.expired_weather_cycle();self.assertFalse(s['physical_control_active']);self.assertEqual(self.h.calls,[])
+    def test_57_weather_expires_between_shadow_and_arm(self):
+        self.h.room=20;self.arm();s=self.expired_weather_cycle();self.assertFalse(s['physical_control_active']);self.assertEqual(self.h.calls,[])
+    def test_58_expired_weather_explicit_summer(self):
+        self.h.room=20;self.arm();self.cycle();self.d['season_mode']='summer';s=self.expired_weather_cycle()
+        self.assertFalse(s['relay_on']);self.assertFalse(s['outdoor_fallback_active']);self.assertEqual(s['reason'],'summer_auto_block')
+    def test_59_expired_weather_status_export(self):
+        self.h.room=20;self.arm();self.cycle();self.expired_weather_cycle()
+        with patch.object(r,'STATE_PATH',self.p):s=r.get_local_status(IDENT)
+        self.assertTrue(s['outdoor_fallback_active']);self.assertEqual(s['outdoor_age_s'],7201);self.assertEqual(s['outdoor_policy'],'expired_cache')
+    def test_60_weather_unknown_age_never_invents_fallback(self):
+        self.h.room=20;self.arm();self.cycle();s=self.expired_weather_cycle(None)
+        self.assertFalse(s['outdoor_fallback_active']);self.assertFalse(s['relay_on'])
+
 if __name__=='__main__':unittest.main()
