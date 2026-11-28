@@ -5,6 +5,7 @@ on:
       - feature/f106-midea-00019-readonly-modbus
       - feature/f114-00015-heating-0182
       - feature/f114-00015-heating-er-0183
+      - "candidate/f171-*"
   pull_request:
     paths:
       - "iqfanda-agent/rootfs/app/communication/midea_00019_readonly.py"
@@ -18,6 +19,8 @@ on:
       - "iqfanda-agent/rootfs/app/communication/midea_00019_cloud_probe.py"
       - "iqfanda-agent/rootfs/app/command_worker.py"
       - "iqfanda-agent/rootfs/app/heartbeat.py"
+      - "iqfanda-agent/rootfs/app/f171_midea_00019_thermostat.py"
+      - "iqfanda-agent/tests/test_f171*.py"
       - "iqfanda-agent/rootfs/app/f114_heating_circuit_local.py"
       - "iqfanda-agent/rootfs/app/heating_circuit_controller.py"
       - "iqfanda-agent/rootfs/app/startup.py"
@@ -68,6 +71,20 @@ jobs:
             PYTHONPATH=iqfanda-agent/rootfs/app python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f114_00015_er_release_contract.py' -v
             PYTHONPATH=iqfanda-agent/rootfs/app python3 -m unittest discover -s iqfanda-agent/tests -p 'test_heating_circuit_controller.py' -v
             PYTHONPATH=iqfanda-agent/rootfs/app python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f114_heating_circuit_local.py' -v
+          elif [ "$version" = "0.1.184" ]; then
+            old181=$(mktemp -d); rmdir "$old181"
+            old182=$(mktemp -d); rmdir "$old182"
+            old183=$(mktemp -d); rmdir "$old183"
+            trap 'git worktree remove --force "$old181" || true; git worktree remove --force "$old182" || true; git worktree remove --force "$old183" || true' EXIT
+            git worktree add --detach "$old181" a58969a904e9234e56912e9f9a30baa3d354b14a
+            git worktree add --detach "$old182" 9e503531e545cb3bf3cacbaf732c561e9913fd0e
+            git worktree add --detach "$old183" 3ce8438a3a8b1a2058d8fd89d5beceaa063739c5
+            (cd "$old181" && python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f133_agent_0177_additive_contract.py' -v)
+            (cd "$old182" && PYTHONPATH=iqfanda-agent/rootfs/app python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f114_00015_release_contract.py' -v)
+            (cd "$old183" && PYTHONPATH=iqfanda-agent/rootfs/app python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f114_00015_er_release_contract.py' -v)
+            PYTHONPATH=iqfanda-agent/rootfs/app python3 -m unittest discover -s iqfanda-agent/tests -p 'test_heating_circuit_controller.py' -v
+            PYTHONPATH=iqfanda-agent/rootfs/app python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f114_heating_circuit_local.py' -v
+            PYTHONPATH=iqfanda-agent/rootfs/app python3 -m unittest discover -s iqfanda-agent/tests -p 'test_f171*.py' -v
           else
             echo "Unreviewed successor version: $version" >&2
             exit 1

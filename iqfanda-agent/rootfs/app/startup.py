@@ -434,6 +434,16 @@ def main() -> None:
     except Exception as _f114_exc:
         logging.warning("F114 pilot heating service not started: %s", type(_f114_exc).__name__)
 
+    # F171: isolated local thermostat, exact 00019 only.
+    midea_thermostat_thread = None
+    try:
+        from device_config import load_device_identity as _f171_identity
+        from f171_midea_00019_thermostat import matches as _f171_matches, run_forever as _f171_run
+        if _f171_matches(_f171_identity()):
+            midea_thermostat_thread = vytvorit_vlakno(cil=_f171_run, nazev="f171-00019-thermostat")
+    except Exception as _f171_exc:
+        logging.warning("F171 thermostat not started: %s", type(_f171_exc).__name__)
+
     local_mixing_thread = vytvorit_vlakno(
         cil=spustit_lokalni_smesovani_00013,
         nazev="f47-00013-local-mixing",
@@ -448,6 +458,8 @@ def main() -> None:
     module_telemetry_thread.start()
     zha_bootstrap_thread.start()
     local_mixing_thread.start()
+    if midea_thermostat_thread is not None:
+        midea_thermostat_thread.start()
     if local_heating_thread is not None:
         local_heating_thread.start()
 
@@ -466,6 +478,7 @@ def main() -> None:
             "zha-bootstrap": zha_bootstrap_thread,
             "f47-00013-local-mixing": local_mixing_thread,
             **({"f114-00015-heating": local_heating_thread} if local_heating_thread is not None else {}),
+            **({"f171-00019-thermostat": midea_thermostat_thread} if midea_thermostat_thread is not None else {}),
         }
     )
 

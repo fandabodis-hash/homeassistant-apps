@@ -42,6 +42,9 @@ def get_supervisor_token() -> str:
 # F114 R17: a commissioned local owner cannot be overridden by cloud relay commands.
 from f114_heating_circuit_local import guarded_ha_request as _f114_guard_ha_request
 
+from f171_midea_00019_thermostat import guarded_ha_request as _f171_guard_ha_request
+
+@_f171_guard_ha_request
 @_f114_guard_ha_request
 def home_assistant_request(
     *,

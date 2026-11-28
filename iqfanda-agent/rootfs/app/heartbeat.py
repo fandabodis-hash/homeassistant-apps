@@ -356,6 +356,15 @@ def send_heartbeat(config: dict) -> dict:
         except Exception as exc:
             logging.warning("F169 Midea capability unavailable: %s", type(exc).__name__)
 
+    # F171: exact 00019 local readback; no actuator calls in heartbeat.
+    try:
+        from f171_midea_00019_thermostat import get_local_status as _f171_status, STATUS_KEY as _F171_KEY
+        _f171 = _f171_status(config)
+        if _f171 is not None:
+            communication_state[_F171_KEY] = _f171
+    except Exception as _f171_exc:
+        logging.warning("F171 status unavailable: %s", type(_f171_exc).__name__)
+
     # F114 R17: copy local readback/status only, never execute a relay command here.
     if str(config.get("device_uuid") or "") == "ec77027b-fea4-464b-bb11-94ea790f2706":
         try:

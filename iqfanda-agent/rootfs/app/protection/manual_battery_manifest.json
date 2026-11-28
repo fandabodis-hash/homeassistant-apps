@@ -1,12 +1,12 @@
 {
-  "agent_version": "0.1.183",
+  "agent_version": "0.1.184",
   "build_inputs": {
     "Dockerfile": "663f98d078e3873a5ba253a9b1703dc3158f5b5840b974bb41b6a2737d91f1ef",
-    "config.yaml": "a8bdbdcd68f04b837808be5d1733efc69ac81edf8819128a44deb85447b896ed"
+    "config.yaml": "916a2cb883feafc1e6a477aa5a77666a0728a6bc3b7246b45bd372a7a322c947"
   },
   "feature": "local_manual_battery",
   "files": {
-    "VERSION": "bfea5cf6f3ead8cdf50848e4eed72ded56d58c9fb12d7e8b13afe7056defadb7",
+    "VERSION": "98d7eacc163dcc68f2d215662a882445d3873ded2d187c9146f00c8bb4b09633",
     "battery_control_canary.py": "27d4538b8388bd8ca065c26f1cab4fc9e26d026e603a338c3f79a4b667f07a9d",
     "command_worker.py": "d7fc76b3c40212ca438c318e27b0c1ff1dc93d4e39b12a7a3b5330925243b2c5",
     "communication/battery_control_safety.py": "c1637e26fb9b9a17e17c405b7e0e5f92c2d18dcb0165eaf4727793804c518284",
@@ -26,23 +26,24 @@
     "communication/inverter_profiles/goodwe_et_15_30kw.json": "35ce7a5b99f4ff092a209847e260e600e7abf955b3b568b2dbe56b6e318cad3f",
     "communication/inverter_profiles/solax_x3_hybrid_g4.json": "2e571117bbc0a1c455890388f618319b5417f3cf2bf548e1e51222179a811e38",
     "communication/json_utils.py": "5e622e084388923234c044aec1a6199d67a545306649430734c1d8453dc3f8ac",
-    "communication/midea_00019_power.py": "67f22fd93413e447a38ac8be252a257675fc12f808fd0cb68722db9cec1c17e6",
+    "communication/midea_00019_power.py": "fdcdc45826acddaa5f7cb0f8d794f00e1c118b2565124911d5caeef31aec3c82",
     "communication/modbus_bus_lock.py": "a5b1e7366e816545e0e3eefbfb1c99c609f85271144d21727b54acbfff4da00c",
     "communication/solax_ems_controller.py": "af3afcb244585aaf56c322f38cf2f644119f331832b8e24d4af2e8d770c97277",
     "device_config.py": "28a39b57044a81b9d920bd5afe1344584e246ceee8f9afaac5b922b84e4995dc",
     "f114_heating_circuit_local.py": "78079f0e4560c38bcaa5be384a13558a2b0d3ce828a6d4be13b6928db86e8eb0",
+    "f171_midea_00019_thermostat.py": "2d015c9bacc62fb703bce2b2a74d6a3ac9328301ef8d1c2fcb76de856457e3d0",
     "foxess_00018_owner_recovery.py": "ccdce2c0ba98ee80b8b447a8242797c86aba2064bcff843995866760e4c1cf9c",
     "foxess_zero_remote_release.py": "be53097b8d74433c0d51276b5d53c52fb3af515a4376b7d8c8aa76ee6705abac",
-    "heartbeat.py": "55e1e401f35c6ec039235f98b7a83b9563c052318b59ef8c16f75a34a811b677",
+    "heartbeat.py": "ed7c6a0f6e03694b75955f8c6b1db636a24e51fb098c8f6d8ad145d188b1d306",
     "heating_circuit_controller.py": "a4f7b8876e1f22b90b6b95250a45421f55ed191f3fc229b43c26b4a7bb9e79a8",
     "manual_battery_runtime.py": "bd55f70ea8c31da76c00b0b43a3a2320e594b6a32ac1e7d89291f40570756558",
     "spot_battery_intent.py": "9614747ec7a5e246c9bff2c18527c741f75c2453251baeaacea813bdc0fdcc02",
-    "startup.py": "d2823c065cf6a98b48706e7bea09bf3a2051517b0a8fe855049357f622036be8",
-    "zigbee_manager.py": "af6a046288a62b6f24c070767b7d3241f32d0f3c43ecbef008deb1ebb5d63f8d"
+    "startup.py": "8c4a50d18f093e34e5b39875095934409e5ba86d0d1e6a9e8c1e4cdc3c0e6d0c",
+    "zigbee_manager.py": "6c72c2f09f621e2774a515cd49d16bbe10e97ffc24af23d8677196065a3b6676"
   },
   "rootfs_files": {
     "etc/services.d/iqfanda/run": "14f3f2fbe262d2884bf40082a75876b25c300085995d69c4d3e67e4c670fe735"
   },
-  "runtime_fingerprint": "e3ebe3294a5d21a7b9a0de8d98df109a38bd077ab1f0108df4e0a315d85c3ac0",
+  "runtime_fingerprint": "9319865a2cd22b6f9106c2c59e3985e2aa0188b575bad2e423d3f5ba09c08926",
   "schema_version": 1
 }

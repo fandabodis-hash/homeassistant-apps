@@ -20,7 +20,7 @@ from communication.modbus_bus_lock import ziskej_zamek_modbus_sbernice
 
 COMMAND = 'midea_00019_zone1_power_v1'
 PROFILE = 'f169_midea_bms1_zone1_fc06_v1'
-VERSION = '0.1.181'
+SUPPORTED_VERSIONS = ('0.1.181', '0.1.183', '0.1.184')
 STATE = Path('/config/midea_00019_power_f169.json')
 COOLDOWN = 30
 
@@ -146,7 +146,7 @@ def production_identity(identity):
     from agent_updater import read_installed_agent_version
     return (exact(identity) and exact(load_device_identity())
             and DeviceIdentityService().get_serial_number() == SERIAL
-            and read_installed_agent_version() == VERSION)
+            and read_installed_agent_version() in SUPPORTED_VERSIONS)
 
 
 def execute(identity, command_id, payload, *, path=STATE, client_factory=None,
